@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "酒店预订：库存事务与支付边界",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1140,
+      680
+    ]
+  },
+  "components": [
+    {
+      "id": "guest-request",
+      "type": "frontend",
+      "label": "客人提交预订",
+      "sublabel": "重试使用同一订单号",
+      "pos": [
+        40,
+        140
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "reservation-api",
+      "type": "backend",
+      "label": "预订服务",
+      "sublabel": "校验房型、日期、数量",
+      "pos": [
+        460,
+        140
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "inventory-order",
+      "type": "database",
+      "label": "库存与预订数据库",
+      "sublabel": "唯一订单号＋多日库存",
+      "pos": [
+        880,
+        140
+      ],
+      "size": [
+        220,
+        84
+      ]
+    },
+    {
+      "id": "payment-external",
+      "type": "external",
+      "label": "支付服务／支付机构",
+      "sublabel": "超时后查询或等待回调",
+      "pos": [
+        460,
+        450
+      ],
+      "size": [
+        220,
+        84
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "book-request",
+      "from": "guest-request",
+      "to": "reservation-api",
+      "label": "预订请求"
+    },
+    {
+      "id": "inventory-transaction",
+      "from": "reservation-api",
+      "to": "inventory-order",
+      "label": "同一事务提交"
+    },
+    {
+      "id": "payment-call",
+      "from": "reservation-api",
+      "to": "payment-external",
+      "label": "事务外发起支付",
+      "variant": "dashed",
+      "labelAt": [
+        640,
+        340
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "两类并发分别处理",
+      "items": [
+        "同一订单重试：唯一约束与幂等结果",
+        "不同订单抢房：版本校验／锁与库存约束"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "支付不能占着数据库锁等待",
+      "items": [
+        "多晚库存与预订记录一起成功或一起回滚",
+        "付款结果待确认时保留状态，再查询或补偿"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+  <rect width="1000" height="420" fill="#fffdf7"/>
+  <style>
+    .box{fill:#fffaf0;stroke:#2e4057;stroke-width:4;stroke-linejoin:round}
+    .t{font-family:"Comic Sans MS","KaiTi",cursive;fill:#1f2937}
+    .small{font-size:18px}.big{font-size:24px;font-weight:bold}
+    .arrow{fill:none;stroke:#e07a5f;stroke-width:5;stroke-linecap:round;stroke-dasharray:9 8}
+  </style>
+  <text x="42" y="42" class="t big">从单机到横向扩展：每一步都在解决一个瓶颈</text>
+  <path d="M62 330 Q180 300 275 260 T490 205 T695 150 T920 92" class="arrow"/>
+  <g transform="translate(45,240) rotate(-2)"><rect class="box" width="145" height="88" rx="17"/><text x="20" y="35" class="t big">单体</text><text x="20" y="63" class="t small">Web + DB</text></g>
+  <g transform="translate(210,205) rotate(2)"><rect class="box" width="150" height="88" rx="17"/><text x="18" y="35" class="t big">拆 DB</text><text x="18" y="63" class="t small">独立扩容</text></g>
+  <g transform="translate(382,166) rotate(-2)"><rect class="box" width="160" height="88" rx="17"/><text x="18" y="35" class="t big">LB + Web</text><text x="18" y="63" class="t small">多节点扩展</text></g>
+  <g transform="translate(565,125) rotate(2)"><rect class="box" width="160" height="88" rx="17"/><text x="18" y="35" class="t big">缓存 / CDN</text><text x="18" y="63" class="t small">减少慢读</text></g>
+  <g transform="translate(748,75) rotate(-2)"><rect class="box" width="190" height="100" rx="17"/><text x="18" y="38" class="t big">队列 + 分片</text><text x="18" y="68" class="t small">解耦、扩展容量</text></g>
+  <text x="68" y="375" class="t small">先测量 → 找瓶颈 → 加一层能力 → 验证，再继续</text>
+</svg>

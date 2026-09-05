@@ -1,0 +1,25 @@
+{
+  "documents": 33,
+  "images": {
+    "total": 453,
+    "broken": []
+  },
+  "answerAnchors": 58,
+  "answerTocTargetsValid": true,
+  "sourceAnswerJump": true,
+  "questionSearchJump": true,
+  "emptySearch": true,
+  "desktop": {
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  "mobile": {
+    "width": 390,
+    "scrollWidth": 390
+  },
+  "mobileZoom": {
+    "width": 350,
+    "scrollWidth": 1040
+  },
+  "pageErrors": []
+}

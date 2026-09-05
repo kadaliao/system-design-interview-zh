@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520">
+  <rect width="920" height="520" fill="#fffdf7"/>
+  <style>.s{stroke:#30475e;stroke-width:4;stroke-linejoin:round}.t{font-family:"Comic Sans MS","KaiTi",cursive;fill:#1f2937}.h{font-size:26px;font-weight:bold}.p{font-size:20px}.a{fill:none;stroke:#e07a5f;stroke-width:5;stroke-linecap:round;stroke-dasharray:8 8}</style>
+  <text x="36" y="42" class="t h">估算漏斗：把模糊问题变成可检验的数字</text>
+  <path d="M90 105 L830 105 L690 230 L610 230 L530 400 L390 400 L310 230 L230 230 Z" fill="#fff4d6" class="s"/>
+  <g transform="translate(120,125) rotate(-1)"><rect width="680" height="68" rx="16" fill="#f6bd60" class="s"/><text x="24" y="43" class="t p">1. 需求：用户、动作、峰值、留存期</text></g>
+  <g transform="translate(210,245) rotate(1)"><rect width="500" height="68" rx="16" fill="#f7ede2" class="s"/><text x="24" y="43" class="t p">2. 假设：取整并写出单位</text></g>
+  <g transform="translate(260,365) rotate(-2)"><rect width="400" height="68" rx="16" fill="#cdeac0" class="s"/><text x="26" y="43" class="t p">3. 结果：QPS / TB / 机器数</text></g>
+  <path d="M805 145 q38 35 0 70" class="a"/><text x="210" y="490" class="t p">不追求小数点，追求量级和可解释性</text>
+</svg>

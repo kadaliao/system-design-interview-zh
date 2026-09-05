@@ -1,0 +1,533 @@
+{
+  "scope": "28章中文学习版明确标记的章末自测；附通用复盘与钱包/交易所正文追问。第5章三项绘图/解释任务拆为三个条目；不重复计入已作答的C/I需求访谈。",
+  "counts": {
+    "章末自测": 46,
+    "通用复盘": 5,
+    "正文追问": 7
+  },
+  "total": 58,
+  "questions": [
+    {
+      "id": "Q01-01",
+      "category": "章末自测",
+      "source": "01. Scaling/Readme.md",
+      "line": 311,
+      "question": "为什么加 Web 服务器不能解决数据库锁等待？",
+      "source_excerpt": "为什么加 Web 服务器不能解决数据库锁等待？",
+      "answer_anchor": "q01-01"
+    },
+    {
+      "id": "Q01-02",
+      "category": "章末自测",
+      "source": "01. Scaling/Readme.md",
+      "line": 312,
+      "question": "缓存命中率下降时，先看哪些指标？",
+      "source_excerpt": "缓存命中率下降时，先看哪些指标？",
+      "answer_anchor": "q01-02"
+    },
+    {
+      "id": "Q01-03",
+      "category": "章末自测",
+      "source": "01. Scaling/Readme.md",
+      "line": 313,
+      "question": "从库延迟时，如何保证用户刚写入的数据可见？",
+      "source_excerpt": "从库延迟时，如何保证用户刚写入的数据可见？",
+      "answer_anchor": "q01-03"
+    },
+    {
+      "id": "Q01-04",
+      "category": "章末自测",
+      "source": "01. Scaling/Readme.md",
+      "line": 314,
+      "question": "你选择 `user_id` 作为分片键，名人用户把一个分片打爆了怎么办？",
+      "source_excerpt": "你选择 `user_id` 作为分片键，名人用户把一个分片打爆了怎么办？",
+      "answer_anchor": "q01-04"
+    },
+    {
+      "id": "Q01-05",
+      "category": "章末自测",
+      "source": "01. Scaling/Readme.md",
+      "line": 315,
+      "question": "哪些任务适合放入消息队列？如何防止消费者重复执行？",
+      "source_excerpt": "哪些任务适合放入消息队列？如何防止消费者重复执行？",
+      "answer_anchor": "q01-05"
+    },
+    {
+      "id": "Q02-01",
+      "category": "章末自测",
+      "source": "02. Back Of the Envelope Estimation/Readme.md",
+      "line": 162,
+      "question": "`2^30` 为什么可以快速当作十亿级？",
+      "source_excerpt": "`2^30` 为什么可以快速当作十亿级？",
+      "answer_anchor": "q02-01"
+    },
+    {
+      "id": "Q02-02",
+      "category": "章末自测",
+      "source": "02. Back Of the Envelope Estimation/Readme.md",
+      "line": 163,
+      "question": "一个链路依赖三个 99.9% 的组件，端到端可用性大约是多少？",
+      "source_excerpt": "一个链路依赖三个 99.9% 的组件，端到端可用性大约是多少？",
+      "answer_anchor": "q02-02"
+    },
+    {
+      "id": "Q02-03",
+      "category": "章末自测",
+      "source": "02. Back Of the Envelope Estimation/Readme.md",
+      "line": 164,
+      "question": "若 DAU 不变、每天操作从 2 次变成 10 次，QPS 和存储如何变化？",
+      "source_excerpt": "若 DAU 不变、每天操作从 2 次变成 10 次，QPS 和存储如何变化？",
+      "answer_anchor": "q02-03"
+    },
+    {
+      "id": "Q02-04",
+      "category": "章末自测",
+      "source": "02. Back Of the Envelope Estimation/Readme.md",
+      "line": 165,
+      "question": "为什么只算平均 QPS 会让容量不足？",
+      "source_excerpt": "为什么只算平均 QPS 会让容量不足？",
+      "answer_anchor": "q02-04"
+    },
+    {
+      "id": "Q02-05",
+      "category": "章末自测",
+      "source": "02. Back Of the Envelope Estimation/Readme.md",
+      "line": 166,
+      "question": "估算结果和监控实测差很多时，先检查假设、单位还是代码？",
+      "source_excerpt": "估算结果和监控实测差很多时，先检查假设、单位还是代码？",
+      "answer_anchor": "q02-05"
+    },
+    {
+      "id": "Q03-01",
+      "category": "章末自测",
+      "source": "03. System Design Framework/Readme.md",
+      "line": 190,
+      "question": "设计新闻 Feed 时，你会先确认哪三个需求？它们如何改变架构？",
+      "source_excerpt": "设计新闻 Feed 时，你会先确认哪三个需求？它们如何改变架构？",
+      "answer_anchor": "q03-01"
+    },
+    {
+      "id": "Q03-02",
+      "category": "章末自测",
+      "source": "03. System Design Framework/Readme.md",
+      "line": 191,
+      "question": "为什么高层设计阶段要取得共识，而不是直接深挖数据库？",
+      "source_excerpt": "为什么高层设计阶段要取得共识，而不是直接深挖数据库？",
+      "answer_anchor": "q03-02"
+    },
+    {
+      "id": "Q03-03",
+      "category": "章末自测",
+      "source": "03. System Design Framework/Readme.md",
+      "line": 192,
+      "question": "一个热点组件要讨论哪些容量和故障问题？",
+      "source_excerpt": "一个热点组件要讨论哪些容量和故障问题？",
+      "answer_anchor": "q03-03"
+    },
+    {
+      "id": "Q03-04",
+      "category": "章末自测",
+      "source": "03. System Design Framework/Readme.md",
+      "line": 193,
+      "question": "当面试只剩 5 分钟，你如何收口而不是继续加组件？",
+      "source_excerpt": "当面试只剩 5 分钟，你如何收口而不是继续加组件？",
+      "answer_anchor": "q03-04"
+    },
+    {
+      "id": "Q03-05",
+      "category": "章末自测",
+      "source": "03. System Design Framework/Readme.md",
+      "line": 194,
+      "question": "你能否用 90 秒讲完“需求—路径—瓶颈—取舍—演进”？",
+      "source_excerpt": "你能否用 90 秒讲完“需求—路径—瓶颈—取舍—演进”？",
+      "answer_anchor": "q03-05"
+    },
+    {
+      "id": "Q04-01",
+      "category": "章末自测",
+      "source": "04. Rate Limiter/Readme.md",
+      "line": 169,
+      "question": "为什么前端限制不可靠？",
+      "source_excerpt": "合上文档，尝试解释：为什么前端限制不可靠？令牌桶两个参数分别管什么？为什么固定窗口边界会突发？多台网关怎样避免同时超发最后一个名额？",
+      "answer_anchor": "q04-01"
+    },
+    {
+      "id": "Q04-02",
+      "category": "章末自测",
+      "source": "04. Rate Limiter/Readme.md",
+      "line": 169,
+      "question": "令牌桶两个参数分别管什么？",
+      "source_excerpt": "合上文档，尝试解释：为什么前端限制不可靠？令牌桶两个参数分别管什么？为什么固定窗口边界会突发？多台网关怎样避免同时超发最后一个名额？",
+      "answer_anchor": "q04-02"
+    },
+    {
+      "id": "Q04-03",
+      "category": "章末自测",
+      "source": "04. Rate Limiter/Readme.md",
+      "line": 169,
+      "question": "为什么固定窗口边界会突发？",
+      "source_excerpt": "合上文档，尝试解释：为什么前端限制不可靠？令牌桶两个参数分别管什么？为什么固定窗口边界会突发？多台网关怎样避免同时超发最后一个名额？",
+      "answer_anchor": "q04-03"
+    },
+    {
+      "id": "Q04-04",
+      "category": "章末自测",
+      "source": "04. Rate Limiter/Readme.md",
+      "line": 169,
+      "question": "多台网关怎样避免同时超发最后一个名额？",
+      "source_excerpt": "合上文档，尝试解释：为什么前端限制不可靠？令牌桶两个参数分别管什么？为什么固定窗口边界会突发？多台网关怎样避免同时超发最后一个名额？",
+      "answer_anchor": "q04-04"
+    },
+    {
+      "id": "Q05-01",
+      "category": "章末自测",
+      "source": "05. Consistent Hashing/Readme.md",
+      "line": 129,
+      "question": "画 3 个服务器和 4 个 key",
+      "source_excerpt": "合上文档，尝试画 3 个服务器和 4 个 key；加入一个节点后标出唯一受影响区间；解释为什么虚拟节点不能自动消除热门 key。",
+      "answer_anchor": "q05-01"
+    },
+    {
+      "id": "Q05-02",
+      "category": "章末自测",
+      "source": "05. Consistent Hashing/Readme.md",
+      "line": 129,
+      "question": "加入一个节点后标出唯一受影响区间",
+      "source_excerpt": "合上文档，尝试画 3 个服务器和 4 个 key；加入一个节点后标出唯一受影响区间；解释为什么虚拟节点不能自动消除热门 key。",
+      "answer_anchor": "q05-02"
+    },
+    {
+      "id": "Q05-03",
+      "category": "章末自测",
+      "source": "05. Consistent Hashing/Readme.md",
+      "line": 129,
+      "question": "解释为什么虚拟节点不能自动消除热门 key",
+      "source_excerpt": "合上文档，尝试画 3 个服务器和 4 个 key；加入一个节点后标出唯一受影响区间；解释为什么虚拟节点不能自动消除热门 key。",
+      "answer_anchor": "q05-03"
+    },
+    {
+      "id": "Q06-01",
+      "category": "章末自测",
+      "source": "06. Key-Value Store/Readme.md",
+      "line": 278,
+      "question": "分区和复制分别解决什么？",
+      "source_excerpt": "自测：分区和复制分别解决什么？N=3、R=W=2 为什么读写集合相交但仍不等于完整强一致协议？向量时钟能自动选出正确姓名吗？Bloom Filter 返回“存在”后为何还要读磁盘？",
+      "answer_anchor": "q06-01"
+    },
+    {
+      "id": "Q06-02",
+      "category": "章末自测",
+      "source": "06. Key-Value Store/Readme.md",
+      "line": 278,
+      "question": "N=3、R=W=2 为什么读写集合相交但仍不等于完整强一致协议？",
+      "source_excerpt": "自测：分区和复制分别解决什么？N=3、R=W=2 为什么读写集合相交但仍不等于完整强一致协议？向量时钟能自动选出正确姓名吗？Bloom Filter 返回“存在”后为何还要读磁盘？",
+      "answer_anchor": "q06-02"
+    },
+    {
+      "id": "Q06-03",
+      "category": "章末自测",
+      "source": "06. Key-Value Store/Readme.md",
+      "line": 278,
+      "question": "向量时钟能自动选出正确姓名吗？",
+      "source_excerpt": "自测：分区和复制分别解决什么？N=3、R=W=2 为什么读写集合相交但仍不等于完整强一致协议？向量时钟能自动选出正确姓名吗？Bloom Filter 返回“存在”后为何还要读磁盘？",
+      "answer_anchor": "q06-03"
+    },
+    {
+      "id": "Q06-04",
+      "category": "章末自测",
+      "source": "06. Key-Value Store/Readme.md",
+      "line": 278,
+      "question": "Bloom Filter 返回“存在”后为何还要读磁盘？",
+      "source_excerpt": "自测：分区和复制分别解决什么？N=3、R=W=2 为什么读写集合相交但仍不等于完整强一致协议？向量时钟能自动选出正确姓名吗？Bloom Filter 返回“存在”后为何还要读磁盘？",
+      "answer_anchor": "q06-04"
+    },
+    {
+      "id": "Q07-01",
+      "category": "章末自测",
+      "source": "07. Unique-Id Generator/Readme.md",
+      "line": 141,
+      "question": "唯一、连续、有序有什么区别？",
+      "source_excerpt": "自测：唯一、连续、有序有什么区别？UUIDv7 为什么仍不满足本题？为什么机器号重复会产生碰撞？同一毫秒序列用完或时钟回拨时，该做什么？",
+      "answer_anchor": "q07-01"
+    },
+    {
+      "id": "Q07-02",
+      "category": "章末自测",
+      "source": "07. Unique-Id Generator/Readme.md",
+      "line": 141,
+      "question": "UUIDv7 为什么仍不满足本题？",
+      "source_excerpt": "自测：唯一、连续、有序有什么区别？UUIDv7 为什么仍不满足本题？为什么机器号重复会产生碰撞？同一毫秒序列用完或时钟回拨时，该做什么？",
+      "answer_anchor": "q07-02"
+    },
+    {
+      "id": "Q07-03",
+      "category": "章末自测",
+      "source": "07. Unique-Id Generator/Readme.md",
+      "line": 141,
+      "question": "为什么机器号重复会产生碰撞？",
+      "source_excerpt": "自测：唯一、连续、有序有什么区别？UUIDv7 为什么仍不满足本题？为什么机器号重复会产生碰撞？同一毫秒序列用完或时钟回拨时，该做什么？",
+      "answer_anchor": "q07-03"
+    },
+    {
+      "id": "Q07-04",
+      "category": "章末自测",
+      "source": "07. Unique-Id Generator/Readme.md",
+      "line": 141,
+      "question": "同一毫秒序列用完或时钟回拨时，该做什么？",
+      "source_excerpt": "自测：唯一、连续、有序有什么区别？UUIDv7 为什么仍不满足本题？为什么机器号重复会产生碰撞？同一毫秒序列用完或时钟回拨时，该做什么？",
+      "answer_anchor": "q07-04"
+    },
+    {
+      "id": "Q22-01",
+      "category": "章末自测",
+      "source": "22. Hotel Reservation System/README.md",
+      "line": 334,
+      "question": "住三晚时中间一天无房怎么办？",
+      "source_excerpt": "自测：① 住三晚时中间一天无房怎么办？② 同一订单重试与两张订单抢房有什么不同？③ 为什么缓存显示有房仍可下单失败？④ 若允许 10% 超售，数据库约束应该限制什么？",
+      "answer_anchor": "q22-01"
+    },
+    {
+      "id": "Q22-02",
+      "category": "章末自测",
+      "source": "22. Hotel Reservation System/README.md",
+      "line": 334,
+      "question": "同一订单重试与两张订单抢房有什么不同？",
+      "source_excerpt": "自测：① 住三晚时中间一天无房怎么办？② 同一订单重试与两张订单抢房有什么不同？③ 为什么缓存显示有房仍可下单失败？④ 若允许 10% 超售，数据库约束应该限制什么？",
+      "answer_anchor": "q22-02"
+    },
+    {
+      "id": "Q22-03",
+      "category": "章末自测",
+      "source": "22. Hotel Reservation System/README.md",
+      "line": 334,
+      "question": "为什么缓存显示有房仍可下单失败？",
+      "source_excerpt": "自测：① 住三晚时中间一天无房怎么办？② 同一订单重试与两张订单抢房有什么不同？③ 为什么缓存显示有房仍可下单失败？④ 若允许 10% 超售，数据库约束应该限制什么？",
+      "answer_anchor": "q22-03"
+    },
+    {
+      "id": "Q22-04",
+      "category": "章末自测",
+      "source": "22. Hotel Reservation System/README.md",
+      "line": 334,
+      "question": "若允许 10% 超售，数据库约束应该限制什么？",
+      "source_excerpt": "自测：① 住三晚时中间一天无房怎么办？② 同一订单重试与两张订单抢房有什么不同？③ 为什么缓存显示有房仍可下单失败？④ 若允许 10% 超售，数据库约束应该限制什么？",
+      "answer_anchor": "q22-04"
+    },
+    {
+      "id": "Q23-01",
+      "category": "章末自测",
+      "source": "23. Distributed Email Service/README.md",
+      "line": 261,
+      "question": "SMTP 接受邮件代表用户已读吗？",
+      "source_excerpt": "自测：① SMTP 接受邮件代表用户已读吗？② 为什么附件常放对象存储？③ 搜索不到刚收到的信，先查哪个队列水位？④ 已读查询表反规范化之后多了什么写入责任？",
+      "answer_anchor": "q23-01"
+    },
+    {
+      "id": "Q23-02",
+      "category": "章末自测",
+      "source": "23. Distributed Email Service/README.md",
+      "line": 261,
+      "question": "为什么附件常放对象存储？",
+      "source_excerpt": "自测：① SMTP 接受邮件代表用户已读吗？② 为什么附件常放对象存储？③ 搜索不到刚收到的信，先查哪个队列水位？④ 已读查询表反规范化之后多了什么写入责任？",
+      "answer_anchor": "q23-02"
+    },
+    {
+      "id": "Q23-03",
+      "category": "章末自测",
+      "source": "23. Distributed Email Service/README.md",
+      "line": 261,
+      "question": "搜索不到刚收到的信，先查哪个队列水位？",
+      "source_excerpt": "自测：① SMTP 接受邮件代表用户已读吗？② 为什么附件常放对象存储？③ 搜索不到刚收到的信，先查哪个队列水位？④ 已读查询表反规范化之后多了什么写入责任？",
+      "answer_anchor": "q23-03"
+    },
+    {
+      "id": "Q23-04",
+      "category": "章末自测",
+      "source": "23. Distributed Email Service/README.md",
+      "line": 261,
+      "question": "已读查询表反规范化之后多了什么写入责任？",
+      "source_excerpt": "自测：① SMTP 接受邮件代表用户已读吗？② 为什么附件常放对象存储？③ 搜索不到刚收到的信，先查哪个队列水位？④ 已读查询表反规范化之后多了什么写入责任？",
+      "answer_anchor": "q23-04"
+    },
+    {
+      "id": "Q24-01",
+      "category": "章末自测",
+      "source": "24. S3-like Object Storage/README.md",
+      "line": 296,
+      "question": "8+4 的总存储放大为什么是 1.5？",
+      "source_excerpt": "自测：① 8+4 的总存储放大为什么是 1.5？② 元数据提交失败会留下什么？③ 同步三副本为什么不能直接证明线性一致？④ ETag 为什么不能始终当 MD5？",
+      "answer_anchor": "q24-01"
+    },
+    {
+      "id": "Q24-02",
+      "category": "章末自测",
+      "source": "24. S3-like Object Storage/README.md",
+      "line": 296,
+      "question": "元数据提交失败会留下什么？",
+      "source_excerpt": "自测：① 8+4 的总存储放大为什么是 1.5？② 元数据提交失败会留下什么？③ 同步三副本为什么不能直接证明线性一致？④ ETag 为什么不能始终当 MD5？",
+      "answer_anchor": "q24-02"
+    },
+    {
+      "id": "Q24-03",
+      "category": "章末自测",
+      "source": "24. S3-like Object Storage/README.md",
+      "line": 296,
+      "question": "同步三副本为什么不能直接证明线性一致？",
+      "source_excerpt": "自测：① 8+4 的总存储放大为什么是 1.5？② 元数据提交失败会留下什么？③ 同步三副本为什么不能直接证明线性一致？④ ETag 为什么不能始终当 MD5？",
+      "answer_anchor": "q24-03"
+    },
+    {
+      "id": "Q24-04",
+      "category": "章末自测",
+      "source": "24. S3-like Object Storage/README.md",
+      "line": 296,
+      "question": "ETag 为什么不能始终当 MD5？",
+      "source_excerpt": "自测：① 8+4 的总存储放大为什么是 1.5？② 元数据提交失败会留下什么？③ 同步三副本为什么不能直接证明线性一致？④ ETag 为什么不能始终当 MD5？",
+      "answer_anchor": "q24-04"
+    },
+    {
+      "id": "Q25-01",
+      "category": "章末自测",
+      "source": "25. Real-time Gaming Leaderboard/README.md",
+      "line": 337,
+      "question": "为什么 HTTPS 不能防玩家自行报高分？",
+      "source_excerpt": "自测：① 为什么 HTTPS 不能防玩家自行报高分？② 两人同分时 Redis 返回的位置就是题目要求的并列名次吗？③ Redis Cluster 为什么不能自动拆一个大 ZSET？④ 本地 Top 10 为什么足够求全局 Top 10？",
+      "answer_anchor": "q25-01"
+    },
+    {
+      "id": "Q25-02",
+      "category": "章末自测",
+      "source": "25. Real-time Gaming Leaderboard/README.md",
+      "line": 337,
+      "question": "两人同分时 Redis 返回的位置就是题目要求的并列名次吗？",
+      "source_excerpt": "自测：① 为什么 HTTPS 不能防玩家自行报高分？② 两人同分时 Redis 返回的位置就是题目要求的并列名次吗？③ Redis Cluster 为什么不能自动拆一个大 ZSET？④ 本地 Top 10 为什么足够求全局 Top 10？",
+      "answer_anchor": "q25-02"
+    },
+    {
+      "id": "Q25-03",
+      "category": "章末自测",
+      "source": "25. Real-time Gaming Leaderboard/README.md",
+      "line": 337,
+      "question": "Redis Cluster 为什么不能自动拆一个大 ZSET？",
+      "source_excerpt": "自测：① 为什么 HTTPS 不能防玩家自行报高分？② 两人同分时 Redis 返回的位置就是题目要求的并列名次吗？③ Redis Cluster 为什么不能自动拆一个大 ZSET？④ 本地 Top 10 为什么足够求全局 Top 10？",
+      "answer_anchor": "q25-03"
+    },
+    {
+      "id": "Q25-04",
+      "category": "章末自测",
+      "source": "25. Real-time Gaming Leaderboard/README.md",
+      "line": 337,
+      "question": "本地 Top 10 为什么足够求全局 Top 10？",
+      "source_excerpt": "自测：① 为什么 HTTPS 不能防玩家自行报高分？② 两人同分时 Redis 返回的位置就是题目要求的并列名次吗？③ Redis Cluster 为什么不能自动拆一个大 ZSET？④ 本地 Top 10 为什么足够求全局 Top 10？",
+      "answer_anchor": "q25-04"
+    },
+    {
+      "id": "R-01",
+      "category": "通用复盘",
+      "source": "术语速查.md",
+      "line": 44,
+      "question": "一次请求从哪里进、哪里返回成功？",
+      "source_excerpt": "一次请求从哪里进、哪里返回成功？",
+      "answer_anchor": "r-01"
+    },
+    {
+      "id": "R-02",
+      "category": "通用复盘",
+      "source": "术语速查.md",
+      "line": 45,
+      "question": "哪一份记录是可用于恢复的权威事实？",
+      "source_excerpt": "哪一份记录是可用于恢复的权威事实？",
+      "answer_anchor": "r-02"
+    },
+    {
+      "id": "R-03",
+      "category": "通用复盘",
+      "source": "术语速查.md",
+      "line": 46,
+      "question": "请求重复、机器重启、网络断开时会发生什么？",
+      "source_excerpt": "请求重复、机器重启、网络断开时会发生什么？",
+      "answer_anchor": "r-03"
+    },
+    {
+      "id": "R-04",
+      "category": "通用复盘",
+      "source": "术语速查.md",
+      "line": 47,
+      "question": "哪个数字或查询模式决定了要不要缓存、分片或异步？",
+      "source_excerpt": "哪个数字或查询模式决定了要不要缓存、分片或异步？",
+      "answer_anchor": "r-04"
+    },
+    {
+      "id": "R-05",
+      "category": "通用复盘",
+      "source": "术语速查.md",
+      "line": 48,
+      "question": "我为了延迟/成本/可靠性牺牲了什么？",
+      "source_excerpt": "我为了延迟/成本/可靠性牺牲了什么？",
+      "answer_anchor": "r-05"
+    },
+    {
+      "id": "P27-01",
+      "category": "正文追问",
+      "source": "27.  Digital Wallet/README.md",
+      "line": 247,
+      "question": "是否知道任意时刻的账户余额？",
+      "source_excerpt": "是否知道任意时刻的账户余额？",
+      "answer_anchor": "p27-01"
+    },
+    {
+      "id": "P27-02",
+      "category": "正文追问",
+      "source": "27.  Digital Wallet/README.md",
+      "line": 248,
+      "question": "如何证明历史余额和当前余额正确？",
+      "source_excerpt": "如何证明历史余额和当前余额正确？",
+      "answer_anchor": "p27-02"
+    },
+    {
+      "id": "P27-03",
+      "category": "正文追问",
+      "source": "27.  Digital Wallet/README.md",
+      "line": 249,
+      "question": "代码修改后，如何验证系统逻辑仍然正确？",
+      "source_excerpt": "代码修改后，如何验证系统逻辑仍然正确？",
+      "answer_anchor": "p27-03"
+    },
+    {
+      "id": "P28-01",
+      "category": "正文追问",
+      "source": "28. Stock Exchange/README.md",
+      "line": 462,
+      "question": "主实例下线，什么时候、怎样切换到备份？",
+      "source_excerpt": "主实例下线，什么时候、怎样切换到备份？",
+      "answer_anchor": "p28-01"
+    },
+    {
+      "id": "P28-02",
+      "category": "正文追问",
+      "source": "28. Stock Exchange/README.md",
+      "line": 463,
+      "question": "从备份中如何选主？",
+      "source_excerpt": "从备份中如何选主？",
+      "answer_anchor": "p28-02"
+    },
+    {
+      "id": "P28-03",
+      "category": "正文追问",
+      "source": "28. Stock Exchange/README.md",
+      "line": 464,
+      "question": "恢复时间目标 RTO 是多少？",
+      "source_excerpt": "恢复时间目标 RTO 是多少？",
+      "answer_anchor": "p28-03"
+    },
+    {
+      "id": "P28-04",
+      "category": "正文追问",
+      "source": "28. Stock Exchange/README.md",
+      "line": 465,
+      "question": "必须恢复哪些功能，能否降级运行？",
+      "source_excerpt": "必须恢复哪些功能，能否降级运行？",
+      "answer_anchor": "p28-04"
+    }
+  ]
+}

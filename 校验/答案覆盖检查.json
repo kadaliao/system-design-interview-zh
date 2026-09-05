@@ -1,0 +1,304 @@
+{
+  "expected_answers": 58,
+  "actual_answers": 58,
+  "counts": {
+    "章末自测": 46,
+    "通用复盘": 5,
+    "正文追问": 7
+  },
+  "illustration_references": 31,
+  "unique_illustrations": 31,
+  "answers": [
+    {
+      "id": "Q01-01",
+      "answer_anchor": "q01-01",
+      "chinese_characters": 493
+    },
+    {
+      "id": "Q01-02",
+      "answer_anchor": "q01-02",
+      "chinese_characters": 495
+    },
+    {
+      "id": "Q01-03",
+      "answer_anchor": "q01-03",
+      "chinese_characters": 537
+    },
+    {
+      "id": "Q01-04",
+      "answer_anchor": "q01-04",
+      "chinese_characters": 500
+    },
+    {
+      "id": "Q01-05",
+      "answer_anchor": "q01-05",
+      "chinese_characters": 629
+    },
+    {
+      "id": "Q02-01",
+      "answer_anchor": "q02-01",
+      "chinese_characters": 368
+    },
+    {
+      "id": "Q02-02",
+      "answer_anchor": "q02-02",
+      "chinese_characters": 452
+    },
+    {
+      "id": "Q02-03",
+      "answer_anchor": "q02-03",
+      "chinese_characters": 382
+    },
+    {
+      "id": "Q02-04",
+      "answer_anchor": "q02-04",
+      "chinese_characters": 468
+    },
+    {
+      "id": "Q02-05",
+      "answer_anchor": "q02-05",
+      "chinese_characters": 533
+    },
+    {
+      "id": "Q03-01",
+      "answer_anchor": "q03-01",
+      "chinese_characters": 599
+    },
+    {
+      "id": "Q03-02",
+      "answer_anchor": "q03-02",
+      "chinese_characters": 556
+    },
+    {
+      "id": "Q03-03",
+      "answer_anchor": "q03-03",
+      "chinese_characters": 556
+    },
+    {
+      "id": "Q03-04",
+      "answer_anchor": "q03-04",
+      "chinese_characters": 565
+    },
+    {
+      "id": "Q03-05",
+      "answer_anchor": "q03-05",
+      "chinese_characters": 630
+    },
+    {
+      "id": "Q04-01",
+      "answer_anchor": "q04-01",
+      "chinese_characters": 341
+    },
+    {
+      "id": "Q04-02",
+      "answer_anchor": "q04-02",
+      "chinese_characters": 333
+    },
+    {
+      "id": "Q04-03",
+      "answer_anchor": "q04-03",
+      "chinese_characters": 343
+    },
+    {
+      "id": "Q04-04",
+      "answer_anchor": "q04-04",
+      "chinese_characters": 386
+    },
+    {
+      "id": "Q05-01",
+      "answer_anchor": "q05-01",
+      "chinese_characters": 283
+    },
+    {
+      "id": "Q05-02",
+      "answer_anchor": "q05-02",
+      "chinese_characters": 288
+    },
+    {
+      "id": "Q05-03",
+      "answer_anchor": "q05-03",
+      "chinese_characters": 407
+    },
+    {
+      "id": "Q06-01",
+      "answer_anchor": "q06-01",
+      "chinese_characters": 367
+    },
+    {
+      "id": "Q06-02",
+      "answer_anchor": "q06-02",
+      "chinese_characters": 389
+    },
+    {
+      "id": "Q06-03",
+      "answer_anchor": "q06-03",
+      "chinese_characters": 388
+    },
+    {
+      "id": "Q06-04",
+      "answer_anchor": "q06-04",
+      "chinese_characters": 364
+    },
+    {
+      "id": "Q07-01",
+      "answer_anchor": "q07-01",
+      "chinese_characters": 373
+    },
+    {
+      "id": "Q07-02",
+      "answer_anchor": "q07-02",
+      "chinese_characters": 319
+    },
+    {
+      "id": "Q07-03",
+      "answer_anchor": "q07-03",
+      "chinese_characters": 367
+    },
+    {
+      "id": "Q07-04",
+      "answer_anchor": "q07-04",
+      "chinese_characters": 415
+    },
+    {
+      "id": "Q22-01",
+      "answer_anchor": "q22-01",
+      "chinese_characters": 498
+    },
+    {
+      "id": "Q22-02",
+      "answer_anchor": "q22-02",
+      "chinese_characters": 476
+    },
+    {
+      "id": "Q22-03",
+      "answer_anchor": "q22-03",
+      "chinese_characters": 449
+    },
+    {
+      "id": "Q22-04",
+      "answer_anchor": "q22-04",
+      "chinese_characters": 440
+    },
+    {
+      "id": "Q23-01",
+      "answer_anchor": "q23-01",
+      "chinese_characters": 461
+    },
+    {
+      "id": "Q23-02",
+      "answer_anchor": "q23-02",
+      "chinese_characters": 446
+    },
+    {
+      "id": "Q23-03",
+      "answer_anchor": "q23-03",
+      "chinese_characters": 473
+    },
+    {
+      "id": "Q23-04",
+      "answer_anchor": "q23-04",
+      "chinese_characters": 529
+    },
+    {
+      "id": "Q24-01",
+      "answer_anchor": "q24-01",
+      "chinese_characters": 390
+    },
+    {
+      "id": "Q24-02",
+      "answer_anchor": "q24-02",
+      "chinese_characters": 495
+    },
+    {
+      "id": "Q24-03",
+      "answer_anchor": "q24-03",
+      "chinese_characters": 511
+    },
+    {
+      "id": "Q24-04",
+      "answer_anchor": "q24-04",
+      "chinese_characters": 470
+    },
+    {
+      "id": "Q25-01",
+      "answer_anchor": "q25-01",
+      "chinese_characters": 479
+    },
+    {
+      "id": "Q25-02",
+      "answer_anchor": "q25-02",
+      "chinese_characters": 394
+    },
+    {
+      "id": "Q25-03",
+      "answer_anchor": "q25-03",
+      "chinese_characters": 419
+    },
+    {
+      "id": "Q25-04",
+      "answer_anchor": "q25-04",
+      "chinese_characters": 540
+    },
+    {
+      "id": "R-01",
+      "answer_anchor": "r-01",
+      "chinese_characters": 412
+    },
+    {
+      "id": "R-02",
+      "answer_anchor": "r-02",
+      "chinese_characters": 451
+    },
+    {
+      "id": "R-03",
+      "answer_anchor": "r-03",
+      "chinese_characters": 437
+    },
+    {
+      "id": "R-04",
+      "answer_anchor": "r-04",
+      "chinese_characters": 403
+    },
+    {
+      "id": "R-05",
+      "answer_anchor": "r-05",
+      "chinese_characters": 463
+    },
+    {
+      "id": "P27-01",
+      "answer_anchor": "p27-01",
+      "chinese_characters": 449
+    },
+    {
+      "id": "P27-02",
+      "answer_anchor": "p27-02",
+      "chinese_characters": 466
+    },
+    {
+      "id": "P27-03",
+      "answer_anchor": "p27-03",
+      "chinese_characters": 539
+    },
+    {
+      "id": "P28-01",
+      "answer_anchor": "p28-01",
+      "chinese_characters": 502
+    },
+    {
+      "id": "P28-02",
+      "answer_anchor": "p28-02",
+      "chinese_characters": 452
+    },
+    {
+      "id": "P28-03",
+      "answer_anchor": "p28-03",
+      "chinese_characters": 439
+    },
+    {
+      "id": "P28-04",
+      "answer_anchor": "p28-04",
+      "chinese_characters": 511
+    }
+  ],
+  "errors": []
+}
