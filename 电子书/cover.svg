@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2560" viewBox="0 0 1600 2560" role="img" aria-labelledby="title desc">
+  <title id="title">系统设计面试笔记中文版学习版封面</title>
+  <desc id="desc">从 CRUD 到分布式系统，二十九章与五十八道自测详解。</desc>
+  <rect width="1600" height="2560" fill="#f7f2e8"/>
+  <path d="M0 0h1600v160l-260 40-310-46-298 57-384-35L0 221Z" fill="#254c43"/>
+  <path d="M0 2370l302-47 316 51 336-71 311 56 335-65v266H0Z" fill="#254c43"/>
+  <path d="M118 324C390 269 637 300 853 269c218-31 396-14 618 31" fill="none" stroke="#d68c5c" stroke-width="12" stroke-linecap="round" opacity=".88"/>
+  <text x="126" y="510" fill="#254c43" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="78" font-weight="600">系统设计面试笔记</text>
+  <text x="126" y="640" fill="#18342e" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="132" font-weight="800">中文版学习版</text>
+  <text x="132" y="742" fill="#5e6e68" font-family="PingFang SC, Noto Sans CJK SC, sans-serif" font-size="42" letter-spacing="5">从 CRUD 到分布式系统</text>
+
+  <g transform="translate(120 945)" stroke="#355b51" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M125 226C70 192 78 95 147 73c25-78 139-88 177-24 68-42 164 5 157 83 80 6 108 109 51 158-36 31-88 29-126 17H188c-24 0-44-7-63-19" fill="#e6ede3"/>
+    <g fill="#fffaf1">
+      <rect x="632" y="28" width="360" height="222" rx="36"/>
+      <path d="M632 101h360M632 176h360"/>
+      <circle cx="680" cy="65" r="13" fill="#d68c5c" stroke="none"/>
+      <circle cx="680" cy="138" r="13" fill="#d68c5c" stroke="none"/>
+      <circle cx="680" cy="213" r="13" fill="#d68c5c" stroke="none"/>
+    </g>
+    <g fill="#fffaf1">
+      <path d="M62 550c0-38 78-69 174-69s174 31 174 69v191c0 38-78 69-174 69S62 779 62 741Z"/>
+      <ellipse cx="236" cy="550" rx="174" ry="69"/>
+      <path d="M62 646c0 38 78 69 174 69s174-31 174-69" fill="none"/>
+    </g>
+    <g fill="#e6ede3">
+      <rect x="620" y="503" width="388" height="250" rx="34"/>
+      <path d="M669 566h289M669 626h223M669 686h260"/>
+    </g>
+    <path d="M505 180h93" fill="none"/>
+    <path d="m574 148 32 32-32 32" fill="none"/>
+    <path d="M810 287v174" fill="none"/>
+    <path d="m778 436 32 32 32-32" fill="none"/>
+    <path d="M584 633H451" fill="none"/>
+    <path d="m480 601-32 32 32 32" fill="none"/>
+  </g>
+
+  <g font-family="PingFang SC, Noto Sans CJK SC, sans-serif">
+    <rect x="124" y="1904" width="1352" height="205" rx="34" fill="#e7eee3" stroke="#aac0b7" stroke-width="5"/>
+    <text x="182" y="1984" fill="#254c43" font-size="43" font-weight="700">29 章中文笔记 · 58 道自测详解</text>
+    <text x="182" y="2055" fill="#536961" font-size="35">批注、算例、故障边界与完整机制图解</text>
+    <text x="126" y="2208" fill="#82654f" font-size="30" letter-spacing="3">SYSTEM-DESIGN-NOTES · 非官方中文学习版</text>
+  </g>
+</svg>

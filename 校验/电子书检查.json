@@ -1,0 +1,32 @@
+{
+  "epub": {
+    "zip_entries": 496,
+    "manifest_items": 492,
+    "spine_items": 35,
+    "image_items": 454,
+    "epub3_navigation_documents": 1,
+    "ncx_navigation_documents": 0,
+    "required_content_present": true
+  },
+  "azw3_metadata": {
+    "readable": true,
+    "title_present": true,
+    "language_present": true
+  },
+  "epub_metadata": {
+    "readable": true,
+    "title_present": true,
+    "language_present": true
+  },
+  "azw3_roundtrip_epub": {
+    "zip_entries": 712,
+    "manifest_items": 706,
+    "spine_items": 249,
+    "image_items": 454,
+    "epub3_navigation_documents": 0,
+    "ncx_navigation_documents": 1,
+    "required_content_present": true
+  },
+  "artifact_hashes_match": true,
+  "errors": []
+}
