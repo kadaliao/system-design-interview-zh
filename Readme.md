@@ -6,7 +6,7 @@
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[打开离线阅读版](./index.html) · [下载 EPUB](./电子书/系统设计面试笔记-中文版学习版.epub) · [下载 AZW3](./电子书/系统设计面试笔记-中文版学习版.azw3) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-notes/中文版/) · [打开离线阅读版](./index.html) · [下载 EPUB](./电子书/系统设计面试笔记-中文版学习版.epub) · [下载 AZW3](./电子书/系统设计面试笔记-中文版学习版.azw3) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
 
 ## 怎么读
 
@@ -76,3 +76,17 @@
 原笔记中的过时概括、算式矛盾和示例缺陷在相应位置单独标注，不默默改成另一套结论。未经实测的吞吐量和成本仍是题设或估算，不能直接当成生产系统保证。
 
 第 29 章汇总 46 个章末自测条目，另补 5 道通用复盘题和 7 道钱包/交易所正文追问。每道题有稳定编号，可从原章题目后的链接跳到详细答案。
+
+## 维护与发布
+
+`index.html` 由 Markdown 编译而来，改完任何章节、`Readme.md`、术语或延伸阅读后都要重新生成并一起提交：
+
+```bash
+npm install --no-save --prefix /tmp/sdn-deps marked@18.0.14
+MARKED_MODULE=/tmp/sdn-deps/node_modules/marked/lib/marked.esm.js node 工具/build-reader.mjs
+PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-reader.cjs   # 可选：图片、锚点、移动端验收
+```
+
+电子书的重新构建见 [电子书/README.md](./电子书/README.md)。
+
+推送到 `main` 后，GitHub Actions（`.github/workflows/pages.yml`）会重新编译阅读页并发布到 [GitHub Pages](https://kadaliao.github.io/system-design-notes/中文版/)；如果仓库里的 `index.html` 没有同步更新，该工作流会给出警告，但线上仍以最新 Markdown 为准。
