@@ -1,6 +1,6 @@
 # 第 7 章：设计分布式唯一 ID 生成器（Unique ID Generator）
 
-> 对照原版：[07. Unique-Id Generator/Readme.md](../../07.%20Unique-Id%20Generator/Readme.md)。本章按原文翻译并插入批注；原版文件保持不变。
+> 对照原版：[07. Unique-Id Generator/Readme.md](https://github.com/liquidslr/system-design-notes/blob/main/07.%20Unique-Id%20Generator/Readme.md)。本章按原文翻译并插入批注；原版文件保持不变。
 
 ## 学习导读
 

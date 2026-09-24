@@ -1,12 +1,12 @@
 # 系统设计面试笔记：中文版学习版
 
-这是基于本仓库原版系统设计笔记整理的中文学习版（对应《System Design Interview》卷 1、卷 2 的笔记，并非原书全文），目标读者是**会写 CRUD，但对分布式系统、容量估算和故障处理缺乏整体感觉的工程师**。
+这是基于 [liquidslr/system-design-notes](https://github.com/liquidslr/system-design-notes) 英文笔记整理的中文学习版（对应《System Design Interview》卷 1、卷 2 的笔记，并非原书全文），目标读者是**会写 CRUD，但对分布式系统、容量估算和故障处理缺乏整体感觉的工程师**。
 
-> 原版目录和文件保持不变。中文版只在新目录中增加翻译、批注、学习提示和补充插图。
+> 各章保留原笔记的结构、原图和代码示例，在此基础上增加翻译、批注、学习提示和补充插图。英文原文可随时在[上游仓库](https://github.com/liquidslr/system-design-notes)对照。
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[在线阅读](https://kadaliao.github.io/system-design-notes/中文版/) · [打开离线阅读版](./index.html) · [下载 EPUB](./电子书/系统设计面试笔记-中文版学习版.epub) · [下载 AZW3](./电子书/系统设计面试笔记-中文版学习版.azw3) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
 
 ## 怎么读
 
@@ -87,6 +87,10 @@ MARKED_MODULE=/tmp/sdn-deps/node_modules/marked/lib/marked.esm.js node 工具/bu
 PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-reader.cjs   # 可选：图片、锚点、移动端验收
 ```
 
-电子书的重新构建见 [电子书/README.md](./电子书/README.md)。
+完整的检查步骤见 [验收说明](./校验/验收说明.md#后续编辑)。电子书不进 Git，重新构建后发布到 [Releases](https://github.com/kadaliao/system-design-interview-zh/releases)，步骤见 [电子书/README.md](./电子书/README.md)。
 
-推送到 `main` 后，GitHub Actions（`.github/workflows/pages.yml`）会重新编译阅读页并发布到 [GitHub Pages](https://kadaliao.github.io/system-design-notes/中文版/)；如果仓库里的 `index.html` 没有同步更新，该工作流会给出警告，但线上仍以最新 Markdown 为准。
+推送到 `main` 后，GitHub Actions（`.github/workflows/pages.yml`）会重新编译阅读页并发布到 [GitHub Pages](https://kadaliao.github.io/system-design-interview-zh/)；如果仓库里的 `index.html` 没有同步更新，该工作流会给出警告，但线上仍以最新 Markdown 为准。
+
+## 来源与署名
+
+英文原笔记来自 [liquidslr/system-design-notes](https://github.com/liquidslr/system-design-notes)，整理自 Alex Xu 的《System Design Interview》卷 1、卷 2。本仓库是其中文学习版，最初在该仓库的 fork 中完成，后独立出来；原图按字节复制自原仓库，版权归原作者。原仓库未声明开源许可证，如原作者对转载有异议，请提 issue 联系。

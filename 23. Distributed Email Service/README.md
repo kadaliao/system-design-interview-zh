@@ -1,6 +1,6 @@
 # 第 23 章：分布式邮件服务（Distributed Email Service）
 
-> 原版：[第 23 章英文笔记](../../23.%20Distributed%20Email%20Service/README.md)。按原文顺序翻译；新增解释和校正标为「批注」。原文件未改动。
+> 原版：[第 23 章英文笔记](https://github.com/liquidslr/system-design-notes/blob/main/23.%20Distributed%20Email%20Service/README.md)。按原文顺序翻译；新增解释和校正标为「批注」。原文件未改动。
 
 ## 学习导读
 

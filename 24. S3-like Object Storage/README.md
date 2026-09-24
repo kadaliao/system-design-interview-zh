@@ -1,6 +1,6 @@
 # 第 24 章：S3 类对象存储（S3-like Object Storage）
 
-> 原版：[第 24 章英文笔记](../../24.%20S3-like%20Object%20Storage/README.md)。按原文结构翻译；「批注」区分新增解释和校正。这里是教学设计，不是对 Amazon S3 内部实现的披露。
+> 原版：[第 24 章英文笔记](https://github.com/liquidslr/system-design-notes/blob/main/24.%20S3-like%20Object%20Storage/README.md)。按原文结构翻译；「批注」区分新增解释和校正。这里是教学设计，不是对 Amazon S3 内部实现的披露。
 
 ## 学习导读
 

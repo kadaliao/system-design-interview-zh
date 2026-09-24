@@ -1,6 +1,6 @@
 # 第 22 章：酒店预订系统（Hotel Reservation System）
 
-> 原版：[第 22 章英文笔记](../../22.%20Hotel%20Reservation%20System/README.md)。以下按原文顺序翻译；「批注」是新增解释或校正，原文件未改动。
+> 原版：[第 22 章英文笔记](https://github.com/liquidslr/system-design-notes/blob/main/22.%20Hotel%20Reservation%20System/README.md)。以下按原文顺序翻译；「批注」是新增解释或校正，原文件未改动。
 
 ## 学习导读
 

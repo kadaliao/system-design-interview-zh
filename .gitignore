@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .ebook-build/
 .ebook-book.html
+电子书/*.epub
+电子书/*.azw3

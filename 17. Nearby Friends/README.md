@@ -1,6 +1,6 @@
 # 第17章：附近好友（Nearby Friends）
 
-> 对应[英文原版](<../../17. Nearby Friends/README.md>)。正文按原小节翻译；批注为额外解释与边界提醒，原版文件不变。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/17.%20Nearby%20Friends/README.md)。正文按原小节翻译；批注为额外解释与边界提醒，原版文件不变。
 
 ## 中文学习导读
 

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""只读验证中文版：目录、源图字节、引用、SVG与原文未改动；可输出报告。"""
+"""只读验证中文版：目录、源图字节、引用、SVG与原文未改动；可输出报告。原文取自 --original 指定的上游克隆。"""
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import re,json,hashlib,subprocess,sys,xml.etree.ElementTree as ET
 
-zh=Path(__file__).resolve().parents[1]; root=zh.parent
+zh=Path(__file__).resolve().parents[1]
+# 原版英文笔记在上游仓库，需指定其本地克隆：git clone https://github.com/liquidslr/system-design-notes
+original=next((sys.argv[i+1] for i,a in enumerate(sys.argv[:-1]) if a=='--original'),None)
+if not original:raise SystemExit('用法: python3 工具/verify.py --original <上游英文仓库克隆> [--write]')
+root=Path(original).resolve()
 errors=[]; stats=[]
 sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
 def refs(text):

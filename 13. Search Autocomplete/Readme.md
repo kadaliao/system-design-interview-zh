@@ -1,6 +1,6 @@
 # 第 13 章：设计搜索自动补全（Search Autocomplete）
 
-> 译文来源：[原版第 13 章](../../13.%20Search%20Autocomplete/Readme.md)。原版不变；批注与手绘图为新增教学内容。
+> 译文来源：[原版第 13 章](https://github.com/liquidslr/system-design-notes/blob/main/13.%20Search%20Autocomplete/Readme.md)。原版不变；批注与手绘图为新增教学内容。
 
 ## 中文学习导读
 

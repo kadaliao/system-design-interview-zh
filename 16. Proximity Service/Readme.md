@@ -1,6 +1,6 @@
 # 第16章：附近地点服务（Proximity Service）
 
-> 对应[英文原版](<../../16. Proximity Service/Readme.md>)。原版文件与图片保持不变；本文按原文结构翻译，批注单独标明。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/16.%20Proximity%20Service/Readme.md)。原版文件与图片保持不变；本文按原文结构翻译，批注单独标明。
 
 ## 中文学习导读
 

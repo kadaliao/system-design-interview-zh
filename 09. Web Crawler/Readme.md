@@ -1,6 +1,6 @@
 # 第 9 章：设计网络爬虫（Web Crawler）
 
-> 译文来源：[原版第 9 章](../../09.%20Web%20Crawler/Readme.md)。原版不变；“批注”和手绘图为新增教学内容。
+> 译文来源：[原版第 9 章](https://github.com/liquidslr/system-design-notes/blob/main/09.%20Web%20Crawler/Readme.md)。原版不变；“批注”和手绘图为新增教学内容。
 
 ## 中文学习导读
 

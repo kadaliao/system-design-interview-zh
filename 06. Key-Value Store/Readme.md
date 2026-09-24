@@ -1,6 +1,6 @@
 # 第 6 章：设计键值存储（Design a Key-Value Store）
 
-> 对照原版：[06. Key-Value Store/Readme.md](../../06.%20Key-Value%20Store/Readme.md)。正文沿用原版结构；“批注”用于补充解释或标明原文简化的边界，原版文件未修改。
+> 对照原版：[06. Key-Value Store/Readme.md](https://github.com/liquidslr/system-design-notes/blob/main/06.%20Key-Value%20Store/Readme.md)。正文沿用原版结构；“批注”用于补充解释或标明原文简化的边界，原版文件未修改。
 
 ## 学习导读
 

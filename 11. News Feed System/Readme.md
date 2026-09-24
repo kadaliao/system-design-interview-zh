@@ -1,6 +1,6 @@
 # 第 11 章：设计新闻流系统（News Feed System）
 
-> 译文来源：[原版第 11 章](../../11.%20News%20Feed%20System/Readme.md)。原版保持不变；批注和手绘图为新增内容。
+> 译文来源：[原版第 11 章](https://github.com/liquidslr/system-design-notes/blob/main/11.%20News%20Feed%20System/Readme.md)。原版保持不变；批注和手绘图为新增内容。
 
 ## 中文学习导读
 

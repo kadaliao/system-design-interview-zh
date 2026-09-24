@@ -1,6 +1,6 @@
 # 第20章：指标监控与告警系统
 
-> 对应[英文原版](<../../20. Metrics Monitoring and Alerting System/README.md>)。按原结构翻译并保留原图、数据表与代码；批注用于解释与纠错，原版文件不变。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/20.%20Metrics%20Monitoring%20and%20Alerting%20System/README.md)。按原结构翻译并保留原图、数据表与代码；批注用于解释与纠错，原版文件不变。
 
 ## 中文学习导读
 

@@ -1,6 +1,6 @@
 # 第18章：设计 Google Maps
 
-> 对应[英文原版](<../../18. Google Maps/README.md>)。按原文结构翻译，原示例代码保留；“批注”解释概念或指出原笔记中的简化，原版未修改。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/18.%20Google%20Maps/README.md)。按原文结构翻译，原示例代码保留；“批注”解释概念或指出原笔记中的简化，原版未修改。
 
 ## 中文学习导读
 

@@ -1,6 +1,6 @@
 # 第 5 章：设计一致性哈希（Design Consistent Hashing）
 
-> 对照原版：[05. Consistent Hashing/Readme.md](../../05.%20Consistent%20Hashing/Readme.md)。本章覆盖原版各节；“批注”为新增解释，原版文件保持不变。
+> 对照原版：[05. Consistent Hashing/Readme.md](https://github.com/liquidslr/system-design-notes/blob/main/05.%20Consistent%20Hashing/Readme.md)。本章覆盖原版各节；“批注”为新增解释，原版文件保持不变。
 
 ## 学习导读
 

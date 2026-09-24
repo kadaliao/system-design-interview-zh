@@ -1,6 +1,6 @@
 # 第15章：设计 Google Drive
 
-> 本章对应[英文原版](<../../15. Google Drive/Readme.md>)。译文保留原文结构与设计假设；“批注”为面向初学者的解释或纠错，原版文件与原图未修改。
+> 本章对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/15.%20Google%20Drive/Readme.md)。译文保留原文结构与设计假设；“批注”为面向初学者的解释或纠错，原版文件与原图未修改。
 
 ## 中文学习导读
 

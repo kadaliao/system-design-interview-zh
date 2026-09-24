@@ -1,6 +1,6 @@
 # 第 25 章：实时游戏排行榜（Real-time Gaming Leaderboard）
 
-> 原版：[第 25 章英文笔记](../../25.%20Real-time%20Gaming%20Leaderboard/README.md)。按原文顺序翻译，新增解释及原文疑点标为「批注」。原文件保持不变。
+> 原版：[第 25 章英文笔记](https://github.com/liquidslr/system-design-notes/blob/main/25.%20Real-time%20Gaming%20Leaderboard/README.md)。按原文顺序翻译，新增解释及原文疑点标为「批注」。原文件保持不变。
 
 ## 学习导读
 

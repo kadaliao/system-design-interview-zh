@@ -1,6 +1,6 @@
 # 第 8 章：设计短网址服务（URL Shortener）
 
-> 译文来源：[原版第 8 章](../../08.%20URL%20Shortener/Readme.md)。本目录新增中文翻译与教学批注；原版文件保持不变。标有“批注”的内容是新增解释或对原文简化表述的补充。
+> 译文来源：[原版第 8 章](https://github.com/liquidslr/system-design-notes/blob/main/08.%20URL%20Shortener/Readme.md)。本目录新增中文翻译与教学批注；原版文件保持不变。标有“批注”的内容是新增解释或对原文简化表述的补充。
 
 ## 中文学习导读
 

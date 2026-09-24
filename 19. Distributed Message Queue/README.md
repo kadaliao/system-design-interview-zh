@@ -1,6 +1,6 @@
 # 第19章：分布式消息队列（Distributed Message Queue）
 
-> 对应[英文原版](<../../19. Distributed Message Queue/README.md>)。按原结构翻译并保留示例与原图，批注标明解释和实现边界；原版未修改。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/19.%20Distributed%20Message%20Queue/README.md)。按原结构翻译并保留示例与原图，批注标明解释和实现边界；原版未修改。
 
 ## 中文学习导读
 

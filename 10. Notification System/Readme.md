@@ -1,6 +1,6 @@
 # 第 10 章：设计通知系统（Notification System）
 
-> 译文来源：[原版第 10 章](../../10.%20Notification%20System/Readme.md)。原版保持不变；“批注”和手绘图是新增材料。
+> 译文来源：[原版第 10 章](https://github.com/liquidslr/system-design-notes/blob/main/10.%20Notification%20System/Readme.md)。原版保持不变；“批注”和手绘图是新增材料。
 
 ## 中文学习导读
 

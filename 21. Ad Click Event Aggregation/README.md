@@ -1,6 +1,6 @@
 # 第21章：广告点击事件聚合
 
-> 对应[英文原版](<../../21. Ad Click Event Aggregation/README.md>)。按原结构翻译，保留原图、API、数据模型和估算；批注解释概念或纠正简化，原版文件未修改。
+> 对应[英文原版](https://github.com/liquidslr/system-design-notes/blob/main/21.%20Ad%20Click%20Event%20Aggregation/README.md)。按原结构翻译，保留原图、API、数据模型和估算；批注解释概念或纠正简化，原版文件未修改。
 
 ## 中文学习导读
 

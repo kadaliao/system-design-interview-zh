@@ -1,6 +1,6 @@
 # 第 14 章：设计 YouTube 视频系统
 
-> 译文来源：[原版第 14 章](../../14.%20Youtube/Readme.md)。原版保持不变；“批注”和手绘图是新增解释。原文平台统计与价格仅作历史设计背景。
+> 译文来源：[原版第 14 章](https://github.com/liquidslr/system-design-notes/blob/main/14.%20Youtube/Readme.md)。原版保持不变；“批注”和手绘图是新增解释。原文平台统计与价格仅作历史设计背景。
 
 ## 中文学习导读
 

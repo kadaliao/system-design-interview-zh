@@ -1,6 +1,6 @@
 # 第 4 章：设计限流器（Design a Rate Limiter）
 
-> 对照原版：[04. Rate Limiter/Readme.md](../../04.%20Rate%20Limiter/Readme.md)。本章按原版结构翻译；标有“批注”的内容为补充，原版文件未修改。
+> 对照原版：[04. Rate Limiter/Readme.md](https://github.com/liquidslr/system-design-notes/blob/main/04.%20Rate%20Limiter/Readme.md)。本章按原版结构翻译；标有“批注”的内容为补充，原版文件未修改。
 
 ## 学习导读
 

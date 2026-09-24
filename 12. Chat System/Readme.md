@@ -1,6 +1,6 @@
 # 第 12 章：设计聊天系统（Chat System）
 
-> 译文来源：[原版第 12 章](../../12.%20Chat%20System/Readme.md)。原版不变；“批注”与手绘图是新增教学内容。
+> 译文来源：[原版第 12 章](https://github.com/liquidslr/system-design-notes/blob/main/12.%20Chat%20System/Readme.md)。原版不变；“批注”与手绘图是新增教学内容。
 
 ## 中文学习导读
 
