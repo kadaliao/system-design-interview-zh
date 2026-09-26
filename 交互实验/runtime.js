@@ -196,9 +196,15 @@ function renderScenarios(inst,box,list){
   box.append(h('p',{class:'sdl-scen-label'},'预设场景：先预测，再运行'),chips,card);
   let active=null;
   const btns=list.map(sc=>{
-    const b=h('button',{type:'button','aria-pressed':'false',onclick:()=>select(sc)},sc.label,rec.done.includes(sc.id)?h('span',{class:'done','aria-label':'已完成'},'✓'):null);
+    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>active===sc?deselect():select(sc)},sc.label,rec.done.includes(sc.id)?h('span',{class:'done','aria-label':'已完成'},'✓'):null);
     chips.append(b);return b;
   });
+  /** 收起场景卡、回到自由探索；正在运行的场景随之停止，实验保留当前状态。 */
+  function deselect(){
+    inst.abort();active=null;
+    btns.forEach(b=>b.setAttribute('aria-pressed','false'));
+    card.hidden=true;card.replaceChildren();
+  }
   function select(sc){
     inst.abort();active=sc;
     btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(list[i]===sc)));
@@ -206,7 +212,7 @@ function renderScenarios(inst,box,list){
     const run=h('button',{type:'button',class:'primary'},'运行场景');
     const insight=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
     card.replaceChildren();
-    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},run,status),insight]);
+    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},run,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到自由探索',onclick:deselect},'收起')),insight]);
     card.hidden=false;
     run.onclick=async()=>{
       inst.abort();const token=inst.token;

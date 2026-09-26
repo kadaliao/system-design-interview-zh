@@ -38,6 +38,7 @@
 .sdl-card .insight b{color:var(--lab-ok)}
 .sdl-card .row{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
 .sdl-card .status{font-size:12px;color:var(--lab-muted)}
+.sdl-card .row .sdl-card-close{margin-left:auto;font-size:13px;padding:3px 10px;color:var(--lab-muted)}
 /* 主体 */
 .sdl-body{padding:14px 20px 6px}
 .sdl-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 18px;margin-bottom:12px}
