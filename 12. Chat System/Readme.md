@@ -162,7 +162,7 @@ Snowflake 通常近似按时间排序，但时钟漂移、跨节点并发和迟�
 
 ![原图：心跳与超时](./images/heartbeat-mechanism.png)
 
-客户端定期向 presence server 发心跳；超过阈值（原文示例 `x = 30`，可理解为约 30 秒）未收到则标记离线。
+客户端定期向 presence server 发心跳；超过阈值未收到则标记离线。原图示例是每 5 秒发一次心跳，连续 30 秒（`x = 30s`）没收到就改为离线。
 
 ![原版附图：在线状态服务](./images/online-presence.png)
 
