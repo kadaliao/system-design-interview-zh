@@ -135,7 +135,29 @@
 .sdp-empty{padding:18px 20px;color:var(--lab-muted);font-size:14px}
 .sdp-counts{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--lab-muted)}
 .sdp-counts b{color:var(--lab-ink)}
-nav a .sdl-badge{display:block;font-size:11px;color:var(--lab-muted);font-weight:400;margin-top:3px}
-nav a .sdl-badge .on{color:var(--lab-ok);font-weight:650}
+nav a .sdl-badge{display:block;font-size:11px;color:var(--muted,#66756d);font-weight:400;margin-top:3px}
+nav a .sdl-badge .on{color:var(--accent,#2f8f5b);font-weight:650}
 @media(max-width:760px){.sdp{margin-left:-8px;margin-right:-8px}.sdp-head,.sdp-item,.sdp-bar,.sdp-card{padding-left:14px;padding-right:14px}}
 @media print{.sdl-frame,.sdp{display:none}}
+/* ---------- 夜间模式 ----------
+ * 实验内部有大量按浅色设计的配色（SVG 填充、状态色），统一用反色 + 色相回转转换：
+ * 白底变深灰、深色文字变浅，红绿琥珀蓝的色相基本保持。表单控件按浅色渲染后一起反色。 */
+:root[data-theme=dark] .sdl-frame{filter:invert(.88) hue-rotate(180deg);box-shadow:none;color-scheme:light}
+/* 实心主按钮反色后会变成亮薄荷色：预先换成浅底深字，反色后得到暗绿底浅字 */
+:root[data-theme=dark] .sdl-frame button.primary{background:#a9d6bd;border-color:#a9d6bd;color:#12301f}
+:root[data-theme=dark] .sdl-frame button.primary:hover:not(:disabled){background:#bfe2cd}
+:root[data-theme=dark] .sd-lab:not(.sdl-mounted){border-color:#3e5a4a;background:#17201b}
+/* 练习卡里会嵌入答案图片，不能整体反色，改用原生深色配色 */
+:root[data-theme=dark] .sdp{--lab-card:#1a201d;--lab-ink:#d3dbd4;--lab-muted:#8c9a91;--lab-line:#2a332e;--lab-soft:#222a26;--lab-soft2:#2c3530;--lab-accent:#2f8a62;--lab-accent-soft:#1f3a2c;--lab-ok:#5fbf8a;--lab-ok-soft:#1b3326;--lab-warn:#d6a24a;--lab-warn-soft:#3a2f1a;--lab-bad:#e27a72;--lab-bad-soft:#3d2220;--lab-info:#6fa6e0;--lab-info-soft:#1c2a3a}
+:root[data-theme=dark] .sdp-head{background:linear-gradient(180deg,#19241e,#1a201d)}
+:root[data-theme=dark] .sdp-bar{background:#171d1a}
+:root[data-theme=dark] .sdp-answer{background:#151c18;border-left-color:#3e7a58}
+:root[data-theme=dark] .sdp-draft,:root[data-theme=dark] .sdp-bar select{background:#131815;border-color:#3a4640;color:var(--lab-ink)}
+:root[data-theme=dark] .sdp button:hover:not(:disabled){border-color:#4a5a51}
+:root[data-theme=dark] .sdp button.primary{color:#f2f7f3}
+:root[data-theme=dark] .sdp button.primary:hover:not(:disabled){background:#379a6e}
+:root[data-theme=dark] .sdp-rate button[aria-pressed=true].good{border-color:#3f8a5f;color:var(--lab-ok)}
+:root[data-theme=dark] .sdp-rate button[aria-pressed=true].fuzzy{border-color:#8a6a2f;color:var(--lab-warn)}
+:root[data-theme=dark] .sdp-rate button[aria-pressed=true].bad{border-color:#8f4a44;color:var(--lab-bad)}
+:root[data-theme=dark] .sdp-bar .chips button[aria-pressed=true]{border-color:#3f8a5f;color:#b5e6c8}
+:root[data-theme=dark] .sdp-meter i.fuzzy{background:#b88a3a}:root[data-theme=dark] .sdp-meter i.bad{background:#b8605a}

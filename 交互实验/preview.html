@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>交互实验预览</title>
+<script>/* ?theme=dark 预览夜间模式 */(function(){var t=new URLSearchParams(location.search).get('theme');if(t)document.documentElement.dataset.theme=t})()</script>
 <link rel="stylesheet" href="runtime.css">
 <style>
 /* 与阅读页正文相同的基础排版，便于单独开发和截图检查实验。 */
@@ -17,6 +18,7 @@ table{border-collapse:collapse;width:100%;font-size:14px;margin:25px 0;display:b
 th,td{text-align:left;padding:10px 13px;border:1px solid #dbe2da;min-width:90px}th{background:#eaf0e5}
 code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef2ec;border-radius:4px;padding:2px 4px;font-size:.88em}
 .usage{color:#66756d;font-size:14px}
+:root[data-theme=dark]{color-scheme:dark}:root[data-theme=dark] body{background:#121614;color:#d3dbd4}:root[data-theme=dark] code{background:#1d2421}
 @media(max-width:760px){article{padding:22px 20px}}
 </style>
 </head>

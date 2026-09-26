@@ -10,6 +10,8 @@ const comp=(m,s)=>1+[...m.values()].filter(v=>v>s).length;
 const dense=(m,s)=>1+new Set([...m.values()].filter(v=>v>s)).size;
 const CSS=`
 .lb-cmd{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#23352f;color:#e8f0ea;border-radius:10px;padding:8px 12px;margin:0 0 10px;min-height:5.6em;line-height:1.6;overflow-wrap:anywhere}
+:root[data-theme=dark] .lb-cmd{background:#e8f0ea;color:#23352f}
+:root[data-theme=dark] .lb-cmd .r{color:#2c7449}:root[data-theme=dark] .lb-cmd .n{color:#8f600c}:root[data-theme=dark] .lb-cmd .c{color:#5b6e64}
 .lb-cmd div{white-space:pre-wrap}.lb-cmd .r{color:#9fd3b0}.lb-cmd .n{color:#f0c987}.lb-cmd .c{color:#9ab0a4}
 .lb-list{display:flex;flex-direction:column;gap:2px;font-size:13px}
 .lb-row{display:grid;grid-template-columns:36px minmax(0,1fr) 40px 80px;gap:6px;align-items:center;padding:2px 8px;border-radius:6px;background:#fff;border:1px solid #edf1eb;font-variant-numeric:tabular-nums;position:relative}

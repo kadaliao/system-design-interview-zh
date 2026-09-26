@@ -1,5 +1,5 @@
 /** 交互实验验收：逐个实验文件在桌面与手机宽度下挂载、运行全部预设场景，检查脚本错误、横向溢出和过小文字。
- * 用法：node 工具/check-labs.cjs [--file 04-rate-limiter.js[,05-...]] [--jobs 并行数] [--out 截图目录] [--write]
+ * 用法：node 工具/check-labs.cjs [--file 04-rate-limiter.js[,05-...]] [--jobs 并行数] [--theme dark] [--out 截图目录] [--write]
  * 需要 playwright 或 playwright-core（PLAYWRIGHT_MODULE 指定路径）；默认使用本机 Chrome。 */
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{pathToFileURL}=require('node:url');
@@ -9,6 +9,7 @@ const labDir=path.join(root,'交互实验','labs');
 const files=(arg('--file')||fs.readdirSync(labDir).filter(f=>f.endsWith('.js')).sort().join(',')).split(',').filter(Boolean);
 const out=arg('--out',path.join(os.tmpdir(),'sd-labs-check'));
 const scenarioTimeout=+arg('--timeout',60000);
+const theme=arg('--theme','');  // --theme dark：在夜间模式下检查与截图
 fs.mkdirSync(out,{recursive:true});
 (async()=>{
   const options={headless:true};
@@ -26,7 +27,7 @@ fs.mkdirSync(out,{recursive:true});
         const errors=[];
         page.on('pageerror',e=>errors.push('pageerror: '+e.message));
         page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push(m.type()+': '+m.text())});
-        const url=pathToFileURL(path.join(root,'交互实验','preview.html')).href+'?file='+encodeURIComponent(file);
+        const url=pathToFileURL(path.join(root,'交互实验','preview.html')).href+'?file='+encodeURIComponent(file)+(theme?'&theme='+theme:'');
         await page.goto(url);
         await page.waitForFunction(()=>window.__labsReady===true,null,{timeout:15000});
         await page.waitForTimeout(400);
@@ -65,7 +66,7 @@ fs.mkdirSync(out,{recursive:true});
           return {pageScroll:document.documentElement.scrollWidth>innerWidth,overflow,tiny,tinySamples};
         });
         const shots=[];
-        for(let li=0;li<labs.length;li++){const shot=path.join(out,labs[li].id+'-'+vp.name+'.png');await page.locator('.sd-lab').nth(li).screenshot({path:shot});shots.push(shot)}
+        for(let li=0;li<labs.length;li++){const shot=path.join(out,labs[li].id+'-'+vp.name+(theme?'-'+theme:'')+'.png');await page.locator('.sd-lab').nth(li).screenshot({path:shot});shots.push(shot)}
         const shot=shots.join(',');
         const bad=errors.length||labs.some(l=>!l.mounted||l.error)||layout.pageScroll||layout.overflow.length;
         if(bad)failed=true;
