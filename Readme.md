@@ -6,7 +6,11 @@
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [交互实验总览](./交互实验/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+
+## 动手实验与自测练习
+
+在线阅读版的每一章都嵌入了交互实验：拖动参数、运行预设场景，亲眼看到限流算法在窗口边界放过两倍流量、一致性哈希增删节点时哪些 key 搬家、两个人怎样同时订走最后一间房。每个场景先让你预测结果，再运行对照。有章末自测题的章节，末尾有练习卡（先作答，再展开答案并自评）；第 29 章顶部的练习模式可以按章节和掌握程度筛题复习。进度只保存在你自己的浏览器里。完整清单见[交互实验总览](./交互实验/README.md)。
 
 ## 怎么读
 

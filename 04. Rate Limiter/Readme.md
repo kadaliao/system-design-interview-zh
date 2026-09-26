@@ -130,6 +130,10 @@
 | 精确限制任意滚动窗口 | 滑动日志 | 保存时间戳耗内存 |
 | 较平滑且省内存 | 滑动窗口计数 | 接受近似误差 |
 
+<div class="sd-lab" id="lab-rate-limiter-arena" data-lab="rate-limiter-arena">
+<p><strong>交互实验：五种限流算法同场对比</strong>。同一股流量交给五种算法，对比窗口边界突发、空闲后突发和持续超速下的放行、拒绝与排队。<a href="https://kadaliao.github.io/system-design-interview-zh/#d4/lab-rate-limiter-arena">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ## 高层架构（High-Level Architecture）
 
 ![原图：限流器高层架构](./images/architecture.png)
@@ -150,6 +154,10 @@
 - **解决方向**：锁、Redis Lua 脚本，以及 sorted set 等数据结构；利用共享存储协调各实例。
 
 > **批注｜sorted set 本身不等于原子性**：它可保存时间戳，但“清理旧记录—计数—决定—写入”仍需放在 Lua 脚本等原子操作中。Lua 的原子性也只覆盖其所在 Redis 实例的数据操作，并非跨地区自动强一致。
+
+<div class="sd-lab" id="lab-rate-limiter-race" data-lab="rate-limiter-race">
+<p><strong>交互实验：两台网关抢最后一个名额</strong>。逐步执行「GET 再 INCR」、原子 INCR、Lua 脚本和跨地区计数，看哪种写法会超发。<a href="https://kadaliao.github.io/system-design-interview-zh/#d4/lab-rate-limiter-race">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 性能优化（Performance Optimizations）
 

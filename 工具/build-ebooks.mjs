@@ -77,7 +77,7 @@ for(const doc of docs){
 
 const css=`
 html{font-family:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;color:#23352f;line-height:1.7}
-body{margin:0;padding:0}section.chapter{page-break-before:always}section.chapter:first-child{page-break-before:auto}
+body{margin:0;padding:0}div.sd-lab{border:1px dashed #9fbca9;border-radius:.5em;padding:0 1em;margin:1em 0;background:#f3f7f0}section.chapter{page-break-before:always}section.chapter:first-child{page-break-before:auto}
 h1{font-family:"Noto Sans CJK SC","PingFang SC",sans-serif;color:#183f35;font-size:2em;line-height:1.35;margin:0 0 1em}
 h2{font-family:"Noto Sans CJK SC","PingFang SC",sans-serif;color:#245447;font-size:1.55em;border-bottom:1px solid #b8c8c0;padding-bottom:.25em;margin-top:2.1em}
 h3,h4{font-family:"Noto Sans CJK SC","PingFang SC",sans-serif;color:#2d554a;line-height:1.45;margin-top:1.7em}
