@@ -323,6 +323,10 @@ PSP 端也使用前述 nonce 去重，不重复处理同一 nonce。
 
 > **批注｜幂等真正的边界**：唯一键要和业务状态的原子更新配合；同一键携带不同金额应拒绝。外部 PSP 与本地数据库没有共同事务，超时后应查原请求状态、复用原键，而不是生成新键。有限重试本身也不保证最终执行，超过阈值仍需人工处理或对账。实际还常加入抖动（jitter），避免重试同时涌入。可对照 [Stripe 官方客户端重试实现](https://github.com/stripe/stripe-node/blob/master/src/RequestSender.ts)理解同一逻辑请求如何携带幂等键；应用自己的重复提交仍需稳定业务键。
 
+<div class="sd-lab" id="lab-payment-retry" data-lab="payment-retry">
+<p><strong>交互实验：支付超时后的重试、幂等键与对账</strong>。注入响应丢失、PSP 宕机、重复 webhook 等故障，对比换新键重试与沿用原键重试，看订单状态怎样迁移、买家被扣几次，以及夜间对账怎样发现并收敛差异。<a href="https://kadaliao.github.io/system-design-interview-zh/#d26/lab-payment-retry">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 一致性（Consistency）
 
 一次支付生命周期涉及 PSP、账本、钱包、支付服务等有状态组件。任意两个服务之间都可能通信失败。原版通过恰好一次处理与对账来实现最终一致性。

@@ -80,6 +80,10 @@ Geohash 用字母数字字符串表示地理区域。将地图视作平面并递
 
 > **批注｜图像瓦片与路由瓦片不是同一种东西。** 图像瓦片用于“看”，包含像素或矢量；路由瓦片用于“算”，包含路口、道路、通行规则。长途导航像先走高速公路，再在目的地附近展开小路。
 
+<div class="sd-lab" id="lab-routing-tiles" data-lab="routing-tiles">
+<p><strong>交互实验：路由瓦片：只加载路线需要的子图，长途走高层</strong>。在网格路网上对比整张图 Dijkstra、A* 按需加载路由瓦片和分层路由瓦片：各加载了多少瓦片和道路边、展开了多少路口，路线是否变慢。<a href="https://kadaliao.github.io/system-design-interview-zh/#d18/lab-routing-tiles">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 粗略估算
 
 需要保存：
@@ -175,6 +179,10 @@ CDN 让用户从附近的边缘节点（POP）取图，减少延迟。
 ![原图：瓦片 URL 计算](./images/map-tile-url-calculation.png)
 
 > **批注｜原文把瓦片标识笼统称为 Geohash。** 常见 Web 地图瓦片使用 `z/x/y` 编号，不能把它与 Geohash 字符串直接等同。关键是客户端与服务端约定一致的坐标、缩放和编号体系。
+
+<div class="sd-lab" id="lab-map-tiles" data-lab="map-tiles">
+<p><strong>交互实验：地图瓦片：缩放一级，瓦片数 ×4</strong>。缩放和平移地图，看每级瓦片总数按 4 倍增长、屏幕却只需要十来张，客户端怎样按 z/x/y 算出瓦片编号，以及平移时哪些瓦片来自 CDN、哪些来自本地缓存。<a href="https://kadaliao.github.io/system-design-interview-zh/#d18/lab-map-tiles">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ## 第三步：深入设计
 

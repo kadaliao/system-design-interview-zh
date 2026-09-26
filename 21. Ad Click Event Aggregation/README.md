@@ -289,6 +289,10 @@ GET /v1/ads/popular_ads
 
 > **批注｜一眼区分。** 滚动窗口像每分钟一个独立账本；滑动/跳跃窗口是每隔一段时间看“最近 M 分钟”，窗口可以重叠；会话窗口按一段无活动间隔断开。不同框架对 hopping/sliding 命名有差异，面试时直接说明窗口长度与滑动步长更清楚。
 
+<div class="sd-lab" id="lab-stream-window" data-lab="stream-window">
+<p><strong>交互实验：事件时间、窗口与水位线</strong>。点击按事件时间落进滚动或滑动窗口，调节乱序容忍和允许迟到，比较结果产出的快慢、被丢进侧输出的迟到点击和更正版本。<a href="https://kadaliao.github.io/system-design-interview-zh/#d21/lab-stream-window">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 投递保证（Delivery Guarantees）
 
 计费用途要求不重复计数、也不漏事件。通常少量重复可接受时，至少一次足够；本题哪怕很小百分比差异也可能对应大量金额，因此目标是 exactly-once 的结果语义。
@@ -317,6 +321,10 @@ GET /v1/ads/popular_ads
 原作者另注：若下游幂等处理聚合结果，可以不使用分布式事务。
 
 > **批注｜CRUD 工程师最熟悉的实现。** 以 `(ad_id, window, filter, result_version)` 作为唯一键写绝对结果，重复同一提交不会再 `+count`；但还要防止旧版本覆盖新版本。输入源重复点击也需要稳定 `event_id` 的精确去重。Bloom Filter 有假阳性，不能单独用于计费去重，否则会误删真实点击。
+
+<div class="sd-lab" id="lab-agg-exactly-once" data-lab="agg-exactly-once">
+<p><strong>交互实验：聚合节点崩溃：结果会重复还是丢失</strong>。在「发结果」和「记 offset」之间注入崩溃，对比先发后提交、先存进度、原子提交与下游幂等写的最终计数。<a href="https://kadaliao.github.io/system-design-interview-zh/#d21/lab-agg-exactly-once">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 扩展系统（Scale the System）
 

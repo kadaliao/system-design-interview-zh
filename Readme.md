@@ -88,7 +88,14 @@
 ```bash
 npm install --no-save --prefix /tmp/sdn-deps marked@18.0.14
 MARKED_MODULE=/tmp/sdn-deps/node_modules/marked/lib/marked.esm.js node 工具/build-reader.mjs
-PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-reader.cjs   # 可选：图片、锚点、移动端验收
+PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-reader.cjs   # 可选：图片、锚点、实验挂载、移动端验收
+```
+
+改动交互实验（`交互实验/`）后，另跑实验清单与场景验收：
+
+```bash
+python3 工具/build_lab_index.py --write                                          # 更新实验清单，检查占位块与实验定义一一对应
+PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-labs.cjs --jobs 6   # 每个实验在桌面/手机宽度下运行全部预设场景
 ```
 
 完整的检查步骤见 [验收说明](./校验/验收说明.md#后续编辑)。电子书不进 Git，重新构建后发布到 [Releases](https://github.com/kadaliao/system-design-interview-zh/releases)，步骤见 [电子书/README.md](./电子书/README.md)。

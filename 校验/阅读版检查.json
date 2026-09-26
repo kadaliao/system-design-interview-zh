@@ -1,8 +1,19 @@
 {
-  "documents": 33,
+  "documents": 34,
   "images": {
     "total": 453,
     "broken": []
+  },
+  "labs": {
+    "total": 48,
+    "unique": 48,
+    "mounted": 48,
+    "errors": [],
+    "practiceCards": 13,
+    "practiceChapters": 13,
+    "reviewMode": true,
+    "questions": 58,
+    "mobileOverflow": []
   },
   "answerAnchors": 58,
   "answerTocTargetsValid": true,

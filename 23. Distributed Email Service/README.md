@@ -242,6 +242,10 @@
 
 ![批注图：主存、搜索索引与通知的可见时间不同](./images/email-visibility-cn.svg)
 
+<div class="sd-lab" id="lab-mail-pipeline" data-lab="mail-pipeline">
+<p><strong>交互实验：一封邮件的旅程与队列水位</strong>。追踪一封发出的信和一封收到的信，看 SMTP 250、入库、可搜索、已读分别是哪一层的「成功」，再调慢索引消费者或让对方限流，按水位找出卡点。<a href="https://kadaliao.github.io/system-design-interview-zh/#d23/lab-mail-pipeline">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 可扩展性与可用性（Scalability and availability）
 
 用户操作大多彼此独立，多数组件能独立扩容。跨数据中心部署，通过 leader/follower 与故障切换提升可用性。

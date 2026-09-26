@@ -4,11 +4,11 @@
 
 ## 中文学习导读
 
-**学习目标：**把“下单后发一封邮件”的同步代码，变成可重试、可扩展、能追踪状态的通知流水线。
+**学习目标**：把“下单后发一封邮件”的同步代码，变成可重试、可扩展、能追踪状态的通知流水线。
 
-**先记住：**业务事件 → 持久化队列 → 渠道 worker → 第三方。接受、投递、展示、打开是不同状态。
+**先记住**：业务事件 → 持久化队列 → 渠道 worker → 第三方。接受、投递、展示、打开是不同状态。
 
-**常见误区：**第三方超时就认定没发送；认为 event ID 去重能自动保证绝不重复；忽略用户退订设置。
+**常见误区**：第三方超时就认定没发送；认为 event ID 去重能自动保证绝不重复；忽略用户退订设置。
 
 ## 简介（Introduction）
 
@@ -24,12 +24,12 @@
 
 ### 需求（Requirements）
 
-- **类型：**推送、短信、邮件。
-- **时效：**尽量减少延迟的软实时系统。
-- **平台：**iOS、Android、桌面端。
-- **触发：**客户端操作或服务端定时任务。
-- **日规模：**推送 **1000 万**条、短信 **100 万**条、邮件 **500 万**条。
-- **退订：**用户可关闭指定类型的通知。
+- **类型**：推送、短信、邮件。
+- **时效**：尽量减少延迟的软实时系统。
+- **平台**：iOS、Android、桌面端。
+- **触发**：客户端操作或服务端定时任务。
+- **日规模**：推送 **1000 万**条、短信 **100 万**条、邮件 **500 万**条。
+- **退订**：用户可关闭指定类型的通知。
 
 ### 批注：软实时不等于永远立即到达
 
@@ -41,10 +41,10 @@
 
 #### 1. 通知类型与渠道
 
-- **iOS 推送：**Apple Push Notification Service（APNS）。
-- **Android 推送：**Firebase Cloud Messaging（FCM）。
-- **短信：**第三方短信服务，原文举例 Twilio、Nexmo。
-- **邮件：**商业邮件服务，原文举例 SendGrid、Mailchimp。
+- **iOS 推送**：Apple Push Notification Service（APNS）。
+- **Android 推送**：Firebase Cloud Messaging（FCM）。
+- **短信**：第三方短信服务，原文举例 Twilio、Nexmo。
+- **邮件**：商业邮件服务，原文举例 SendGrid、Mailchimp。
 
 这些是原文的实现示例，具体服务与认证方式需按实际平台选择。
 
@@ -54,22 +54,22 @@
 
 在安装应用或注册时收集 device token、手机号和邮箱，并保存到数据库：
 
-- **Device Tokens Table：**保存推送需要的设备令牌。
-- **User Table：**保存用户邮箱和手机号。
+- **Device Tokens Table**：保存推送需要的设备令牌。
+- **User Table**：保存用户邮箱和手机号。
 
 #### 3. 通知发送流程（Notification Sending Flow）
 
 ![原图：最初的同步通知架构](./images/high-level-design.png)
 
-- **Trigger Services（触发服务）：**产生账单提醒、物流更新等事件。来源可以是微服务、cron 任务或分布式系统。
-- **Notification Server（通知服务器）：**提供发送 API；校验邮箱、手机号等基本信息；查询数据库或缓存，取得渲染通知所需的数据。
-- **Third-Party Services（第三方服务）：**负责向用户送达通知。
+- **Trigger Services（触发服务）**：产生账单提醒、物流更新等事件。来源可以是微服务、cron 任务或分布式系统。
+- **Notification Server（通知服务器）**：提供发送 API；校验邮箱、手机号等基本信息；查询数据库或缓存，取得渲染通知所需的数据。
+- **Third-Party Services（第三方服务）**：负责向用户送达通知。
 
 ### 初版设计的问题（Challenges in Initial Design）
 
-- **单点故障（SPOF）：**唯一通知服务器故障会影响整个系统。
-- **扩展困难：**数据库、缓存和处理模块耦合，难以独立扩容。
-- **性能瓶颈：**发送通知占用大量资源。
+- **单点故障（SPOF）**：唯一通知服务器故障会影响整个系统。
+- **扩展困难**：数据库、缓存和处理模块耦合，难以独立扩容。
+- **性能瓶颈**：发送通知占用大量资源。
 
 ### 改进设计（Improved Design）
 
@@ -86,6 +86,10 @@
 
 业务服务把包裹交给可靠的待发货区后，不必一直等待快递员。队列削平短期高峰，但不会增加第三方的长期处理能力；若积压持续增长，要看渠道限额、worker 吞吐和通知过期策略，而不只是加机器。
 
+<div class="sd-lab" id="lab-notification-pipeline" data-lab="notification-pipeline">
+<p><strong>交互实验：分渠道队列遇上第三方故障</strong>。通知持续进入 iOS、Android、短信、邮件四个队列；让短信服务商故障，看只有这一条链路积压、退避重试、过期验证码作废，再换成共用队列对比其他渠道被拖慢多少。<a href="https://kadaliao.github.io/system-design-interview-zh/#d10/lab-notification-pipeline">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ## 步骤 3：深入设计（Design Deep Dive）
 
 ### 可靠性（Reliability）
@@ -94,7 +98,7 @@
 
 ![原图：通知日志持久化](./images/data-loss.png)
 
-把通知数据持久化到数据库，并实现重试。**Notification log database（通知日志库）**记录通知状态，供恢复与排查。
+把通知数据持久化到数据库，并实现重试。<strong>Notification log database（通知日志库）</strong>记录通知状态，供恢复与排查。
 
 #### 2. 去重（Deduplication）
 
@@ -104,16 +108,20 @@
 
 两个 worker 可能同时查到“没见过”；也可能第三方已接受，但响应丢失，worker 重试造成重复。需要原子占用/状态更新、稳定幂等键和第三方的幂等能力配合。若业务写库与事件入队必须一起成功，可用事务发件箱（transactional outbox）。能可靠描述“至少一次 + 去重”比轻率承诺 exactly-once 更准确。
 
+<div class="sd-lab" id="lab-notification-dedup" data-lab="notification-dedup">
+<p><strong>交互实验：为什么「先查后发」挡不住重复通知</strong>。同一事件被投递两次，逐步执行「发送后崩溃」「两个 worker 同时处理」「确认丢失」，对比不去重、先查后发、原子占用加幂等键时用户会收到几条。<a href="https://kadaliao.github.io/system-design-interview-zh/#d10/lab-notification-dedup">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 其他组件（Additional Components）
 
 ![原图：发送到打开的事件追踪](./images/events-tracking.png)
 
-1. **Notification Templates（模板）：**使用预定义模板保持格式统一，提高渲染效率。
-2. **Notification Settings（设置）：**独立设置表记录用户各渠道的 opt-in/opt-out。
-3. **Rate Limiting（限流）：**限制对用户的发送频率。
-4. **Retry Mechanism（重试）：**第三方失败时重新投递。
-5. **Monitoring Queues（监控队列）：**跟踪积压并动态调整 worker。
-6. **Event Tracking（事件追踪）：**统计打开率、点击率和参与度。
+1. **Notification Templates（模板）**：使用预定义模板保持格式统一，提高渲染效率。
+2. **Notification Settings（设置）**：独立设置表记录用户各渠道的 opt-in/opt-out。
+3. **Rate Limiting（限流）**：限制对用户的发送频率。
+4. **Retry Mechanism（重试）**：第三方失败时重新投递。
+5. **Monitoring Queues（监控队列）**：跟踪积压并动态调整 worker。
+6. **Event Tracking（事件追踪）**：统计打开率、点击率和参与度。
 
 ### 安全（Security）
 
@@ -131,10 +139,10 @@
 
 ## 关键优化（Key Optimizations）
 
-1. **水平扩展：**增加通知服务器分担流量。
-2. **消息队列：**解耦并处理高吞吐。
-3. **缓存：**缓存常用数据，减少延迟。
-4. **地域优化：**原文将此项写作“Distributed Crawling（分布式爬取）”，但上下文讲通知投递，应理解为按地域优化消息投递，并非加入爬虫组件。
+1. **水平扩展**：增加通知服务器分担流量。
+2. **消息队列**：解耦并处理高吞吐。
+3. **缓存**：缓存常用数据，减少延迟。
+4. **地域优化**：原文将此项写作“Distributed Crawling（分布式爬取）”，但上下文讲通知投递，应理解为按地域优化消息投递，并非加入爬虫组件。
 
 ### 批注：面试回答模板
 

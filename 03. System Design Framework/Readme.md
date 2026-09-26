@@ -54,6 +54,10 @@
 >
 > **失败模式**：一开始就画 Kafka、Redis、十个微服务；到了中途才发现题目只要求按时间排序的好友动态。范围没锁定，细节越多越容易跑题。
 
+<div class="sd-lab" id="lab-interview-scope" data-lab="interview-scope">
+<p><strong>交互实验：新闻 Feed：需求答案怎样改变架构</strong>。切换排序方式、关注关系、内容类型和日活规模，看发布、读取和媒体路径上会多出哪些组件，以及名人发帖怎样压垮扇出队列。<a href="https://kadaliao.github.io/system-design-interview-zh/#d3/lab-interview-scope">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ---
 
 ## 第 2 步：提出高层设计并取得共识（Propose High-Level Design and Get Buy-In）
@@ -171,6 +175,10 @@
 4. **收尾**：3–5 分钟
 
 > **实用计时点**：第 10 分钟前应有需求和核心 API；第 20 分钟前应有高层图和容量量级；第 40 分钟前停止新增组件，开始回顾故障和取舍。
+
+<div class="sd-lab" id="lab-interview-drill" data-lab="interview-drill">
+<p><strong>交互实验：面试节奏练习：45 分钟、最后 5 分钟、90 秒</strong>。带检查点的练习计时器：按本章建议分配练完整面试，或单独练最后 5 分钟收口和 90 秒陈述。<a href="https://kadaliao.github.io/system-design-interview-zh/#d3/lab-interview-drill">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ## 一页式答题卡
 

@@ -55,7 +55,9 @@
 .sdl-ctrl .sdl-btnrow button{padding:3px 9px;font-size:13px}
 .sdl-stage{position:relative;min-width:0}
 .sdl-stage svg{display:block;width:100%;height:auto;max-width:100%;overflow:visible}
-.sdl-stage svg text{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;fill:var(--lab-ink)}
+/* 只给未写 fill 的文字设默认颜色；写成 CSS fill 会盖过 SVG 元素自身的 fill 属性 */
+.sdl-stage svg text{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}
+.sdl-stage svg text:not([fill]){fill:var(--lab-ink)}
 .sdl-stage svg .mono{font-family:var(--lab-mono)}
 .sdl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:6px 20px 14px}
 .sdl-stats:empty{display:none}
@@ -69,6 +71,10 @@
 .sdl-log li.ok{color:var(--lab-ok)}.sdl-log li.bad{color:var(--lab-bad)}.sdl-log li.warn{color:var(--lab-warn)}.sdl-log li.info{color:var(--lab-info)}
 .sdl-foot{padding:9px 20px;border-top:1px solid var(--lab-line);font-size:12px;color:var(--lab-muted);background:#fbfcfa}
 .sdl-error{padding:14px 20px;color:var(--lab-bad);font-size:14px}
+/* 阅读页的全局表格样式（display:block、单元格 min-width:90px）不应作用到实验内部 */
+.sdl-frame th,.sdl-frame td{min-width:0}
+.sdl-frame table:not([class]){display:table;width:100%;margin:0;font-size:13px}
+.sdl-frame table:not([class]) th,.sdl-frame table:not([class]) td{padding:4px 8px}
 /* 实验内部可复用的小部件 */
 .sdl-note{font-size:13px;color:var(--lab-muted);margin:6px 0}
 .sdl-panel{border:1px solid var(--lab-line);border-radius:10px;padding:10px 12px;background:#fbfcfa;min-width:0}

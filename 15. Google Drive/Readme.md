@@ -173,6 +173,10 @@ Web 服务器以 `drive/` 为上传文件的根目录。目录下有多个命名
 
 > **批注｜去重不等于直接删文件。** 多个版本可能共同引用同一个块。只有没有有效引用、且超过保留/回滚窗口的块才能回收；否则删旧版本时可能破坏当前文件。
 
+<div class="sd-lab" id="lab-block-sync" data-lab="block-sync">
+<p><strong>交互实验：只传变化的块，冲突留副本</strong>。修改文件中的几块再同步，看增量上传、按哈希去重、两台设备同时修改时的冲突副本，以及上传中断时版本为什么停在 pending。<a href="https://kadaliao.github.io/system-design-interview-zh/#d15/lab-block-sync">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 故障处理（Failure Handling）
 
 1. **负载均衡器故障**：备用负载均衡器接管。

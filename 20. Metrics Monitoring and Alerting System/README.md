@@ -274,6 +274,10 @@ from(db:"telegraf")
 
 很久不访问的数据可转冷存储，成本较低。
 
+<div class="sd-lab" id="lab-metrics-downsample" data-lab="metrics-downsample">
+<p><strong>交互实验：降采样与分层保留</strong>。逐窗计算原文的 30 秒平均（含纠正后的数值），看短暂尖峰怎样被平均抹掉，再按 7 天 / 30 天 / 1 年的分层估算存储量。<a href="https://kadaliao.github.io/system-design-interview-zh/#d20/lab-metrics-downsample">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 告警系统（Alerting System）
 
 ![原图：告警系统](./images/alerting-system.png)
@@ -301,6 +305,10 @@ from(db:"telegraf")
 告警存储可使用 Cassandra 等 KV 型数据库，保存状态。触发后写 Kafka；通知消费者读取后发送邮件、短信、PagerDuty、Webhook。实际产品已有许多成熟方案，自建前应确认必要性。
 
 > **批注｜存状态不会自动保证送达。** 还需要可恢复任务、重试、持久化确认和下游响应处理。至少一次通知可能重复，通知端要去重。指标缺失也应有明确规则，不能把“没有数据”默认为“健康”。
+
+<div class="sd-lab" id="lab-alert-rule" data-lab="alert-rule">
+<p><strong>交互实验：告警规则：阈值加持续时长</strong>。拖动阈值与 for 持续时长，看 inactive、pending、firing 怎样切换，尖峰会不会误报，主机失联、不再上报时规则为何会发出错误的恢复。<a href="https://kadaliao.github.io/system-design-interview-zh/#d20/lab-alert-rule">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 可视化系统（Visualization System）
 

@@ -12,7 +12,7 @@
 
 ## 简介（Introduction）
 
-**键值存储（key-value store）**是一类非关系数据库，以 key-value 对保存数据。每个 key 唯一，使用 key 读取对应 value。本章设计一个可扩展、高可用的分布式键值存储，提供以下操作：
+<strong>键值存储（key-value store）</strong>是一类非关系数据库，以 key-value 对保存数据。每个 key 唯一，使用 key 读取对应 value。本章设计一个可扩展、高可用的分布式键值存储，提供以下操作：
 
 - `put(key, value)`：写入数据。
 - `get(key)`：读取数据。
@@ -30,7 +30,7 @@
 
 ### 实现（Implementation）
 
-用内存**哈希表（hash table）**保存键值对。可进一步优化：
+用内存<strong>哈希表（hash table）</strong>保存键值对。可进一步优化：
 
 - 压缩数据。
 - 将低频访问的数据存到磁盘。
@@ -112,6 +112,10 @@
 
 > **准确性批注｜相交不是完整的一致性协议**：`W+R>N` 只保证固定 N 个副本中的读写集合相交。要实现线性一致性，还需正确的版本比较、并发写排序、失败写处理、读修复和成员变化处理；不能仅凭这条不等式就宣称“保证强一致”。只等一个副本也可能很快，但另两个后台写失败时要有明确恢复语义。
 
+<div class="sd-lab" id="lab-quorum-rw" data-lab="quorum-rw">
+<p><strong>交互实验：Quorum 读写：集合相交，就一定读到新值吗</strong>。调 N、W、R，让副本变慢或失联，逐步看写确认、读回复和每个副本的版本；复现「读到 1 后又读到 0」的反例、读修复的效果，以及 sloppy quorum 下读写集合不再相交。<a href="https://kadaliao.github.io/system-design-interview-zh/#d6/lab-quorum-rw">在线阅读版</a>中可直接操作。</p>
+</div>
+
 #### 一致性模型（Models）
 
 - **强一致性（Strong Consistency）**：读操作返回符合最新已完成写入结果的值。
@@ -126,7 +130,7 @@
 
 #### 版本化（Versioning）
 
-- 使用**向量时钟（vector clock）**跟踪版本、识别冲突。
+- 使用<strong>向量时钟（vector clock）</strong>跟踪版本、识别冲突。
 - 把每次修改看作新的不可变数据版本。
 
 ![原图：一致的副本](./images/consistent-server.png)
@@ -146,6 +150,10 @@
 > **准确性批注｜精确比较规则**：缺失项视为 0。若 X 每一项都 `≤` Y，且至少一项 `<`，则 X 先于 Y；全部相等是同一向量。如果某一项 X 大于 Y，而另一项 Y 大于 X，二者才是并发。原文只写“有一项小于对方”不足以判断并发。
 >
 > **入门批注｜像各人盖章的修改记录**：`X={A:2,B:1}` 与 `Y={A:1,B:2}` 各有新信息，不能简单认为计数总和更大者胜。向量时钟能识别冲突，不能决定正确业务值；购物车可合并集合，姓名可能要用户选择或使用明确的覆盖规则。
+
+<div class="sd-lab" id="lab-vector-clock" data-lab="vector-clock">
+<p><strong>交互实验：向量时钟：谁是祖先，谁在冲突</strong>。选基础版本和处理服务器来写入，看向量怎样递增、两个版本何时互不支配成为 siblings，以及客户端合并后的新向量。<a href="https://kadaliao.github.io/system-design-interview-zh/#d6/lab-vector-clock">在线阅读版</a>中可直接操作。</p>
+</div>
 
 挑战包括：
 
@@ -187,7 +195,7 @@
 
 #### c. 永久故障（Permanent Failures）
 
-使用 **Merkle Tree（默克尔树，也叫哈希树）**高效检测副本差异，辅助数据同步和修复。
+使用 <strong>Merkle Tree（默克尔树，也叫哈希树）</strong>高效检测副本差异，辅助数据同步和修复。
 
 ##### 工作原理（Working）
 
@@ -253,17 +261,21 @@
 ![原图：需要访问 SSTable 的读取](./images/read-path-without-cache.png)
 
 1. 先检查内存中是否有目标数据。
-2. 若未命中，通过 **Bloom Filter（布隆过滤器）**排除不可能包含 key 的 SSTable。
+2. 若未命中，通过 <strong>Bloom Filter（布隆过滤器）</strong>排除不可能包含 key 的 SSTable。
 3. 从相关 SSTable 读取并返回数据。
 
 > **准确性批注｜Bloom Filter 不负责定位精确记录**：它只回答“一定不存在”或“可能存在”，后者还需查索引与数据文件；可能误报存在，但在正确维护下不会漏报已插入元素。LSM 系统中同一 key 也可能出现在多个 SSTable，读取可能需要合并版本、处理墓碑，而不是命中第一个文件就返回。
+
+<div class="sd-lab" id="lab-bloom-filter" data-lab="bloom-filter">
+<p><strong>交互实验：Bloom Filter：「可能存在」为什么还要读盘</strong>。在 SSTable 读路径上插入和查询 key，看位数组怎样产生假阳性、位数组大小如何影响误报，以及为什么不能靠清零位来删除。<a href="https://kadaliao.github.io/system-design-interview-zh/#d6/lab-bloom-filter">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ## 最终架构（Final Architecture）
 
 ![原图：最终架构](./images/final-architecture.png)
 
 - 客户端通过简单 API `get(key)` 和 `put(key,value)` 访问存储。
-- **协调节点（coordinator）**作为客户端与存储节点之间的代理。
+- <strong>协调节点（coordinator）</strong>作为客户端与存储节点之间的代理。
 - 节点通过一致性哈希分布在环上。
 - 系统采用去中心化的数据节点设计，可自动加入和迁移节点。
 - 数据复制到多个节点。

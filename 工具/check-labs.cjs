@@ -1,5 +1,5 @@
 /** 交互实验验收：逐个实验文件在桌面与手机宽度下挂载、运行全部预设场景，检查脚本错误、横向溢出和过小文字。
- * 用法：node 工具/check-labs.cjs [--file 04-rate-limiter.js[,05-...]] [--out 截图目录] [--write]
+ * 用法：node 工具/check-labs.cjs [--file 04-rate-limiter.js[,05-...]] [--jobs 并行数] [--out 截图目录] [--write]
  * 需要 playwright 或 playwright-core（PLAYWRIGHT_MODULE 指定路径）；默认使用本机 Chrome。 */
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{pathToFileURL}=require('node:url');
@@ -17,8 +17,11 @@ fs.mkdirSync(out,{recursive:true});
   const browser=await chromium.launch(options);
   const report=[];let failed=false;
   try{
-    for(const file of files){
-      for(const vp of [{name:'desktop',width:1180,height:900},{name:'mobile',width:390,height:844}]){
+    const jobs=[];
+    for(const file of files)for(const vp of [{name:'desktop',width:1180,height:900},{name:'mobile',width:390,height:844}])jobs.push({file,vp});
+    const workers=Math.max(1,+arg('--jobs',1));
+    const runJob=async({file,vp})=>{
+      {
         const page=await browser.newPage({viewport:{width:vp.width,height:vp.height},deviceScaleFactor:vp.name==='mobile'?2:1});
         const errors=[];
         page.on('pageerror',e=>errors.push('pageerror: '+e.message));
@@ -73,7 +76,10 @@ fs.mkdirSync(out,{recursive:true});
         if(layout.tiny)console.log('    小字样例：',layout.tinySamples.join(' | '));
         await page.close();
       }
-    }
+    };
+    let next=0;
+    await Promise.all(Array.from({length:workers},async()=>{while(next<jobs.length){const j=jobs[next++];try{await runJob(j)}catch(e){failed=true;report.push({file:j.file,viewport:j.vp.name,crash:String(e)});console.log(`✗ ${j.file} [${j.vp.name}] 检查中断：${e.message}`)}}}));
+    report.sort((a,b)=>a.file.localeCompare(b.file)||a.viewport.localeCompare(b.viewport));
   }finally{await browser.close()}
   if(process.argv.includes('--write')){
     const slim=report.map(r=>({...r,screenshot:r.screenshot.split(',').map(x=>path.basename(x))}));

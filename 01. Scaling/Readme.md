@@ -127,8 +127,8 @@
 
 ### 主从模型（Master-Slave Model）
 
-- **主库（Master）**处理写操作：`insert`、`delete`、`update` 等会修改数据的命令必须发往主库。
-- **从库（Slave）**处理读操作，以提升性能和可靠性。多数应用读多写少，因此从库数量通常多于主库。
+- <strong>主库（Master）</strong>处理写操作：`insert`、`delete`、`update` 等会修改数据的命令必须发往主库。
+- <strong>从库（Slave）</strong>处理读操作，以提升性能和可靠性。多数应用读多写少，因此从库数量通常多于主库。
 
 ### 收益（Benefits）
 
@@ -149,6 +149,10 @@
 > 写入主库后立刻读从库，可能暂时读不到刚写的数据。需要“读己之写”时，可在短窗口内读主库、携带版本号，或等待从库追平。
 >
 > **失败模式**：自动提升错误副本导致数据丢失；重试写请求造成重复写入；只监控“数据库在线”而不监控复制延迟。
+
+<div class="sd-lab" id="lab-replica-lag" data-lab="replica-lag">
+<p><strong>交互实验：复制延迟：刚改的昵称为什么又变回去</strong>。改完昵称立刻刷新，对比轮流读从库、写后 1 秒读主库、带版本号读，以及缓存未失效时各读到新值还是旧值。<a href="https://kadaliao.github.io/system-design-interview-zh/#d1/lab-replica-lag">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ---
 
@@ -287,6 +291,10 @@ CDN 把图片、CSS、JavaScript 等静态内容缓存到地理分散的服务�
 > **批注｜分片是最后一公里**
 >
 > 分片键一旦选错，迁移和跨分片查询都很贵。面试中先说明单库 + 读副本的上限，再说明何时、按什么键分片，并给出热点和迁移方案。
+
+<div class="sd-lab" id="lab-scale-journey" data-lab="scale-journey">
+<p><strong>交互实验：从单机到分片：瓶颈在哪一层</strong>。拖动流量，逐个加上拆库、负载均衡、缓存、CDN、读副本、消息队列和分片，看瓶颈怎样在各层之间转移，以及加 Web 解决不了的行锁等待和名人热点。<a href="https://kadaliao.github.io/system-design-interview-zh/#d1/lab-scale-journey">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ---
 

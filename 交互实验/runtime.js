@@ -76,6 +76,8 @@ function tick(now){
   for(const inst of live)if(busy(inst)){rafId=requestAnimationFrame(tick);break}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)kick()});
+// 按钮等处调用 ctx.wait 时被重置/切换场景中断，属于正常流程，不作为未捕获错误上报。
+window.addEventListener('unhandledrejection',e=>{if(e.reason===ABORT)e.preventDefault()});
 const io='IntersectionObserver' in window?new IntersectionObserver(entries=>{for(const e of entries){const inst=e.target.__sdl;if(inst){inst.visible=e.isIntersecting;if(inst.visible)kick()}}},{rootMargin:'80px'}):null;
 
 /* ---------- 实验实例 ---------- */
@@ -228,11 +230,29 @@ function define(spec){
   if(specs.has(spec.id))console.warn('[SDLab] 重复定义',spec.id);
   specs.set(spec.id,spec);order.push(spec.id);
 }
+/* 按需加载：阅读页只内联「实验 ID → 脚本」清单（window.SDLAB_MANIFEST），切到某章时才加载该章脚本。 */
+const loading=new Map();
+let lastActivate=0;
+function loadScript(src){
+  if(!loading.has(src))loading.set(src,new Promise((resolve,reject)=>{const el=document.createElement('script');el.src=src;el.onload=resolve;el.onerror=()=>{loading.delete(src);reject(new Error('无法加载 '+src))};document.head.append(el)}));
+  return loading.get(src);
+}
 function mountEl(el){
   if(el.__sdlInst)return el.__sdlInst;
-  const spec=specs.get(el.dataset.lab);
-  if(!spec){console.warn('[SDLab] 未找到实验',el.dataset.lab);return null}
+  const id=el.dataset.lab,spec=specs.get(id);
+  if(!spec){
+    const src=(window.SDLAB_MANIFEST||{})[id];
+    if(!src){console.warn('[SDLab] 未找到实验',id);return null}
+    if(!el.__sdlLoading)el.__sdlLoading=loadScript(src).then(()=>{if(specs.has(id)){mountEl(el);reanchor(el)}else console.warn('[SDLab] 脚本中没有实验',id,src)}).catch(e=>console.error('[SDLab]',e)).finally(()=>{el.__sdlLoading=null});
+    return null;
+  }
   const inst=new Instance(el,spec);el.__sdlInst=inst;return inst;
+}
+/** 异步挂载会撑高页面：刚切换章节且地址带章内锚点时，重新定位到锚点。 */
+function reanchor(el){
+  const art=el.closest('article');if(!art||art.hidden||performance.now()-lastActivate>2500)return;
+  const [id,...parts]=decodeURIComponent(location.hash.slice(1)).split('/');if(id!==art.id||!parts.length)return;
+  const t=document.getElementById(id+'-'+parts.join('/'));if(t)t.scrollIntoView();
 }
 function mountAll(root){return [...(root||document).querySelectorAll('.sd-lab[data-lab]')].map(mountEl).filter(Boolean)}
 
@@ -354,11 +374,14 @@ function refreshBadges(){clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>
 /** 阅读页切换章节后调用：挂载实验、插入练习卡。 */
 function activate(article){
   if(!article)return;
+  lastActivate=performance.now();
   mountAll(article);
   const m=/^d(\d+)$/.exec(article.id||'');
   if(m){const n=+m[1];if(n>=1&&n<=28)chapterPractice(article,n);else if(n===29)reviewMode(article)}
 }
 
 window.SDLab={define,mountAll,mountEl,activate,badge,refreshBadges,questions,colors,util,el:h,svgEl:s,
+  /** ctx.wait 被重置/切换场景中断时抛出的信号；自己 catch 异步流程时用它区分真正的错误。 */
+  isAbort:e=>e===ABORT,
   get specs(){return order.map(id=>specs.get(id))},progress:()=>JSON.parse(JSON.stringify(store))};
 })();

@@ -135,6 +135,10 @@ AND (longitude BETWEEN :long - radius AND :long + radius);
 
 > **批注｜记住单向关系。** 共享长前缀提供范围约束，但“距离近”不保证前缀相同。不要把 Geohash 当距离公式。查询要覆盖整个半径区域，再精确过滤。
 
+<div class="sd-lab" id="lab-geohash-nearby" data-lab="geohash-nearby">
+<p><strong>交互实验：Geohash 附近搜索：选精度、查九格、再精确过滤</strong>。在原书坐标周围点选位置、切换半径和编码长度，看本格加 8 个邻格取回多少候选、按距离过滤后剩几家，以及边界两侧的近邻为什么前缀不同、精度太细时九格为什么盖不住圆。<a href="https://kadaliao.github.io/system-design-interview-zh/#d16/lab-geohash-nearby">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 方案四：四叉树（Quadtree）
 
 四叉树递归把二维空间分成四个象限，每个内部节点恰好有四个子节点，分别代表四个区域。原版将它作为每台 LBS 启动时构建的内存数据结构。
@@ -158,7 +162,11 @@ AND (longitude BETWEEN :long - radius AND :long + radius);
 - 新增/更新商家最简单的办法是逐步重建树，但会造成缓存失效。
 - 也能实时修改树，不过实现更复杂，需要锁等并发机制。
 
-> **批注｜别把估算当保证。** 实際复杂度取决于树深度、分布、构建方式和退化情况；内存需要计入 ID、坐标、节点指针与语言对象开销。上线前应测量真实数据，而不是直接沿用“几 GB”。
+> **批注｜别把估算当保证。** 实际复杂度取决于树深度、分布、构建方式和退化情况；内存需要计入 ID、坐标、节点指针与语言对象开销。上线前应测量真实数据，而不是直接沿用“几 GB”。
+
+<div class="sd-lab" id="lab-quadtree-knn" data-lab="quadtree-knn">
+<p><strong>交互实验：四叉树：按密度拆格子，再找最近的 k 家</strong>。拖动叶子阈值看四叉树逐层拆分、树变深，点地图看 k 近邻查询依次访问了哪些节点，并与固定精度的 Geohash 九格对照。<a href="https://kadaliao.github.io/system-design-interview-zh/#d16/lab-quadtree-knn">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 方案五：Google S2
 

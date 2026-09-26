@@ -145,6 +145,10 @@ WebSocket 服务器从 ZooKeeper 获取分布数据，确定频道在哪台机�
 
 > **批注｜服务端仍须鉴权。** 不能仅因客户端要求订阅某个 ID 就泄露位置；服务器必须检查真实好友关系和分享权限。
 
+<div class="sd-lab" id="lab-nearby-pubsub" data-lab="nearby-pubsub">
+<p><strong>交互实验：附近好友：每人一个频道，订阅端按距离过滤</strong>。看位置更新怎样发布到自己的 Redis 频道、扇出到在线好友所在的服务器，再按 5 英里过滤；调节更新间隔与在线好友数换算原书的每秒推送量，并演示加好友、删好友时的订阅变化。<a href="https://kadaliao.github.io/system-design-interview-zh/#d17/lab-nearby-pubsub">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 好友特别多的用户
 
 可以限制好友数量，例如原文举 Facebook 的 5000 上限作为例子。“超级用户”所在 WebSocket 服务器负载更高，但足够多的服务器可以分散总体压力。

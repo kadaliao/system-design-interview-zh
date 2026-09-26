@@ -56,7 +56,7 @@ C 表示候选人，I 表示面试官。
 
 ### 业务基础（Business Knowledge 101）
 
-**券商（Broker）**连接交易所与终端用户，例如 Robinhood、Fidelity。机构客户通过专用交易软件交易大额数量，需要专门处理；例如大额交易拆单，以降低对市场价格的冲击。
+<strong>券商（Broker）</strong>连接交易所与终端用户，例如 Robinhood、Fidelity。机构客户通过专用交易软件交易大额数量，需要专门处理；例如大额交易拆单，以降低对市场价格的冲击。
 
 订单类型：
 
@@ -86,7 +86,7 @@ C 表示候选人，I 表示面试官。
 
 > **批注｜深度的区别**：L2 通常按价格聚合数量，L3 通常提供更细的逐订单信息及队列变化；具体字段取决于交易所数据产品。不要把“多个档位”直接等同于 L3。
 
-**蜡烛图（Candlestick）**展示给定时间区间内的开盘价、收盘价、最高价和最低价。
+<strong>蜡烛图（Candlestick）</strong>展示给定时间区间内的开盘价、收盘价、最高价和最低价。
 
 ![蜡烛图](./images/candlestick.png)
 
@@ -134,7 +134,7 @@ C 表示候选人，I 表示面试官。
 - 将执行结果流分发为行情数据。
 - 按确定顺序产生成交；这是高可用与重放的基础。
 
-**排序器（Sequencer）**为入站订单和出站成交回报打上序列 ID，使撮合引擎可以确定地工作。
+<strong>排序器（Sequencer）</strong>为入站订单和出站成交回报打上序列 ID，使撮合引擎可以确定地工作。
 
 ![排序器](./images/sequencer.png)
 
@@ -148,7 +148,7 @@ C 表示候选人，I 表示面试官。
 
 > **批注｜序号不是万能保证**：序号用于发现重复、缺口和乱序，但还需要持久化处理位置、去重规则以及与输出提交的协调，才能避免重复产生业务效果。“公平”也要定义排序边界，不能凭一个递增数字就证明所有网络路径公平。
 
-**订单管理器（Order manager）**管理订单状态，并向撮合引擎发订单、接收 fill：
+<strong>订单管理器（Order manager）</strong>管理订单状态，并向撮合引擎发订单、接收 fill：
 
 - 发送订单做风险检查，例如确认用户交易量未超过 100 万股。
 - 检查钱包资金能否覆盖订单。
@@ -157,7 +157,7 @@ C 表示候选人，I 表示面试官。
 
 订单管理器最大的挑战是状态转换；事件溯源是一种可行方案，后文深入讨论。
 
-**客户端网关（Client gateway）**接收用户订单并转交订单管理器，其职责见原图：
+<strong>客户端网关（Client gateway）</strong>接收用户订单并转交订单管理器，其职责见原图：
 
 ![客户端网关](./images/client-gateway.png)
 
@@ -484,6 +484,10 @@ Raft 工作方式可参考[交互说明](https://thesecretlivesofdata.com/raft/)
 
 > **准确性批注**：备份频率定义恢复点目标 RPO 的一部分，单靠“经常备份”不能确保已确认成交零丢失。需要在确认前达到规定的持久化/复制提交条件，另有跨故障域灾备；Raft 也依赖多数节点与持久化假设。
 
+<div class="sd-lab" id="lab-exchange-failover" data-lab="exchange-failover">
+<p><strong>交互实验：撮合引擎主备切换的四道关口</strong>。让主节点宕机或假死，看选主、隔离旧主、重放日志、校验输出边界四道关口怎样决定 RTO，本地确认为什么会丢已确认数据，以及没有 fencing 时旧主醒来后的双发。<a href="https://kadaliao.github.io/system-design-interview-zh/#d28/lab-exchange-failover">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 撮合算法（Matching algorithms）
 
 下面完整保留原版伪代码，用于理解结构；它不是可直接上线的撮合实现。
@@ -553,6 +557,10 @@ Context match(OrderBook book, Order order) {
 >
 > **正确的记忆顺序**：取最优对手档 → 检查是否满足限价 → 取该档队首 → 按双方剩余量成交 → 更新双方 → 清理空订单/空档 → 继续，剩余新单再入簿。
 
+<div class="sd-lab" id="lab-order-book" data-lab="order-book">
+<p><strong>交互实验：限价订单簿按价格和到达顺序撮合</strong>。下限价单或市价单，逐步看撮合引擎取最优对手价、取队首订单、按双方剩余量成交、剩余量入簿，以及大单扫过多档、撤单与成交的先后顺序。<a href="https://kadaliao.github.io/system-design-interview-zh/#d28/lab-order-book">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 确定性（Determinism）
 
 前面的排序器用于保证功能确定性；墙上时钟的实际时刻不应改变相同有序输入的结果。
@@ -569,7 +577,7 @@ Context match(OrderBook book, Order order) {
 
 ![行情发布器](./images/market-data-publisher.png)
 
-**环形缓冲区（Ring buffer / Circular buffer）**是首尾相连的固定大小队列。提前分配内存避免频繁分配；原文还将其描述为无锁数据结构。
+<strong>环形缓冲区（Ring buffer / Circular buffer）</strong>是首尾相连的固定大小队列。提前分配内存避免频繁分配；原文还将其描述为无锁数据结构。
 
 另一项优化是 padding，让序列号不与其他热数据放在同一条缓存行，以减少伪共享。
 

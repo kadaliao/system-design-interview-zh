@@ -225,6 +225,10 @@ ZREVRANGE leaderboard_feb_2021 357 365
 
 > **批注：区间两端都包含。** 榜首要把起点截到 0；成员不存在时先处理空结果。展示普通位置时加 1；若按题目给并列名次，可先取分数，再统计严格更高分成员数量 `ZCOUNT key (score +inf` 并加 1。跨命令读取要考虑中间分数变化，可用同一服务端原子执行单元取得一致结果。`ZINCRBY` 重试会再次加分，须用比赛事件 ID 去重。
 
+<div class="sd-lab" id="lab-leaderboard-zset" data-lab="leaderboard-zset">
+<p><strong>交互实验：Sorted Set 排行榜：位置、名次与同分</strong>。用 ZINCRBY、ZREVRANGE、ZREVRANK 操作一张月榜，看前 10 与「我」上下各 4 名、同分时零基位置与竞赛名次的差别，以及重试投递时为什么要按 match_id 去重。<a href="https://kadaliao.github.io/system-design-interview-zh/#d25/lab-leaderboard-zset">在线阅读版</a>中可直接操作。</p>
+</div>
+
 存储估算：2,500 万 MAU 都参加，ID 24 字节、分数按原文 16 位（2 字节），则 `26×2500万 ≈ 650 MB`。原文再按跳表开销翻倍，认为仍能放入现代 Redis 集群。峰值 2,500 更新/秒也被认为在单实例能力范围内。
 
 > **批注：650 MB 只是原文有效载荷估算。** Redis 分数是双精度浮点，不是 16 位整数；成员对象、字典、跳表节点、分配器、碎片、副本及持久化还占内存。小集合可使用不同紧凑编码。不要拿“乘二”当容量保证，要用真实长度和分布装载测试；一个大 sorted set 也不会由 Redis Cluster 自动拆开。
@@ -282,6 +286,10 @@ Lambda 按调用执行代码，由平台管理服务器与扩缩容。加分和�
 限制：K 大时要取很多数据；分片越多，查询扇出越大；没有只查一片就能得到全局用户名次的简单方法。原文因此偏向固定范围分区。
 
 > **批注：本地 Top K 足够求全局 Top K。** 全局前 K 的某人若在本片排到 K 之后，已有 K 人比他靠前，因此不可能进全局 K。此论证需要统一排序规则；若要求“前十个名次含所有并列者”，结果可能超过十人，需要扩大边界取数。精确个人并列名次可统计各片严格更高分人数再求和，但代价为扇出查询。
+
+<div class="sd-lab" id="lab-leaderboard-shard" data-lab="leaderboard-shard">
+<p><strong>交互实验：分片以后：Top K 合并、跨片名次与单 key 热点</strong>。对比单个 key、哈希拆 key、共用 hash tag 和按分数范围分片：写入落在哪些 Redis Cluster 节点，前 K 名怎样散集合并，个人名次要问几个分片，边界并列为什么需要阈值查询。<a href="https://kadaliao.github.io/system-design-interview-zh/#d25/lab-leaderboard-shard">在线阅读版</a>中可直接操作。</p>
+</div>
 
 原文另建议写密集 Redis 预留约双倍内存以应对快照，并使用 `redis-benchmark` 做数据驱动决策。
 

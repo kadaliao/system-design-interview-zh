@@ -37,7 +37,10 @@ for(const doc of docs){
 const labDir=path.join(root,'交互实验');
 const labFiles=fs.readdirSync(path.join(labDir,'labs')).filter(n=>n.endsWith('.js')).sort();
 const enc=p=>p.split('/').map(encodeURIComponent).join('/');
-const labScripts=['交互实验/runtime.js',...labFiles.map(n=>'交互实验/labs/'+n)].map(p=>`<script src="${enc(p)}"></script>`).join('');
+// 只同步加载运行时；各章实验脚本由运行时按「实验 ID → 脚本」清单在切到该章时加载。
+const manifest={};
+for(const n of labFiles)for(const m of fs.readFileSync(path.join(labDir,'labs',n),'utf8').matchAll(/SDLab\.define\(\{\s*id:\s*['"]([^'"]+)['"]/g))manifest[m[1]]=enc('交互实验/labs/'+n);
+const labScripts=`<script>window.SDLAB_MANIFEST=${JSON.stringify(manifest).replaceAll('<','\\u003c')}</script><script src="${enc('交互实验/runtime.js')}"></script>`;
 const labCount=new Set(docs.slice(1,1+chapterDirs.length).flatMap(d=>[...d.source.matchAll(/<div class="sd-lab"[^>]*data-lab="([^"]+)"/g)].map(m=>m[1]))).size;
 const data=JSON.stringify(docs.map(({id,title,searchText,questions})=>({id,title,text:searchText,questions}))).replaceAll('<','\\u003c');
 const html=`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>系统设计 · 中文学习版</title><link rel="stylesheet" href="${enc('交互实验/runtime.css')}"><style>
@@ -52,4 +55,4 @@ function select(){let hash=decodeURIComponent(location.hash.slice(1)),[id,...par
 q.addEventListener('input',renderNav);window.addEventListener('hashchange',select);document.getElementById('prev').onclick=()=>{const i=docs.findIndex(d=>d.id===active);if(i>0)location.hash=docs[i-1].id};document.getElementById('next').onclick=()=>{const i=docs.findIndex(d=>d.id===active);if(i<docs.length-1)location.hash=docs[i+1].id};document.getElementById('menu').onclick=()=>document.body.classList.toggle('menu');nav.addEventListener('click',()=>document.body.classList.remove('menu'));for(const img of document.querySelectorAll('article img')){img.tabIndex=0;img.setAttribute('aria-label','放大图片：'+img.alt);const open=()=>{zoom.querySelector('img').src=img.src;document.getElementById('original-image').href=img.src;zoom.querySelector('img').alt=img.alt;zoom.showModal()};img.onclick=open;img.onkeydown=e=>{if(e.key==='Enter')open()}}zoom.querySelector('button').onclick=()=>zoom.close();zoom.onclick=e=>{if(e.target===zoom)zoom.close()};select();
 </script></body></html>`;
 fs.writeFileSync(path.join(root,'index.html'),html);
-console.log(JSON.stringify({documents:docs.length,chapters:chapterDirs.length,labs:labCount,labScripts:labFiles.length,bytes:Buffer.byteLength(html)}));
+console.log(JSON.stringify({documents:docs.length,chapters:chapterDirs.length,labs:labCount,labScripts:labFiles.length,manifest:Object.keys(manifest).length,bytes:Buffer.byteLength(html)}));

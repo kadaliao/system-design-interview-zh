@@ -117,7 +117,7 @@
 ### 1. 时钟同步（Clock Synchronization）
 
 - **挑战**：ID 生成依赖服务器时钟，时钟差异会影响顺序与安全性。
-- **原版方向**：使用 **NTP（Network Time Protocol，网络时间协议）**降低漂移。
+- <strong>原版方向</strong>：使用 <strong>NTP（Network Time Protocol，网络时间协议）</strong>降低漂移。
 
 > **批注｜NTP 不能替代回拨保护**：必须比较本次时间与上次发号时间。若当前时间更早，可等待追平、拒绝发号并报警，或采用经过设计的逻辑时间方案；不能悄悄把序列归零继续发。若同毫秒 4096 个序列用尽，也需等待下一毫秒或明确拒绝，不能回到 0 重用。
 
@@ -126,6 +126,10 @@
 根据用途调整各字段大小，例如减少序列位数、增加时间戳位数。
 
 > **批注｜位数是一份固定预算**：要更多机器，就给机器字段更多位；要更长生命周期，就给时间字段更多位；要更大的瞬时吞吐，就给序列更多位。总位数仍为 64，调整时还要考虑已有 ID 的解析和排序兼容性。
+
+<div class="sd-lab" id="lab-snowflake" data-lab="snowflake">
+<p><strong>交互实验：Snowflake 发号器：位预算、序列耗尽与时钟回拨</strong>。调整各字段位数看年限与容量怎样此消彼长，再让三台机器逐毫秒发号，观察序列用尽、时钟回拨、机器号重复和时钟偏差对唯一与有序的影响。<a href="https://kadaliao.github.io/system-design-interview-zh/#d7/lab-snowflake">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 3. 高可用（High Availability）
 

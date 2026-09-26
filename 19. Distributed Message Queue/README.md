@@ -306,6 +306,10 @@ ISR 在性能与持久性之间取舍：若所有副本都必须等齐，慢副�
 
 > **批注｜`all` 仍有前提。** ISR 如果只剩 Leader，`all` 也可能只确认一份；需配合最小同步副本数与禁止不安全选主。原文的 lag 参数属于历史/教学表述，落地应查具体版本；不能照抄为当前通用配置。
 
+<div class="sd-lab" id="lab-mq-isr-acks" data-lab="mq-isr-acks">
+<p><strong>交互实验：副本、ISR 与 ACK：Leader 宕机时丢不丢</strong>。一个分区三个副本：切换 ACK=0/1/all，让 Follower 卡住或让 Leader 宕机，看哪些「已确认」的消息会丢、慢副本怎样被移出 ISR、min.insync.replicas 何时拒绝写入。<a href="https://kadaliao.github.io/system-design-interview-zh/#d19/lab-mq-isr-acks">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 可扩展性
 
 #### 生产者
@@ -383,6 +387,10 @@ Broker 失败时，剩余副本继续提供数据；选出新 Leader，协调器
 ![原图：恰好一次](./images/exactly-once.png)
 
 > **批注｜说清边界。** 队列内部事务可能保证读—处理—写消息结果只提交一次；若最终写到外部数据库或支付接口，还需事务性协作或幂等。仅把 offset 提交顺序调整一下不能得到端到端 exactly-once。
+
+<div class="sd-lab" id="lab-mq-consumer-group" data-lab="mq-consumer-group">
+<p><strong>交互实验：消费组：分区分配、重平衡与 offset 提交</strong>。按 key 写入分区、增减或让消费者崩溃触发重平衡，对比「拉到就提交」与「处理完再提交」在崩溃后是丢消息还是重复处理。<a href="https://kadaliao.github.io/system-design-interview-zh/#d19/lab-mq-consumer-group">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 高级功能
 

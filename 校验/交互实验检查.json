@@ -1,0 +1,3402 @@
+[
+  {
+    "file": "01-scaling.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "scale-journey",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "从单机一路扩到分片",
+          "只加 Web 服务器",
+          "缓存命中率从 98% 掉到 80%",
+          "名人热点压垮一个分片"
+        ]
+      },
+      {
+        "id": "replica-lag",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "改完昵称马上刷新",
+          "写后 1 秒内读主库",
+          "带版本号读",
+          "缓存里还是旧值"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "scale-journey",
+        "scenario": "从单机一路扩到分片",
+        "status": "ok",
+        "ms": 16079
+      },
+      {
+        "lab": "scale-journey",
+        "scenario": "只加 Web 服务器",
+        "status": "ok",
+        "ms": 8797
+      },
+      {
+        "lab": "scale-journey",
+        "scenario": "缓存命中率从 98% 掉到 80%",
+        "status": "ok",
+        "ms": 10296
+      },
+      {
+        "lab": "scale-journey",
+        "scenario": "名人热点压垮一个分片",
+        "status": "ok",
+        "ms": 8038
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "改完昵称马上刷新",
+        "status": "ok",
+        "ms": 4271
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "写后 1 秒内读主库",
+        "status": "ok",
+        "ms": 4273
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "带版本号读",
+        "status": "ok",
+        "ms": 4269
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "缓存里还是旧值",
+        "status": "ok",
+        "ms": 4271
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "scale-journey-desktop.png",
+      "replica-lag-desktop.png"
+    ]
+  },
+  {
+    "file": "01-scaling.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "scale-journey",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "从单机一路扩到分片",
+          "只加 Web 服务器",
+          "缓存命中率从 98% 掉到 80%",
+          "名人热点压垮一个分片"
+        ]
+      },
+      {
+        "id": "replica-lag",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "改完昵称马上刷新",
+          "写后 1 秒内读主库",
+          "带版本号读",
+          "缓存里还是旧值"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "scale-journey",
+        "scenario": "从单机一路扩到分片",
+        "status": "ok",
+        "ms": 16078
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "改完昵称马上刷新",
+        "status": "ok",
+        "ms": 4272
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "scale-journey-mobile.png",
+      "replica-lag-mobile.png"
+    ]
+  },
+  {
+    "file": "02-estimation.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "estimate-calculator",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "复算正文 Twitter 示例",
+          "每天操作 2 次 → 10 次",
+          "只按平均 QPS 买机器"
+        ]
+      },
+      {
+        "id": "availability-nines",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "三个 99.9% 串联",
+          "给数据库加一个副本",
+          "副本共用一个机房",
+          "再接一个 99% 的短信服务"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "estimate-calculator",
+        "scenario": "复算正文 Twitter 示例",
+        "status": "ok",
+        "ms": 9300
+      },
+      {
+        "lab": "estimate-calculator",
+        "scenario": "每天操作 2 次 → 10 次",
+        "status": "ok",
+        "ms": 5027
+      },
+      {
+        "lab": "estimate-calculator",
+        "scenario": "只按平均 QPS 买机器",
+        "status": "ok",
+        "ms": 10048
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "三个 99.9% 串联",
+        "status": "ok",
+        "ms": 3016
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "给数据库加一个副本",
+        "status": "ok",
+        "ms": 7789
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "副本共用一个机房",
+        "status": "ok",
+        "ms": 5281
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "再接一个 99% 的短信服务",
+        "status": "ok",
+        "ms": 6282
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "estimate-calculator-desktop.png",
+      "availability-nines-desktop.png"
+    ]
+  },
+  {
+    "file": "02-estimation.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "estimate-calculator",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "复算正文 Twitter 示例",
+          "每天操作 2 次 → 10 次",
+          "只按平均 QPS 买机器"
+        ]
+      },
+      {
+        "id": "availability-nines",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "三个 99.9% 串联",
+          "给数据库加一个副本",
+          "副本共用一个机房",
+          "再接一个 99% 的短信服务"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "estimate-calculator",
+        "scenario": "复算正文 Twitter 示例",
+        "status": "ok",
+        "ms": 9298
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "三个 99.9% 串联",
+        "status": "ok",
+        "ms": 3018
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "estimate-calculator-mobile.png",
+      "availability-nines-mobile.png"
+    ]
+  },
+  {
+    "file": "03-interview-framework.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "interview-drill",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一上来就深挖数据库",
+          "按建议节奏走完 45 分钟",
+          "只剩 5 分钟怎么收口",
+          "90 秒讲完一道题"
+        ]
+      },
+      {
+        "id": "interview-scope",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "三个问题改变三条路径",
+          "名人发帖压垮扇出队列",
+          "10 万到 1 亿日活"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "interview-drill",
+        "scenario": "一上来就深挖数据库",
+        "status": "ok",
+        "ms": 15327
+      },
+      {
+        "lab": "interview-drill",
+        "scenario": "按建议节奏走完 45 分钟",
+        "status": "ok",
+        "ms": 15320
+      },
+      {
+        "lab": "interview-drill",
+        "scenario": "只剩 5 分钟怎么收口",
+        "status": "ok",
+        "ms": 16326
+      },
+      {
+        "lab": "interview-drill",
+        "scenario": "90 秒讲完一道题",
+        "status": "ok",
+        "ms": 16841
+      },
+      {
+        "lab": "interview-scope",
+        "scenario": "三个问题改变三条路径",
+        "status": "ok",
+        "ms": 12309
+      },
+      {
+        "lab": "interview-scope",
+        "scenario": "名人发帖压垮扇出队列",
+        "status": "ok",
+        "ms": 14069
+      },
+      {
+        "lab": "interview-scope",
+        "scenario": "10 万到 1 亿日活",
+        "status": "ok",
+        "ms": 12311
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "interview-drill-desktop.png",
+      "interview-scope-desktop.png"
+    ]
+  },
+  {
+    "file": "03-interview-framework.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "interview-drill",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一上来就深挖数据库",
+          "按建议节奏走完 45 分钟",
+          "只剩 5 分钟怎么收口",
+          "90 秒讲完一道题"
+        ]
+      },
+      {
+        "id": "interview-scope",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "三个问题改变三条路径",
+          "名人发帖压垮扇出队列",
+          "10 万到 1 亿日活"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "interview-drill",
+        "scenario": "一上来就深挖数据库",
+        "status": "ok",
+        "ms": 15328
+      },
+      {
+        "lab": "interview-scope",
+        "scenario": "三个问题改变三条路径",
+        "status": "ok",
+        "ms": 12562
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "interview-drill-mobile.png",
+      "interview-scope-mobile.png"
+    ]
+  },
+  {
+    "file": "04-rate-limiter.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "rate-limiter-arena",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "窗口边界突发",
+          "空闲后的大突发",
+          "持续两倍超速"
+        ]
+      },
+      {
+        "id": "rate-limiter-race",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "非原子写法交错执行",
+          "改成原子 INCR",
+          "滑动日志用 Lua 脚本",
+          "跨地区各自计数"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "rate-limiter-arena",
+        "scenario": "窗口边界突发",
+        "status": "ok",
+        "ms": 12564
+      },
+      {
+        "lab": "rate-limiter-arena",
+        "scenario": "空闲后的大突发",
+        "status": "ok",
+        "ms": 9047
+      },
+      {
+        "lab": "rate-limiter-arena",
+        "scenario": "持续两倍超速",
+        "status": "ok",
+        "ms": 15067
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "非原子写法交错执行",
+        "status": "ok",
+        "ms": 4274
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "改成原子 INCR",
+        "status": "ok",
+        "ms": 3019
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "滑动日志用 Lua 脚本",
+        "status": "ok",
+        "ms": 1527
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "跨地区各自计数",
+        "status": "ok",
+        "ms": 4270
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "rate-limiter-arena-desktop.png",
+      "rate-limiter-race-desktop.png"
+    ]
+  },
+  {
+    "file": "04-rate-limiter.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "rate-limiter-arena",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "窗口边界突发",
+          "空闲后的大突发",
+          "持续两倍超速"
+        ]
+      },
+      {
+        "id": "rate-limiter-race",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "非原子写法交错执行",
+          "改成原子 INCR",
+          "滑动日志用 Lua 脚本",
+          "跨地区各自计数"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "rate-limiter-arena",
+        "scenario": "窗口边界突发",
+        "status": "ok",
+        "ms": 12565
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "非原子写法交错执行",
+        "status": "ok",
+        "ms": 4274
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "rate-limiter-arena-mobile.png",
+      "rate-limiter-race-mobile.png"
+    ]
+  },
+  {
+    "file": "05-consistent-hashing.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "hash-ring",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "3 台服务器、4 个 key",
+          "加入 S4=65",
+          "新节点加在 5（跨零点）",
+          "30 个 key：移除 S2"
+        ]
+      },
+      {
+        "id": "hash-ring-vnodes",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "虚拟节点降低偏差",
+          "加入第 5 台：key 从谁那里来",
+          "热门 key 不会被分摊"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "hash-ring",
+        "scenario": "3 台服务器、4 个 key",
+        "status": "ok",
+        "ms": 6281
+      },
+      {
+        "lab": "hash-ring",
+        "scenario": "加入 S4=65",
+        "status": "ok",
+        "ms": 4017
+      },
+      {
+        "lab": "hash-ring",
+        "scenario": "新节点加在 5（跨零点）",
+        "status": "ok",
+        "ms": 7033
+      },
+      {
+        "lab": "hash-ring",
+        "scenario": "30 个 key：移除 S2",
+        "status": "ok",
+        "ms": 4771
+      },
+      {
+        "lab": "hash-ring-vnodes",
+        "scenario": "虚拟节点降低偏差",
+        "status": "ok",
+        "ms": 13065
+      },
+      {
+        "lab": "hash-ring-vnodes",
+        "scenario": "加入第 5 台：key 从谁那里来",
+        "status": "ok",
+        "ms": 10052
+      },
+      {
+        "lab": "hash-ring-vnodes",
+        "scenario": "热门 key 不会被分摊",
+        "status": "ok",
+        "ms": 8802
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "hash-ring-desktop.png",
+      "hash-ring-vnodes-desktop.png"
+    ]
+  },
+  {
+    "file": "05-consistent-hashing.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "hash-ring",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "3 台服务器、4 个 key",
+          "加入 S4=65",
+          "新节点加在 5（跨零点）",
+          "30 个 key：移除 S2"
+        ]
+      },
+      {
+        "id": "hash-ring-vnodes",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "虚拟节点降低偏差",
+          "加入第 5 台：key 从谁那里来",
+          "热门 key 不会被分摊"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "hash-ring",
+        "scenario": "3 台服务器、4 个 key",
+        "status": "ok",
+        "ms": 6282
+      },
+      {
+        "lab": "hash-ring-vnodes",
+        "scenario": "虚拟节点降低偏差",
+        "status": "ok",
+        "ms": 13067
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "hash-ring-mobile.png",
+      "hash-ring-vnodes-mobile.png"
+    ]
+  },
+  {
+    "file": "06-key-value-store.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "quorum-rw",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "R+W>N：任意读集合都相交",
+          "相交仍会读到「1 后又 0」",
+          "读前写回：不再倒退",
+          "Sloppy quorum 不再相交"
+        ]
+      },
+      {
+        "id": "vector-clock",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原书 D1 → D5",
+          "向量时钟能选出正确姓名吗",
+          "计数总和大≠更新"
+        ]
+      },
+      {
+        "id": "bloom-filter",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "gamma 从没插入，为何「可能存在」",
+          "位数组小了会怎样",
+          "为什么不能直接删"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "quorum-rw",
+        "scenario": "R+W>N：任意读集合都相交",
+        "status": "ok",
+        "ms": 10552
+      },
+      {
+        "lab": "quorum-rw",
+        "scenario": "相交仍会读到「1 后又 0」",
+        "status": "ok",
+        "ms": 10549
+      },
+      {
+        "lab": "quorum-rw",
+        "scenario": "读前写回：不再倒退",
+        "status": "ok",
+        "ms": 10801
+      },
+      {
+        "lab": "quorum-rw",
+        "scenario": "Sloppy quorum 不再相交",
+        "status": "ok",
+        "ms": 8793
+      },
+      {
+        "lab": "vector-clock",
+        "scenario": "原书 D1 → D5",
+        "status": "ok",
+        "ms": 12387
+      },
+      {
+        "lab": "vector-clock",
+        "scenario": "向量时钟能选出正确姓名吗",
+        "status": "ok",
+        "ms": 9306
+      },
+      {
+        "lab": "vector-clock",
+        "scenario": "计数总和大≠更新",
+        "status": "ok",
+        "ms": 11808
+      },
+      {
+        "lab": "bloom-filter",
+        "scenario": "gamma 从没插入，为何「可能存在」",
+        "status": "ok",
+        "ms": 9540
+      },
+      {
+        "lab": "bloom-filter",
+        "scenario": "位数组小了会怎样",
+        "status": "ok",
+        "ms": 8545
+      },
+      {
+        "lab": "bloom-filter",
+        "scenario": "为什么不能直接删",
+        "status": "ok",
+        "ms": 8289
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "quorum-rw-desktop.png",
+      "vector-clock-desktop.png",
+      "bloom-filter-desktop.png"
+    ]
+  },
+  {
+    "file": "06-key-value-store.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "quorum-rw",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "R+W>N：任意读集合都相交",
+          "相交仍会读到「1 后又 0」",
+          "读前写回：不再倒退",
+          "Sloppy quorum 不再相交"
+        ]
+      },
+      {
+        "id": "vector-clock",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原书 D1 → D5",
+          "向量时钟能选出正确姓名吗",
+          "计数总和大≠更新"
+        ]
+      },
+      {
+        "id": "bloom-filter",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "gamma 从没插入，为何「可能存在」",
+          "位数组小了会怎样",
+          "为什么不能直接删"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "quorum-rw",
+        "scenario": "R+W>N：任意读集合都相交",
+        "status": "ok",
+        "ms": 10550
+      },
+      {
+        "lab": "vector-clock",
+        "scenario": "原书 D1 → D5",
+        "status": "ok",
+        "ms": 12310
+      },
+      {
+        "lab": "bloom-filter",
+        "scenario": "gamma 从没插入，为何「可能存在」",
+        "status": "ok",
+        "ms": 9544
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "quorum-rw-mobile.png",
+      "vector-clock-mobile.png",
+      "bloom-filter-mobile.png"
+    ]
+  },
+  {
+    "file": "07-unique-id-generator.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "snowflake",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "同一毫秒序列用完",
+          "时钟回拨 3 ms",
+          "机器号重复",
+          "唯一、连续、有序"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "snowflake",
+        "scenario": "同一毫秒序列用完",
+        "status": "ok",
+        "ms": 8298
+      },
+      {
+        "lab": "snowflake",
+        "scenario": "时钟回拨 3 ms",
+        "status": "ok",
+        "ms": 14813
+      },
+      {
+        "lab": "snowflake",
+        "scenario": "机器号重复",
+        "status": "ok",
+        "ms": 8792
+      },
+      {
+        "lab": "snowflake",
+        "scenario": "唯一、连续、有序",
+        "status": "ok",
+        "ms": 8043
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "snowflake-desktop.png"
+    ]
+  },
+  {
+    "file": "07-unique-id-generator.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "snowflake",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "同一毫秒序列用完",
+          "时钟回拨 3 ms",
+          "机器号重复",
+          "唯一、连续、有序"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "snowflake",
+        "scenario": "同一毫秒序列用完",
+        "status": "ok",
+        "ms": 8299
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "snowflake-mobile.png"
+    ]
+  },
+  {
+    "file": "08-url-shortener.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "url-shortener",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "256 个码放 20 条",
+          "空间越满越难找",
+          "Bloom Filter 帮了什么",
+          "Base62 的下一个短码"
+        ]
+      },
+      {
+        "id": "url-redirect",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "301：只数到第一次",
+          "302 + no-store：逐次经过",
+          "302 也会被缓存",
+          "请求数 ≠ 点击数"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "url-shortener",
+        "scenario": "256 个码放 20 条",
+        "status": "ok",
+        "ms": 5024
+      },
+      {
+        "lab": "url-shortener",
+        "scenario": "空间越满越难找",
+        "status": "ok",
+        "ms": 6029
+      },
+      {
+        "lab": "url-shortener",
+        "scenario": "Bloom Filter 帮了什么",
+        "status": "ok",
+        "ms": 11052
+      },
+      {
+        "lab": "url-shortener",
+        "scenario": "Base62 的下一个短码",
+        "status": "ok",
+        "ms": 5845
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "301：只数到第一次",
+        "status": "ok",
+        "ms": 5026
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "302 + no-store：逐次经过",
+        "status": "ok",
+        "ms": 6780
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "302 也会被缓存",
+        "status": "ok",
+        "ms": 5527
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "请求数 ≠ 点击数",
+        "status": "ok",
+        "ms": 5026
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "url-shortener-desktop.png",
+      "url-redirect-desktop.png"
+    ]
+  },
+  {
+    "file": "08-url-shortener.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "url-shortener",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "256 个码放 20 条",
+          "空间越满越难找",
+          "Bloom Filter 帮了什么",
+          "Base62 的下一个短码"
+        ]
+      },
+      {
+        "id": "url-redirect",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "301：只数到第一次",
+          "302 + no-store：逐次经过",
+          "302 也会被缓存",
+          "请求数 ≠ 点击数"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "url-shortener",
+        "scenario": "256 个码放 20 条",
+        "status": "ok",
+        "ms": 5021
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "301：只数到第一次",
+        "status": "ok",
+        "ms": 5025
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "url-shortener-mobile.png",
+      "url-redirect-mobile.png"
+    ]
+  },
+  {
+    "file": "09-web-crawler.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "crawler-frontier",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "关掉 URL 去重",
+          "关掉内容去重",
+          "加 worker 能快几倍",
+          "无限日历陷阱"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "crawler-frontier",
+        "scenario": "关掉 URL 去重",
+        "status": "ok",
+        "ms": 5530
+      },
+      {
+        "lab": "crawler-frontier",
+        "scenario": "关掉内容去重",
+        "status": "ok",
+        "ms": 3268
+      },
+      {
+        "lab": "crawler-frontier",
+        "scenario": "加 worker 能快几倍",
+        "status": "ok",
+        "ms": 7786
+      },
+      {
+        "lab": "crawler-frontier",
+        "scenario": "无限日历陷阱",
+        "status": "ok",
+        "ms": 11806
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "crawler-frontier-desktop.png"
+    ]
+  },
+  {
+    "file": "09-web-crawler.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "crawler-frontier",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "关掉 URL 去重",
+          "关掉内容去重",
+          "加 worker 能快几倍",
+          "无限日历陷阱"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "crawler-frontier",
+        "scenario": "关掉 URL 去重",
+        "status": "ok",
+        "ms": 5532
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "crawler-frontier-mobile.png"
+    ]
+  },
+  {
+    "file": "10-notification-system.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "notification-pipeline",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "短信服务商故障 16 秒",
+          "换成共用队列",
+          "营销邮件高峰"
+        ]
+      },
+      {
+        "id": "notification-dedup",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "发送后崩溃 · 先查后发",
+          "两个 worker 同时查",
+          "原子占用 + 幂等键",
+          "第三方不支持幂等"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "notification-pipeline",
+        "scenario": "短信服务商故障 16 秒",
+        "status": "ok",
+        "ms": 9548
+      },
+      {
+        "lab": "notification-pipeline",
+        "scenario": "换成共用队列",
+        "status": "ok",
+        "ms": 9541
+      },
+      {
+        "lab": "notification-pipeline",
+        "scenario": "营销邮件高峰",
+        "status": "ok",
+        "ms": 4270
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "发送后崩溃 · 先查后发",
+        "status": "ok",
+        "ms": 5529
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "两个 worker 同时查",
+        "status": "ok",
+        "ms": 4775
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "原子占用 + 幂等键",
+        "status": "ok",
+        "ms": 5531
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "第三方不支持幂等",
+        "status": "ok",
+        "ms": 5531
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "notification-pipeline-desktop.png",
+      "notification-dedup-desktop.png"
+    ]
+  },
+  {
+    "file": "10-notification-system.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "notification-pipeline",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "短信服务商故障 16 秒",
+          "换成共用队列",
+          "营销邮件高峰"
+        ]
+      },
+      {
+        "id": "notification-dedup",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "发送后崩溃 · 先查后发",
+          "两个 worker 同时查",
+          "原子占用 + 幂等键",
+          "第三方不支持幂等"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "notification-pipeline",
+        "scenario": "短信服务商故障 16 秒",
+        "status": "ok",
+        "ms": 9550
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "发送后崩溃 · 先查后发",
+        "status": "ok",
+        "ms": 5531
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "notification-pipeline-mobile.png",
+      "notification-dedup-mobile.png"
+    ]
+  },
+  {
+    "file": "11-news-feed.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "feed-fanout",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "名人发帖后 2 秒打开",
+          "普通作者发帖",
+          "挪动混合阈值"
+        ]
+      },
+      {
+        "id": "feed-hydrate",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "删帖后 ID 还在",
+          "拉黑之后",
+          "新帖插入时翻页"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "feed-fanout",
+        "scenario": "名人发帖后 2 秒打开",
+        "status": "ok",
+        "ms": 13064
+      },
+      {
+        "lab": "feed-fanout",
+        "scenario": "普通作者发帖",
+        "status": "ok",
+        "ms": 4020
+      },
+      {
+        "lab": "feed-fanout",
+        "scenario": "挪动混合阈值",
+        "status": "ok",
+        "ms": 7288
+      },
+      {
+        "lab": "feed-hydrate",
+        "scenario": "删帖后 ID 还在",
+        "status": "ok",
+        "ms": 5781
+      },
+      {
+        "lab": "feed-hydrate",
+        "scenario": "拉黑之后",
+        "status": "ok",
+        "ms": 5782
+      },
+      {
+        "lab": "feed-hydrate",
+        "scenario": "新帖插入时翻页",
+        "status": "ok",
+        "ms": 11050
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "feed-fanout-desktop.png",
+      "feed-hydrate-desktop.png"
+    ]
+  },
+  {
+    "file": "11-news-feed.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "feed-fanout",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "名人发帖后 2 秒打开",
+          "普通作者发帖",
+          "挪动混合阈值"
+        ]
+      },
+      {
+        "id": "feed-hydrate",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "删帖后 ID 还在",
+          "拉黑之后",
+          "新帖插入时翻页"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "feed-fanout",
+        "scenario": "名人发帖后 2 秒打开",
+        "status": "ok",
+        "ms": 13070
+      },
+      {
+        "lab": "feed-hydrate",
+        "scenario": "删帖后 ID 还在",
+        "status": "ok",
+        "ms": 5820
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "feed-fanout-mobile.png",
+      "feed-hydrate-mobile.png"
+    ]
+  },
+  {
+    "file": "12-chat-system.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "chat-delivery",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "在线推送，离线提醒",
+          "万人群还能写扩散吗",
+          "会话内 ID 配用户级游标",
+          "唯一不等于有序"
+        ]
+      },
+      {
+        "id": "presence-heartbeat",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "电梯里断网 12 秒",
+          "真的下线了",
+          "阈值降到 10 秒",
+          "手机断网，笔记本在线"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "chat-delivery",
+        "scenario": "在线推送，离线提醒",
+        "status": "ok",
+        "ms": 5532
+      },
+      {
+        "lab": "chat-delivery",
+        "scenario": "万人群还能写扩散吗",
+        "status": "ok",
+        "ms": 9045
+      },
+      {
+        "lab": "chat-delivery",
+        "scenario": "会话内 ID 配用户级游标",
+        "status": "ok",
+        "ms": 10105
+      },
+      {
+        "lab": "chat-delivery",
+        "scenario": "唯一不等于有序",
+        "status": "ok",
+        "ms": 6280
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "电梯里断网 12 秒",
+        "status": "ok",
+        "ms": 6032
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "真的下线了",
+        "status": "ok",
+        "ms": 5787
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "阈值降到 10 秒",
+        "status": "ok",
+        "ms": 6142
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "手机断网，笔记本在线",
+        "status": "ok",
+        "ms": 8038
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "chat-delivery-desktop.png",
+      "presence-heartbeat-desktop.png"
+    ]
+  },
+  {
+    "file": "12-chat-system.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "chat-delivery",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "在线推送，离线提醒",
+          "万人群还能写扩散吗",
+          "会话内 ID 配用户级游标",
+          "唯一不等于有序"
+        ]
+      },
+      {
+        "id": "presence-heartbeat",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "电梯里断网 12 秒",
+          "真的下线了",
+          "阈值降到 10 秒",
+          "手机断网，笔记本在线"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "chat-delivery",
+        "scenario": "在线推送，离线提醒",
+        "status": "ok",
+        "ms": 5522
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "电梯里断网 12 秒",
+        "status": "ok",
+        "ms": 6276
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "chat-delivery-mobile.png",
+      "presence-heartbeat-mobile.png"
+    ]
+  },
+  {
+    "file": "13-search-autocomplete.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "trie-topk",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "输入 ca：现算还是查表",
+          "cap 这周突然变热",
+          "边覆盖边服务",
+          "短前缀是热点"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "trie-topk",
+        "scenario": "输入 ca：现算还是查表",
+        "status": "ok",
+        "ms": 4771
+      },
+      {
+        "lab": "trie-topk",
+        "scenario": "cap 这周突然变热",
+        "status": "ok",
+        "ms": 8795
+      },
+      {
+        "lab": "trie-topk",
+        "scenario": "边覆盖边服务",
+        "status": "ok",
+        "ms": 7789
+      },
+      {
+        "lab": "trie-topk",
+        "scenario": "短前缀是热点",
+        "status": "ok",
+        "ms": 2516
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "trie-topk-desktop.png"
+    ]
+  },
+  {
+    "file": "13-search-autocomplete.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "trie-topk",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "输入 ca：现算还是查表",
+          "cap 这周突然变热",
+          "边覆盖边服务",
+          "短前缀是热点"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "trie-topk",
+        "scenario": "输入 ca：现算还是查表",
+        "status": "ok",
+        "ms": 4774
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "trie-topk-mobile.png"
+    ]
+  },
+  {
+    "file": "14-youtube.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "transcode-dag",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "加 worker 能快几倍",
+          "720p 分片崩溃",
+          "过早的完成通知",
+          "1080p 稍后可用"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "transcode-dag",
+        "scenario": "加 worker 能快几倍",
+        "status": "ok",
+        "ms": 6347
+      },
+      {
+        "lab": "transcode-dag",
+        "scenario": "720p 分片崩溃",
+        "status": "ok",
+        "ms": 8038
+      },
+      {
+        "lab": "transcode-dag",
+        "scenario": "过早的完成通知",
+        "status": "ok",
+        "ms": 8044
+      },
+      {
+        "lab": "transcode-dag",
+        "scenario": "1080p 稍后可用",
+        "status": "ok",
+        "ms": 7785
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "transcode-dag-desktop.png"
+    ]
+  },
+  {
+    "file": "14-youtube.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "transcode-dag",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "加 worker 能快几倍",
+          "720p 分片崩溃",
+          "过早的完成通知",
+          "1080p 稍后可用"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "transcode-dag",
+        "scenario": "加 worker 能快几倍",
+        "status": "ok",
+        "ms": 6285
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "transcode-dag-mobile.png"
+    ]
+  },
+  {
+    "file": "15-google-drive.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "block-sync",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "只改一小段",
+          "另存一份副本",
+          "两台设备同时改",
+          "上传中断"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "block-sync",
+        "scenario": "只改一小段",
+        "status": "ok",
+        "ms": 4270
+      },
+      {
+        "lab": "block-sync",
+        "scenario": "另存一份副本",
+        "status": "ok",
+        "ms": 2766
+      },
+      {
+        "lab": "block-sync",
+        "scenario": "两台设备同时改",
+        "status": "ok",
+        "ms": 4272
+      },
+      {
+        "lab": "block-sync",
+        "scenario": "上传中断",
+        "status": "ok",
+        "ms": 7535
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "block-sync-desktop.png"
+    ]
+  },
+  {
+    "file": "15-google-drive.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "block-sync",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "只改一小段",
+          "另存一份副本",
+          "两台设备同时改",
+          "上传中断"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "block-sync",
+        "scenario": "只改一小段",
+        "status": "ok",
+        "ms": 4271
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "block-sync-mobile.png"
+    ]
+  },
+  {
+    "file": "16-proximity-service.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "geohash-nearby",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原书例子：500 米",
+          "边界两侧：近在咫尺，前缀不同",
+          "精度选太细：九格盖不住圆",
+          "固定精度遇上密度差"
+        ]
+      },
+      {
+        "id": "quadtree-knn",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "按阈值递归拆分",
+          "最近 5 家：市中心与郊区",
+          "阈值变小，树变深"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "geohash-nearby",
+        "scenario": "原书例子：500 米",
+        "status": "ok",
+        "ms": 4275
+      },
+      {
+        "lab": "geohash-nearby",
+        "scenario": "边界两侧：近在咫尺，前缀不同",
+        "status": "ok",
+        "ms": 4525
+      },
+      {
+        "lab": "geohash-nearby",
+        "scenario": "精度选太细：九格盖不住圆",
+        "status": "ok",
+        "ms": 4527
+      },
+      {
+        "lab": "geohash-nearby",
+        "scenario": "固定精度遇上密度差",
+        "status": "ok",
+        "ms": 8790
+      },
+      {
+        "lab": "quadtree-knn",
+        "scenario": "按阈值递归拆分",
+        "status": "ok",
+        "ms": 4020
+      },
+      {
+        "lab": "quadtree-knn",
+        "scenario": "最近 5 家：市中心与郊区",
+        "status": "ok",
+        "ms": 3770
+      },
+      {
+        "lab": "quadtree-knn",
+        "scenario": "阈值变小，树变深",
+        "status": "ok",
+        "ms": 6531
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "geohash-nearby-desktop.png",
+      "quadtree-knn-desktop.png"
+    ]
+  },
+  {
+    "file": "16-proximity-service.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "geohash-nearby",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原书例子：500 米",
+          "边界两侧：近在咫尺，前缀不同",
+          "精度选太细：九格盖不住圆",
+          "固定精度遇上密度差"
+        ]
+      },
+      {
+        "id": "quadtree-knn",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "按阈值递归拆分",
+          "最近 5 家：市中心与郊区",
+          "阈值变小，树变深"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "geohash-nearby",
+        "scenario": "原书例子：500 米",
+        "status": "ok",
+        "ms": 4275
+      },
+      {
+        "lab": "quadtree-knn",
+        "scenario": "按阈值递归拆分",
+        "status": "ok",
+        "ms": 4023
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "geohash-nearby-mobile.png",
+      "quadtree-knn-mobile.png"
+    ]
+  },
+  {
+    "file": "17-nearby-friends.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "nearby-pubsub",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一次上报扇出几份",
+          "原书规模：每秒多少推送",
+          "加好友、删好友"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "nearby-pubsub",
+        "scenario": "一次上报扇出几份",
+        "status": "ok",
+        "ms": 5280
+      },
+      {
+        "lab": "nearby-pubsub",
+        "scenario": "原书规模：每秒多少推送",
+        "status": "ok",
+        "ms": 11057
+      },
+      {
+        "lab": "nearby-pubsub",
+        "scenario": "加好友、删好友",
+        "status": "ok",
+        "ms": 9797
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "nearby-pubsub-desktop.png"
+    ]
+  },
+  {
+    "file": "17-nearby-friends.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "nearby-pubsub",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一次上报扇出几份",
+          "原书规模：每秒多少推送",
+          "加好友、删好友"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "nearby-pubsub",
+        "scenario": "一次上报扇出几份",
+        "status": "ok",
+        "ms": 5279
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "nearby-pubsub-mobile.png"
+    ]
+  },
+  {
+    "file": "18-google-maps.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "map-tiles",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "放大一级，瓦片 ×4",
+          "编号靠计算得出",
+          "平移只补新露出的瓦片"
+        ]
+      },
+      {
+        "id": "routing-tiles",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "整张图 vs 按需加载",
+          "长途：换用分层瓦片",
+          "短途只要一两块瓦片"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "map-tiles",
+        "scenario": "放大一级，瓦片 ×4",
+        "status": "ok",
+        "ms": 8287
+      },
+      {
+        "lab": "map-tiles",
+        "scenario": "编号靠计算得出",
+        "status": "ok",
+        "ms": 4272
+      },
+      {
+        "lab": "map-tiles",
+        "scenario": "平移只补新露出的瓦片",
+        "status": "ok",
+        "ms": 5531
+      },
+      {
+        "lab": "routing-tiles",
+        "scenario": "整张图 vs 按需加载",
+        "status": "ok",
+        "ms": 10046
+      },
+      {
+        "lab": "routing-tiles",
+        "scenario": "长途：换用分层瓦片",
+        "status": "ok",
+        "ms": 4272
+      },
+      {
+        "lab": "routing-tiles",
+        "scenario": "短途只要一两块瓦片",
+        "status": "ok",
+        "ms": 2266
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "map-tiles-desktop.png",
+      "routing-tiles-desktop.png"
+    ]
+  },
+  {
+    "file": "18-google-maps.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "map-tiles",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "放大一级，瓦片 ×4",
+          "编号靠计算得出",
+          "平移只补新露出的瓦片"
+        ]
+      },
+      {
+        "id": "routing-tiles",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "整张图 vs 按需加载",
+          "长途：换用分层瓦片",
+          "短途只要一两块瓦片"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "map-tiles",
+        "scenario": "放大一级，瓦片 ×4",
+        "status": "ok",
+        "ms": 8286
+      },
+      {
+        "lab": "routing-tiles",
+        "scenario": "整张图 vs 按需加载",
+        "status": "ok",
+        "ms": 3268
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "map-tiles-mobile.png",
+      "routing-tiles-mobile.png"
+    ]
+  },
+  {
+    "file": "19-message-queue.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "mq-consumer-group",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "消费者逐个加入",
+          "拉到就提交，随后崩溃",
+          "处理完再提交，随后崩溃",
+          "按 key 保序与无 key"
+        ]
+      },
+      {
+        "id": "mq-isr-acks",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "ACK=1 时 Leader 宕机",
+          "ACK=all 时同样宕机",
+          "慢副本被移出 ISR",
+          "ISR 只剩 Leader"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "消费者逐个加入",
+        "status": "ok",
+        "ms": 18589
+      },
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "拉到就提交，随后崩溃",
+        "status": "ok",
+        "ms": 7033
+      },
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "处理完再提交，随后崩溃",
+        "status": "ok",
+        "ms": 8794
+      },
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "按 key 保序与无 key",
+        "status": "ok",
+        "ms": 12052
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "ACK=1 时 Leader 宕机",
+        "status": "ok",
+        "ms": 9294
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "ACK=all 时同样宕机",
+        "status": "ok",
+        "ms": 9050
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "慢副本被移出 ISR",
+        "status": "ok",
+        "ms": 13085
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "ISR 只剩 Leader",
+        "status": "ok",
+        "ms": 14566
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "mq-consumer-group-desktop.png",
+      "mq-isr-acks-desktop.png"
+    ]
+  },
+  {
+    "file": "19-message-queue.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "mq-consumer-group",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "消费者逐个加入",
+          "拉到就提交，随后崩溃",
+          "处理完再提交，随后崩溃",
+          "按 key 保序与无 key"
+        ]
+      },
+      {
+        "id": "mq-isr-acks",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "ACK=1 时 Leader 宕机",
+          "ACK=all 时同样宕机",
+          "慢副本被移出 ISR",
+          "ISR 只剩 Leader"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "消费者逐个加入",
+        "status": "ok",
+        "ms": 18592
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "ACK=1 时 Leader 宕机",
+        "status": "ok",
+        "ms": 9295
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "mq-consumer-group-mobile.png",
+      "mq-isr-acks-mobile.png"
+    ]
+  },
+  {
+    "file": "20-metrics-alerting.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "alert-rule",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "不设持续时长",
+          "for：1 分钟",
+          "for：5 分钟",
+          "主机失联：没数据就是健康？"
+        ]
+      },
+      {
+        "id": "metrics-downsample",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原文的 30 秒平均",
+          "20 秒的尖峰去哪了",
+          "一年要存多少点"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "alert-rule",
+        "scenario": "不设持续时长",
+        "status": "ok",
+        "ms": 12058
+      },
+      {
+        "lab": "alert-rule",
+        "scenario": "for：1 分钟",
+        "status": "ok",
+        "ms": 12192
+      },
+      {
+        "lab": "alert-rule",
+        "scenario": "for：5 分钟",
+        "status": "ok",
+        "ms": 11801
+      },
+      {
+        "lab": "alert-rule",
+        "scenario": "主机失联：没数据就是健康？",
+        "status": "ok",
+        "ms": 12054
+      },
+      {
+        "lab": "metrics-downsample",
+        "scenario": "原文的 30 秒平均",
+        "status": "ok",
+        "ms": 6536
+      },
+      {
+        "lab": "metrics-downsample",
+        "scenario": "20 秒的尖峰去哪了",
+        "status": "ok",
+        "ms": 5782
+      },
+      {
+        "lab": "metrics-downsample",
+        "scenario": "一年要存多少点",
+        "status": "ok",
+        "ms": 1765
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "alert-rule-desktop.png",
+      "metrics-downsample-desktop.png"
+    ]
+  },
+  {
+    "file": "20-metrics-alerting.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "alert-rule",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "不设持续时长",
+          "for：1 分钟",
+          "for：5 分钟",
+          "主机失联：没数据就是健康？"
+        ]
+      },
+      {
+        "id": "metrics-downsample",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "原文的 30 秒平均",
+          "20 秒的尖峰去哪了",
+          "一年要存多少点"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "alert-rule",
+        "scenario": "不设持续时长",
+        "status": "ok",
+        "ms": 12064
+      },
+      {
+        "lab": "metrics-downsample",
+        "scenario": "原文的 30 秒平均",
+        "status": "ok",
+        "ms": 6532
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "alert-rule-mobile.png",
+      "metrics-downsample-mobile.png"
+    ]
+  },
+  {
+    "file": "21-ad-click-aggregation.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "stream-window",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "按到达时刻归属",
+          "乱序容忍 5 秒 vs 40 秒",
+          "允许迟到：发更正版本",
+          "滑动窗口：一次点击算几次"
+        ]
+      },
+      {
+        "id": "agg-exactly-once",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "先发结果再提交",
+          "先存进度再发结果",
+          "原子提交",
+          "下游幂等写"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "stream-window",
+        "scenario": "按到达时刻归属",
+        "status": "ok",
+        "ms": 10549
+      },
+      {
+        "lab": "stream-window",
+        "scenario": "乱序容忍 5 秒 vs 40 秒",
+        "status": "ok",
+        "ms": 14818
+      },
+      {
+        "lab": "stream-window",
+        "scenario": "允许迟到：发更正版本",
+        "status": "ok",
+        "ms": 10556
+      },
+      {
+        "lab": "stream-window",
+        "scenario": "滑动窗口：一次点击算几次",
+        "status": "ok",
+        "ms": 11552
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "先发结果再提交",
+        "status": "ok",
+        "ms": 6284
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "先存进度再发结果",
+        "status": "ok",
+        "ms": 4773
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "原子提交",
+        "status": "ok",
+        "ms": 5529
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "下游幂等写",
+        "status": "ok",
+        "ms": 6282
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "stream-window-desktop.png",
+      "agg-exactly-once-desktop.png"
+    ]
+  },
+  {
+    "file": "21-ad-click-aggregation.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "stream-window",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "按到达时刻归属",
+          "乱序容忍 5 秒 vs 40 秒",
+          "允许迟到：发更正版本",
+          "滑动窗口：一次点击算几次"
+        ]
+      },
+      {
+        "id": "agg-exactly-once",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "先发结果再提交",
+          "先存进度再发结果",
+          "原子提交",
+          "下游幂等写"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "stream-window",
+        "scenario": "按到达时刻归属",
+        "status": "ok",
+        "ms": 10551
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "先发结果再提交",
+        "status": "ok",
+        "ms": 6278
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "stream-window-mobile.png",
+      "agg-exactly-once-mobile.png"
+    ]
+  },
+  {
+    "file": "22-hotel-reservation.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "booking-race",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "无保护：先查后改",
+          "悲观锁：一方等待",
+          "乐观锁：提交时发现冲突",
+          "约束应该限制什么"
+        ]
+      },
+      {
+        "id": "booking-multi-night",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "中间一晚没房",
+          "超时重试与两张订单",
+          "缓存显示有房"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "booking-race",
+        "scenario": "无保护：先查后改",
+        "status": "ok",
+        "ms": 6284
+      },
+      {
+        "lab": "booking-race",
+        "scenario": "悲观锁：一方等待",
+        "status": "ok",
+        "ms": 5782
+      },
+      {
+        "lab": "booking-race",
+        "scenario": "乐观锁：提交时发现冲突",
+        "status": "ok",
+        "ms": 7034
+      },
+      {
+        "lab": "booking-race",
+        "scenario": "约束应该限制什么",
+        "status": "ok",
+        "ms": 14316
+      },
+      {
+        "lab": "booking-multi-night",
+        "scenario": "中间一晚没房",
+        "status": "ok",
+        "ms": 10298
+      },
+      {
+        "lab": "booking-multi-night",
+        "scenario": "超时重试与两张订单",
+        "status": "ok",
+        "ms": 11345
+      },
+      {
+        "lab": "booking-multi-night",
+        "scenario": "缓存显示有房",
+        "status": "ok",
+        "ms": 9540
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "booking-race-desktop.png",
+      "booking-multi-night-desktop.png"
+    ]
+  },
+  {
+    "file": "22-hotel-reservation.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "booking-race",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "无保护：先查后改",
+          "悲观锁：一方等待",
+          "乐观锁：提交时发现冲突",
+          "约束应该限制什么"
+        ]
+      },
+      {
+        "id": "booking-multi-night",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "中间一晚没房",
+          "超时重试与两张订单",
+          "缓存显示有房"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "booking-race",
+        "scenario": "无保护：先查后改",
+        "status": "ok",
+        "ms": 6532
+      },
+      {
+        "lab": "booking-multi-night",
+        "scenario": "中间一晚没房",
+        "status": "ok",
+        "ms": 10294
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "booking-race-mobile.png",
+      "booking-multi-night-mobile.png"
+    ]
+  },
+  {
+    "file": "23-distributed-email.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "mail-pipeline",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "对方回了 250",
+          "搜不到刚收到的信",
+          "发信积压：加 worker 有用吗"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "mail-pipeline",
+        "scenario": "对方回了 250",
+        "status": "ok",
+        "ms": 6031
+      },
+      {
+        "lab": "mail-pipeline",
+        "scenario": "搜不到刚收到的信",
+        "status": "ok",
+        "ms": 11301
+      },
+      {
+        "lab": "mail-pipeline",
+        "scenario": "发信积压：加 worker 有用吗",
+        "status": "ok",
+        "ms": 12555
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "mail-pipeline-desktop.png"
+    ]
+  },
+  {
+    "file": "23-distributed-email.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "mail-pipeline",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "对方回了 250",
+          "搜不到刚收到的信",
+          "发信积压：加 worker 有用吗"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "mail-pipeline",
+        "scenario": "对方回了 250",
+        "status": "ok",
+        "ms": 5779
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "mail-pipeline-mobile.png"
+    ]
+  },
+  {
+    "file": "24-object-storage.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "erasure-coding",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "坏 4 台，再坏第 5 台",
+          "800 MB 占多少空间",
+          "5 片挤在一个机架",
+          "三副本的节点一起坏"
+        ]
+      },
+      {
+        "id": "object-commit",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "提交超时，其实回滚了",
+          "超时了，其实已提交",
+          "三份新字节，读到旧对象"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "erasure-coding",
+        "scenario": "坏 4 台，再坏第 5 台",
+        "status": "ok",
+        "ms": 6533
+      },
+      {
+        "lab": "erasure-coding",
+        "scenario": "800 MB 占多少空间",
+        "status": "ok",
+        "ms": 8784
+      },
+      {
+        "lab": "erasure-coding",
+        "scenario": "5 片挤在一个机架",
+        "status": "ok",
+        "ms": 6281
+      },
+      {
+        "lab": "erasure-coding",
+        "scenario": "三副本的节点一起坏",
+        "status": "ok",
+        "ms": 4776
+      },
+      {
+        "lab": "object-commit",
+        "scenario": "提交超时，其实回滚了",
+        "status": "ok",
+        "ms": 9296
+      },
+      {
+        "lab": "object-commit",
+        "scenario": "超时了，其实已提交",
+        "status": "ok",
+        "ms": 16329
+      },
+      {
+        "lab": "object-commit",
+        "scenario": "三份新字节，读到旧对象",
+        "status": "ok",
+        "ms": 9798
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "erasure-coding-desktop.png",
+      "object-commit-desktop.png"
+    ]
+  },
+  {
+    "file": "24-object-storage.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "erasure-coding",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "坏 4 台，再坏第 5 台",
+          "800 MB 占多少空间",
+          "5 片挤在一个机架",
+          "三副本的节点一起坏"
+        ]
+      },
+      {
+        "id": "object-commit",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "提交超时，其实回滚了",
+          "超时了，其实已提交",
+          "三份新字节，读到旧对象"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "erasure-coding",
+        "scenario": "坏 4 台，再坏第 5 台",
+        "status": "ok",
+        "ms": 6531
+      },
+      {
+        "lab": "object-commit",
+        "scenario": "提交超时，其实回滚了",
+        "status": "ok",
+        "ms": 9292
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "erasure-coding-mobile.png",
+      "object-commit-mobile.png"
+    ]
+  },
+  {
+    "file": "25-leaderboard.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "leaderboard-zset",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "前 10 与我上下 4 名",
+          "同分：位置不等于并列名次",
+          "赢一场：加分、上升与重试"
+        ]
+      },
+      {
+        "id": "leaderboard-shard",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一个大 ZSET 只在一个节点",
+          "哈希分片：Top 3 散集-合并",
+          "跨片查个人名次",
+          "边界并列：前 K 人 ≠ 名次含并列"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "leaderboard-zset",
+        "scenario": "前 10 与我上下 4 名",
+        "status": "ok",
+        "ms": 5780
+      },
+      {
+        "lab": "leaderboard-zset",
+        "scenario": "同分：位置不等于并列名次",
+        "status": "ok",
+        "ms": 8042
+      },
+      {
+        "lab": "leaderboard-zset",
+        "scenario": "赢一场：加分、上升与重试",
+        "status": "ok",
+        "ms": 9551
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "一个大 ZSET 只在一个节点",
+        "status": "ok",
+        "ms": 13061
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "哈希分片：Top 3 散集-合并",
+        "status": "ok",
+        "ms": 5526
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "跨片查个人名次",
+        "status": "ok",
+        "ms": 9860
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "边界并列：前 K 人 ≠ 名次含并列",
+        "status": "ok",
+        "ms": 10309
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "leaderboard-zset-desktop.png",
+      "leaderboard-shard-desktop.png"
+    ]
+  },
+  {
+    "file": "25-leaderboard.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "leaderboard-zset",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "前 10 与我上下 4 名",
+          "同分：位置不等于并列名次",
+          "赢一场：加分、上升与重试"
+        ]
+      },
+      {
+        "id": "leaderboard-shard",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "一个大 ZSET 只在一个节点",
+          "哈希分片：Top 3 散集-合并",
+          "跨片查个人名次",
+          "边界并列：前 K 人 ≠ 名次含并列"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "leaderboard-zset",
+        "scenario": "前 10 与我上下 4 名",
+        "status": "ok",
+        "ms": 5782
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "一个大 ZSET 只在一个节点",
+        "status": "ok",
+        "ms": 13062
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "leaderboard-zset-mobile.png",
+      "leaderboard-shard-mobile.png"
+    ]
+  },
+  {
+    "file": "26-payment-system.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "payment-retry",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "超时后换新键重试",
+          "沿用原键重试",
+          "重复 webhook 遇上非幂等入账",
+          "PSP 宕机，靠对账收敛"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "payment-retry",
+        "scenario": "超时后换新键重试",
+        "status": "ok",
+        "ms": 10548
+      },
+      {
+        "lab": "payment-retry",
+        "scenario": "沿用原键重试",
+        "status": "ok",
+        "ms": 8293
+      },
+      {
+        "lab": "payment-retry",
+        "scenario": "重复 webhook 遇上非幂等入账",
+        "status": "ok",
+        "ms": 10297
+      },
+      {
+        "lab": "payment-retry",
+        "scenario": "PSP 宕机，靠对账收敛",
+        "status": "ok",
+        "ms": 15075
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "payment-retry-desktop.png"
+    ]
+  },
+  {
+    "file": "26-payment-system.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "payment-retry",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "超时后换新键重试",
+          "沿用原键重试",
+          "重复 webhook 遇上非幂等入账",
+          "PSP 宕机，靠对账收敛"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "payment-retry",
+        "scenario": "超时后换新键重试",
+        "status": "ok",
+        "ms": 10551
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "payment-retry-mobile.png"
+    ]
+  },
+  {
+    "file": "27-digital-wallet.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "wallet-event-sourcing",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "回放到任意序号",
+          "快照边界多算一次",
+          "错误事件照样能重放",
+          "新旧版本逐事件比对"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "回放到任意序号",
+        "status": "ok",
+        "ms": 7549
+      },
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "快照边界多算一次",
+        "status": "ok",
+        "ms": 4279
+      },
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "错误事件照样能重放",
+        "status": "ok",
+        "ms": 8036
+      },
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "新旧版本逐事件比对",
+        "status": "ok",
+        "ms": 4023
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "wallet-event-sourcing-desktop.png"
+    ]
+  },
+  {
+    "file": "27-digital-wallet.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "wallet-event-sourcing",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "回放到任意序号",
+          "快照边界多算一次",
+          "错误事件照样能重放",
+          "新旧版本逐事件比对"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "回放到任意序号",
+        "status": "ok",
+        "ms": 7537
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "wallet-event-sourcing-mobile.png"
+    ]
+  },
+  {
+    "file": "28-stock-exchange.js",
+    "viewport": "desktop",
+    "labs": [
+      {
+        "id": "order-book",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "同价先到先成交",
+          "市价大单扫过多档",
+          "部分成交后挂簿",
+          "撤单与成交的先后"
+        ]
+      },
+      {
+        "id": "exchange-failover",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "宕机切换：5 秒够吗",
+          "假死旧主醒来，没有 fencing",
+          "接收端 fencing 拦住旧主",
+          "本地确认的数据缺口"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "order-book",
+        "scenario": "同价先到先成交",
+        "status": "ok",
+        "ms": 6035
+      },
+      {
+        "lab": "order-book",
+        "scenario": "市价大单扫过多档",
+        "status": "ok",
+        "ms": 11811
+      },
+      {
+        "lab": "order-book",
+        "scenario": "部分成交后挂簿",
+        "status": "ok",
+        "ms": 7041
+      },
+      {
+        "lab": "order-book",
+        "scenario": "撤单与成交的先后",
+        "status": "ok",
+        "ms": 9051
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "宕机切换：5 秒够吗",
+        "status": "ok",
+        "ms": 10807
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "假死旧主醒来，没有 fencing",
+        "status": "ok",
+        "ms": 9301
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "接收端 fencing 拦住旧主",
+        "status": "ok",
+        "ms": 9303
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "本地确认的数据缺口",
+        "status": "ok",
+        "ms": 6791
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "order-book-desktop.png",
+      "exchange-failover-desktop.png"
+    ]
+  },
+  {
+    "file": "28-stock-exchange.js",
+    "viewport": "mobile",
+    "labs": [
+      {
+        "id": "order-book",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "同价先到先成交",
+          "市价大单扫过多档",
+          "部分成交后挂簿",
+          "撤单与成交的先后"
+        ]
+      },
+      {
+        "id": "exchange-failover",
+        "mounted": true,
+        "error": null,
+        "scenarios": [
+          "宕机切换：5 秒够吗",
+          "假死旧主醒来，没有 fencing",
+          "接收端 fencing 拦住旧主",
+          "本地确认的数据缺口"
+        ]
+      }
+    ],
+    "scenarios": [
+      {
+        "lab": "order-book",
+        "scenario": "同价先到先成交",
+        "status": "ok",
+        "ms": 6036
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "宕机切换：5 秒够吗",
+        "status": "ok",
+        "ms": 10806
+      }
+    ],
+    "layout": {
+      "pageScroll": false,
+      "overflow": [],
+      "tiny": 0,
+      "tinySamples": []
+    },
+    "errors": [],
+    "screenshot": [
+      "order-book-mobile.png",
+      "exchange-failover-mobile.png"
+    ]
+  }
+]

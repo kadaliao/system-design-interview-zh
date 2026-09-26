@@ -275,6 +275,10 @@ CONSTRAINT `check_room_count` CHECK((`total_inventory - total_reserved` >= 0))
 
 > **批注：这里有两处需要区分。** 上述约束禁止任何超售，与题目允许 10% 超售不同；应保存整数 `sellable_limit` 或准确计算上限，并约束 `total_reserved <= sellable_limit`。约束完全可以放进数据库迁移脚本进行版本控制。它还应搭配非负库存/数量校验，而不是代替事务。
 
+<div class="sd-lab" id="lab-booking-race" data-lab="booking-race">
+<p><strong>交互实验：两位客人抢最后一间房</strong>。逐步执行两条交错的预订事务，对比无保护、悲观锁、乐观锁和两种数据库约束下库存行怎样变化、谁会超卖。<a href="https://kadaliao.github.io/system-design-interview-zh/#d22/lab-booking-race">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 可扩展性（Scalability）
 
 通常酒店预订流量不高。若扩展成 booking.com 一类大型旅行网站，QPS 可能增加 1,000 倍。先识别瓶颈：无状态服务可以加实例，数据库有状态，需要分片等方案。
@@ -297,6 +301,10 @@ value: 对应酒店、房型、日期的剩余可售数量
 缓存优点是减少数据库压力、内存读取快；缺点是维护一致性困难，要考虑陈旧信息对用户体验的影响。
 
 > **批注：展示库存不能作为成交依据。** 最终预订必须检查权威库存。分片按酒店分布平均只是估算，热门酒店仍可能集中一片；每片能承受多少 QPS 需由真实 SQL、索引、硬件和延迟目标验证。CDC 管道也要处理重复、顺序和积压。
+
+<div class="sd-lab" id="lab-booking-multi-night" data-lab="booking-multi-night">
+<p><strong>交互实验：多晚事务、幂等重试与缓存延迟</strong>。看中间一晚没房时整笔事务怎样回滚，超时重试时 reservation_id 怎样避免重复扣房，以及缓存显示有房为什么仍会下单失败。<a href="https://kadaliao.github.io/system-design-interview-zh/#d22/lab-booking-multi-night">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ### 服务间数据一致性（Data consistency among services）
 

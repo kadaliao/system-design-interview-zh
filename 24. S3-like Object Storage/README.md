@@ -138,7 +138,7 @@ API 与数据存储交互如下：
 
 **数据路由服务**提供 REST/gRPC API，无状态、可加实例。职责是向 placement 服务查询目标节点，从节点读数据返回 API，以及把写请求交给节点。
 
-**放置服务（Placement service）**决定对象放在哪些节点，维护虚拟集群映射，体现物理拓扑：
+<strong>放置服务（Placement service）</strong>决定对象放在哪些节点，维护虚拟集群映射，体现物理拓扑：
 
 ![原图：虚拟集群映射](./images/virtual-cluster-map.png)
 
@@ -207,6 +207,10 @@ API 请求保存；数据节点把对象追加到 `/data/c`；映射表新增记
 原文结论：延迟敏感场景倾向复制，成本敏感的大规模存储倾向纠删码。
 
 > **批注：副本数不能直接推出几个九。** 把 `0.0081³` 当丢失概率假定故障相互独立、同时不可恢复等，忽略修复窗口、相关故障、静默损坏、操作失误。8+4 可恢复任意四个缺失分片，需采用具有相应性质的编码且至少八个有效分片可读；跨机房放置若一次丢五片仍无法恢复。十一个九是特定模型/系统目标，不是纠删码算法的固定保证。
+
+<div class="sd-lab" id="lab-erasure-coding" data-lab="erasure-coding">
+<p><strong>交互实验：8+4 纠删码与三副本的容错和空间</strong>。点选宕机节点或让整个机架断电，看三副本与 8+4 分别还能不能恢复，并对比 3 倍与 1.5 倍的总占用。<a href="https://kadaliao.github.io/system-design-interview-zh/#d24/lab-erasure-coding">在线阅读版</a>中可直接操作。</p>
+</div>
 
 #### 正确性校验（Correctness verification）
 
@@ -284,6 +288,10 @@ SELECT * FROM object WHERE bucket_id = "123" AND object_name LIKE `abc/%`
 ![原图：压缩整理](./images/compaction.png)
 
 > **批注：回收要落后于可见性。** 新文件持久化并成功切换映射后，旧文件仍可能被在途读取使用，需要安全释放。版本保留期、活跃 multipart、复制落后和 GC 水位都要考虑；不能把暂时没有元数据引用的新上传立即当垃圾。
+
+<div class="sd-lab" id="lab-object-commit" data-lab="object-commit">
+<p><strong>交互实验：孤儿对象、GC 与旧元数据缓存</strong>。逐步看元数据提交超时后留下了什么、GC 为什么要等宽限期，以及三份新字节为什么挡不住旧的元数据缓存。<a href="https://kadaliao.github.io/system-design-interview-zh/#d24/lab-object-commit">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ## 第 4 步：回顾
 

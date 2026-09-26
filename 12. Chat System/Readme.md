@@ -4,11 +4,11 @@
 
 ## 中文学习导读
 
-**学习目标：**理解聊天为何需要“实时连接 + 持久化消息 + 增量补拉”三部分。
+**学习目标**：理解聊天为何需要“实时连接 + 持久化消息 + 增量补拉”三部分。
 
-**先记住：**WebSocket 是通道，消息库是历史，游标是补拉进度；一个会话内的顺序比所有会话的全局顺序更重要。
+**先记住**：WebSocket 是通道，消息库是历史，游标是补拉进度；一个会话内的顺序比所有会话的全局顺序更重要。
 
-**常见误区：**连接断开等于消息丢失；消息 ID 唯一就等于严格有序；心跳在线状态绝对准确。
+**常见误区**：连接断开等于消息丢失；消息 ID 唯一就等于严格有序；心跳在线状态绝对准确。
 
 ## 简介（Introduction）
 
@@ -46,15 +46,15 @@
 
 #### 接收端（Receiver Side）
 
-**Polling（轮询）：**客户端定期询问是否有新消息，频繁空请求浪费资源。
+**Polling（轮询）**：客户端定期询问是否有新消息，频繁空请求浪费资源。
 
 ![原图：轮询](./images/polling.png)
 
-**Long Polling（长轮询）：**请求保持打开直到有新消息或超时。原文指出对不活跃用户仍有成本；它减少空响应，但需要维护挂起请求并在结束后重连。
+**Long Polling（长轮询）**：请求保持打开直到有新消息或超时。原文指出对不活跃用户仍有成本；它减少空响应，但需要维护挂起请求并在结束后重连。
 
 ![原图：长轮询](./images/long-polling.png)
 
-**WebSocket：**双向持久连接，客户端与服务器都可以发送数据。本设计最终对发送和接收都采用 WebSocket，原文称为 `ws` 协议。
+**WebSocket**：双向持久连接，客户端与服务器都可以发送数据。本设计最终对发送和接收都采用 WebSocket，原文称为 `ws` 协议。
 
 ![原图：WebSocket 双向通信](./images/websocket.png)
 
@@ -67,9 +67,9 @@ HTTP 连接复用降低握手成本，但普通请求/响应模式仍由客户�
 ![原图：无状态服务](./images/high-level-stateless-arch.png)
 ![原图：持有长连接的有状态服务](./images/high-level-statefull-arch.png)
 
-1. **Stateless Services（无状态服务）：**负责注册、登录、用户资料；配合服务发现推荐聊天服务器。
-2. **Stateful Services（有状态服务）：**聊天服务器维护 WebSocket 连接，负责投递和同步。
-3. **Third-Party Integration（第三方集成）：**推送服务通知用户新消息；实现可参考[通知系统](../10.%20Notification%20System/Readme.md)。
+1. **Stateless Services（无状态服务）**：负责注册、登录、用户资料；配合服务发现推荐聊天服务器。
+2. **Stateful Services（有状态服务）**：聊天服务器维护 WebSocket 连接，负责投递和同步。
+3. **Third-Party Integration（第三方集成）**：推送服务通知用户新消息；实现可参考[通知系统](../10.%20Notification%20System/Readme.md)。
 
 ### 设计（Design）
 
@@ -77,11 +77,11 @@ HTTP 连接复用降低握手成本，但普通请求/响应模式仍由客户�
 
 ![原图：聊天系统高层架构](./images/high-level-design.png)
 
-- **Chat Servers：**发送与接收消息。
-- **Presence Servers：**管理在线/离线状态。
-- **API Servers：**处理登录、注册、资料修改等。
-- **Notification Servers：**发送推送通知。
-- **Key-Value Store：**保存聊天历史。
+- **Chat Servers**：发送与接收消息。
+- **Presence Servers**：管理在线/离线状态。
+- **API Servers**：处理登录、注册、资料修改等。
+- **Notification Servers**：发送推送通知。
+- **Key-Value Store**：保存聊天历史。
 
 原文选择 KV 的理由包括：容易水平扩展；低延迟；大索引下关系库随机访问可能昂贵；一些成熟聊天应用采用类似可扩展存储，并以 Facebook Messenger、Discord 为例。
 
@@ -152,6 +152,10 @@ Snowflake 通常近似按时间排序，但时钟漂移、跨节点并发和迟�
 
 若 message ID 只在会话内唯一，不能用一个用户级最大 ID 比较所有会话；应按会话维护游标，或给用户 inbox 另设单调同步序号。只有确认较早消息已完整接收后才推进游标，否则迟到消息可能被跳过。
 
+<div class="sd-lab" id="lab-chat-delivery" data-lab="chat-delivery">
+<p><strong>交互实验：一条消息怎样到达每台设备</strong>。发一条消息，看它先写入 KV，再推给在线设备、给离线用户发提醒；切换会话内序号、Snowflake 与游标方式，观察万人群的写扩散、漏收和顺序颠倒。<a href="https://kadaliao.github.io/system-design-interview-zh/#d12/lab-chat-delivery">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ### 在线状态（Online Presence）
 
 #### 1. 心跳机制（Heartbeat Mechanism）
@@ -175,6 +179,10 @@ Snowflake 通常近似按时间排序，但时钟漂移、跨节点并发和迟�
 
 心跳超时也可能是弱网或设备休眠。它表达“最近还能联系上”，不是精确证明。多设备用户只要仍有一个有效连接就可能在线。好友很多时，可按当前打开的联系人列表订阅，避免全量状态扩散。
 
+<div class="sd-lab" id="lab-presence-heartbeat" data-lab="presence-heartbeat">
+<p><strong>交互实验：网络抖一下，算不算离线</strong>。制造几次断网，对比心跳超时与「断开即离线」两种判定，看阈值怎样影响误判、下线发现延迟和好友扇出量。<a href="https://kadaliao.github.io/system-design-interview-zh/#d12/lab-presence-heartbeat">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ## 其他考虑（Additional Considerations）
 
 ### 可扩展性（Scalability）
@@ -187,10 +195,10 @@ Snowflake 通常近似按时间排序，但时钟漂移、跨节点并发和迟�
 
 ### 后续扩展（Future Extensions）
 
-1. **媒体：**支持图片和视频，包括压缩与云存储。
-2. **端到端加密：**保护消息隐私。
-3. **客户端缓存：**减少数据传输。
-4. **加快加载：**使用地理分布式缓存网络。
+1. **媒体**：支持图片和视频，包括压缩与云存储。
+2. **端到端加密**：保护消息隐私。
+3. **客户端缓存**：减少数据传输。
+4. **加快加载**：使用地理分布式缓存网络。
 
 ### 批注：面试回答模板
 

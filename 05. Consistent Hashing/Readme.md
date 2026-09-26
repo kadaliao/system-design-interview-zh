@@ -73,6 +73,10 @@
 
 > **批注｜何时使用、如何落地**：适合缓存分片、分布式 KV 存储和需要稳定路由的负载均衡。真实迁移仍要复制数据、限速、校验并切换路由；哈希环只告诉你“哪些 key 应当搬”，不会自动搬数据。节点列表版本不一致会让客户端把同一 key 发到不同机器。
 
+<div class="sd-lab" id="lab-hash-ring" data-lab="hash-ring">
+<p><strong>交互实验：哈希环：增删一台服务器，谁要搬家</strong>。在 0–99 的环上加入或移除服务器，对比一致性哈希与 hash % N 各有哪些 key 换了主人，并看 key 怎样顺时针找到负责的服务器。<a href="https://kadaliao.github.io/system-design-interview-zh/#d5/lab-hash-ring">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ## 挑战与解决办法（Challenges and Solutions）
 
 ### 基础方案的两个问题（Two Issues in Basic Approach）
@@ -89,6 +93,10 @@
 > **批注｜像在多个街区开分店**：一台机器只占一个连续区间，容易运气不好分到“大地盘”；占据许多小区间后，偏差更容易相互抵消。容量大的机器可分配更多虚拟节点。节点数过少仍不均，过多则增加路由表与维护成本。
 >
 > **批注｜数据均匀不等于访问均匀**：假设 1,000 万个 key 均匀分布，但某一个热门 key 占据一半请求，虚拟节点也不会自动把这个单 key 拆开。热门 key 仍需缓存复制、请求合并、拆分等业务方案。
+
+<div class="sd-lab" id="lab-hash-ring-vnodes" data-lab="hash-ring-vnodes">
+<p><strong>交互实验：虚拟节点：分布更匀，热门 key 照样压在一台</strong>。拖动每台服务器的虚拟节点数，看 key 分布的偏差怎样缩小、新服务器从谁那里接 key，以及一个热门 key 的请求为何仍落在一台机器上。<a href="https://kadaliao.github.io/system-design-interview-zh/#d5/lab-hash-ring-vnodes">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ## 受影响的 key（Affected Keys）
 

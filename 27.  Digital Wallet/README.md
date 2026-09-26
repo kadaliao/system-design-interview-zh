@@ -296,6 +296,10 @@ Saga 是微服务中实现分布式事务的常见方式：
 
 > **准确性批注**：能够重放证明过程可重现，不能单独证明业务规则正确。如果最初事件金额错了，重放也会得到同样错误。还要检查资金守恒、账户约束、来源凭证与外部对账；合法规则变化也可能有意改变派生结果，需有版本和迁移规则。
 
+<div class="sd-lab" id="lab-wallet-event-sourcing" data-lab="wallet-event-sourcing">
+<p><strong>交互实验：事件溯源钱包的命令、事件与重放</strong>。提交转账命令看校验与事件追加，拖动回放位置重建任意序号的余额，对比有无快照要应用的事件数，再用守恒校验和新旧版本逐事件比对区分「可重现」与「正确」。<a href="https://kadaliao.github.io/system-design-interview-zh/#d27/lab-wallet-event-sourcing">在线阅读版</a>中可直接操作。</p>
+</div>
+
 客户端余额查询可通过 CQRS（命令查询职责分离）处理：多个只读状态机根据同一不可变事件列表构建可查询的历史状态。
 
 ![CQRS 架构](./images/cqrs-architecture.png)

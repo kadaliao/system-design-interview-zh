@@ -80,6 +80,10 @@ Amazon、Google、Microsoft 等云厂商的 SLA 通常目标为 99.9% 或更高�
 >
 > **常见误区**：组件各自 99.9% 并不等于整个链路 99.9%。串行依赖会相乘；一个请求同时依赖 API、数据库和第三方支付时，端到端可用性更低。
 
+<div class="sd-lab" id="lab-availability-nines" data-lab="availability-nines">
+<p><strong>交互实验：几个 9：串联相乘，冗余相并</strong>。用抽样的一年看三个 99.9% 串联为什么只剩约 99.7%，以及加副本、共用机房和可降级依赖怎样改变端到端可用性。<a href="https://kadaliao.github.io/system-design-interview-zh/#d2/lab-availability-nines">在线阅读版</a>中可直接操作。</p>
+</div>
+
 ---
 
 ## 第 2 节：估算示例——Twitter 的 QPS 与存储需求
@@ -146,6 +150,10 @@ Amazon、Google、Microsoft 等云厂商的 SLA 通常目标为 99.9% 或更高�
 > **缓存估算小例子**：如果 1,000 万用户中 10% 是日活，每人产生 20 KB 热数据，缓存目标是 50% 热用户，则约为 `1,000 万 × 10% × 50% × 20 KB = 10 GB`（还要加副本和协议开销）。
 >
 > **机器数小例子**：若峰值 7,000 QPS，而单实例压测稳定承载 350 QPS，则理论上需要 `7,000 / 350 = 20` 个实例；再按 30% 余量取 26～30 个，并说明这是估算值。
+
+<div class="sd-lab" id="lab-estimate-calculator" data-lab="estimate-calculator">
+<p><strong>交互实验：估算计算器：从日活推到 QPS、存储和机器数</strong>。每一步都显示算式和单位，改一个假设就能看到哪些结果变了几倍，并在一天的流量曲线上对比按平均和按峰值买机器。<a href="https://kadaliao.github.io/system-design-interview-zh/#d2/lab-estimate-calculator">在线阅读版</a>中可直接操作。</p>
+</div>
 
 ---
 
