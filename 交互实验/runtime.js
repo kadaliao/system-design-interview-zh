@@ -68,11 +68,11 @@ const util={
 /* ---------- 全局动画时钟：只驱动可见实验，离开视口或切走标签页即暂停 ---------- */
 let rafId=0,last=0;
 function kick(){if(!rafId){last=performance.now();rafId=requestAnimationFrame(tick)}}
-function busy(inst){return inst.visible&&(inst.loops.size||inst.waits.length)}
+function busy(inst){return inst.visible&&inst.mode==='play'&&!inst.stepping&&(inst.loops.size||inst.waits.length)}
 function tick(now){
   rafId=0;
   const dt=Math.min(0.1,Math.max(0,(now-last)/1000));last=now;
-  if(!document.hidden)for(const inst of live)if(busy(inst))inst.step(dt);
+  if(!document.hidden)for(const inst of live)if(busy(inst))inst.advance(dt*inst.speed);
   for(const inst of live)if(busy(inst)){rafId=requestAnimationFrame(tick);break}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)kick()});
@@ -80,13 +80,64 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)kick()});
 window.addEventListener('unhandledrejection',e=>{if(e.reason===ABORT)e.preventDefault()});
 const io='IntersectionObserver' in window?new IntersectionObserver(entries=>{for(const e of entries){const inst=e.target.__sdl;if(inst){inst.visible=e.isIntersecting;if(inst.visible)kick()}}},{rootMargin:'80px'}):null;
 
+/* ---------- 播放控制：倍速偏好全站共用；单步推进到下一个节拍，至少 0.2 秒、至多 1 秒实验时间 ---------- */
+const SPEEDS=[0.25,0.5,1,2],STEP_MIN=200,STEP_MAX=1000,CHUNK=1000/60;
+let speedPref=(()=>{try{const v=+localStorage.getItem('sd-lab-speed');return SPEEDS.includes(v)?v:1}catch{return 1}})();
+function setSpeedPref(v){speedPref=v;try{localStorage.setItem('sd-lab-speed',String(v))}catch{}for(const i of live){i.speed=v;i.updateTransport()}}
+const ICON={play:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>',pause:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4.2" height="14" rx="1" fill="currentColor"/><rect x="13.8" y="5" width="4.2" height="14" rx="1" fill="currentColor"/></svg>',step:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14l10.5-7z" fill="currentColor"/><rect x="16.5" y="5" width="3" height="14" rx="1" fill="currentColor"/></svg>'};
+
 /* ---------- 实验实例 ---------- */
 class Instance{
-  constructor(host,spec){this.host=host;this.spec=spec;this.loops=new Set();this.waits=[];this.clock=0;this.token=0;this.visible=!io;this.cleanups=[];this.mount()}
-  step(dt){
-    this.clock+=dt*1000;
-    if(this.waits.length){const due=this.waits.filter(w=>w.due<=this.clock);if(due.length){this.waits=this.waits.filter(w=>w.due>this.clock);for(const w of due)w.resolve()}}
+  constructor(host,spec){this.host=host;this.spec=spec;this.loops=new Set();this.waits=[];this.clock=0;this.token=0;this.visible=!io;this.cleanups=[];this.mode='play';this.speed=speedPref;this.stepping=false;this.scen=null;this.mount()}
+  /** 推进实验时钟 dt 秒：到期的等待依次放行，再驱动动画循环；返回放行的等待数。 */
+  advance(dt){
+    this.clock+=dt*1000;let n=0;
+    if(this.waits.length){const due=this.waits.filter(w=>w.due<=this.clock);if(due.length){this.waits=this.waits.filter(w=>w.due>this.clock);n=due.length;for(const w of due)w.resolve()}}
     for(const lp of [...this.loops]){try{lp.fn(dt,this.clock/1000)}catch(e){console.error('[SDLab]',this.spec.id,e);this.loops.delete(lp);lp.running=false}}
+    return n;
+  }
+  /** 时间不动，只让动画循环重画一次（暂停时点了按钮也能看到界面变化）。 */
+  renderPass(){for(const lp of [...this.loops]){try{lp.fn(0,this.clock/1000)}catch(e){console.error('[SDLab]',this.spec.id,e)}}}
+  hasWork(){return this.loops.size>0||this.waits.length>0}
+  setMode(m){if(this.mode===m)return;this.mode=m;if(m==='play')kick();this.updateTransport()}
+  /** 单步：推进到下一个节拍（至少 STEP_MIN、至多 STEP_MAX 毫秒）。每放行一次等待就让出一轮事件循环，
+   *  让场景脚本排好后续动作，因此逐步运行与连续播放的结果一致。 */
+  async stepOnce(){
+    if(this.stepping)return;this.setMode('pause');this.stepping=true;this.updateTransport();
+    const token=this.token,min=this.clock+STEP_MIN,max=this.clock+STEP_MAX;let resolved=0;
+    try{
+      while(this.clock<max-1e-6&&token===this.token&&this.hasWork()){
+        const next=this.waits.length?Math.min(...this.waits.map(w=>w.due)):Infinity;
+        const target=Math.min(max,this.clock+CHUNK,Math.max(next,this.clock+0.001));
+        const n=this.advance((target-this.clock)/1000);
+        if(n){resolved+=n;await new Promise(r=>setTimeout(r,0))}
+        if(resolved&&this.clock>=min)break;
+      }
+    }finally{this.stepping=false;if(this.scen&&this.scen.running)this.scen.steps++;this.updateTransport()}
+  }
+  buildTransport(){
+    const inst=this;
+    const toggle=h('button',{type:'button','data-act':'toggle',onclick:()=>inst.setMode(inst.mode==='play'?'pause':'play')});
+    const step=h('button',{type:'button','data-act':'step',title:'推进一步（至多 1 秒实验时间）',onclick:()=>inst.stepOnce()});step.innerHTML=ICON.step+'<span>下一步</span>';
+    const spd=new Map(SPEEDS.map(v=>[v,h('button',{type:'button',onclick:()=>setSpeedPref(v)},v+'×')]));
+    const status=h('span',{class:'tst','aria-live':'polite'});
+    const el=h('div',{class:'sdl-transport',role:'group','aria-label':'播放控制'},toggle,step,h('span',{class:'spd'},h('span',{class:'lbl'},'速度'),[...spd.values()]),status);
+    this.transport={el,toggle,step,spd,status};
+    // 暂停时在实验里点按钮、拖滑块，时间不动，但重画一次界面
+    this.frame.addEventListener('input',()=>{if(inst.mode==='pause'&&!inst.stepping)requestAnimationFrame(()=>inst.renderPass())});
+    this.frame.addEventListener('click',e=>{if(inst.mode==='pause'&&!inst.stepping&&!el.contains(e.target))requestAnimationFrame(()=>inst.renderPass())});
+    return el;
+  }
+  updateTransport(){
+    const t=this.transport;if(!t)return;const S=this.scen;
+    const show=this.spec.transport!==false&&(this.loops.size>0||this.waits.length>0||!!(S&&S.active));
+    t.el.hidden=!show;if(!show)return;
+    const playing=this.mode==='play';
+    t.toggle.innerHTML=(playing?ICON.pause:ICON.play)+'<span>'+(playing?'暂停':'播放')+'</span>';
+    t.toggle.setAttribute('aria-pressed',String(playing));t.toggle.title=playing?'暂停':'连续播放';
+    t.step.disabled=this.stepping||!this.hasWork();
+    for(const [v,b] of t.spd)b.setAttribute('aria-pressed',String(v===this.speed));
+    t.status.textContent=S&&S.running?(playing?'场景播放中':(S.steps?`已推进 ${S.steps} 步 · 点「下一步」继续`:'已开始 · 点「下一步」推进')):S&&S.done?'场景结束 · 已暂停':(playing?'播放中':'已暂停');
   }
   abort(){this.token++;const w=this.waits;this.waits=[];for(const x of w)x.reject(ABORT)}
   destroy(){
@@ -97,6 +148,7 @@ class Instance{
   remount(){this.destroy();this.mount()}
   mount(){
     const spec=this.spec,host=this.host,inst=this;
+    this.mode='play';this.stepping=false;this.scen=null;this.clock=0;
     host.classList.add('sdl-mounted');host.replaceChildren();
     const resetBtn=h('button',{type:'button',title:'恢复初始参数与状态',onclick:()=>inst.remount()},'重置');
     const head=h('header',{class:'sdl-head'},h('div',{class:'sdl-head-text'},
@@ -113,6 +165,7 @@ class Instance{
     if(spec.caveat)frame.append(h('footer',{class:'sdl-foot'},'教学模型：'+spec.caveat));
     host.append(frame);
     this.frame=frame;frame.__sdl=this;
+    frame.append(this.buildTransport());
     if(io)io.observe(frame);
     let logBox=null;
     const ensureLog=()=>{if(!logBox){const ol=h('ol',{reversed:true});logBox=h('details',{class:'sdl-log',open:!!spec.logOpen},h('summary',null,spec.logTitle||'事件日志'),ol);frame.insertBefore(logBox,frame.querySelector('.sdl-foot'));logBox.ol=ol}return logBox};
@@ -169,9 +222,9 @@ class Instance{
       announce(text){sr.textContent=text},
       note(html,parent){const p=h('p',{class:'sdl-note',html});(parent||stage).append(p);return p},
       /** 每帧回调 fn(dt 秒, 实验时钟秒)。只在实验可见时运行。 */
-      loop(fn,autostart=true){const lp={fn,running:false,start(){if(!lp.running){lp.running=true;inst.loops.add(lp);kick()}return lp},stop(){lp.running=false;inst.loops.delete(lp);return lp},toggle(){return lp.running?lp.stop():lp.start()}};if(autostart)lp.start();return lp},
+      loop(fn,autostart=true){const lp={fn,running:false,start(){if(!lp.running){lp.running=true;inst.loops.add(lp);kick();inst.updateTransport()}return lp},stop(){lp.running=false;inst.loops.delete(lp);inst.updateTransport();return lp},toggle(){return lp.running?lp.stop():lp.start()}};if(autostart)lp.start();return lp},
       /** 按实验时钟等待（不可见时暂停）；重置或切换场景会中断等待。 */
-      wait(ms){const token=inst.token;return new Promise((resolve,reject)=>{if(token!==inst.token)return reject(ABORT);inst.waits.push({due:inst.clock+ms,resolve,reject});kick()})},
+      wait(ms){const token=inst.token;return new Promise((resolve,reject)=>{if(token!==inst.token)return reject(ABORT);inst.waits.push({due:inst.clock+ms,resolve,reject});kick();if(inst.waits.length===1)inst.updateTransport()})},
       scenarios(list){renderScenarios(inst,scen,list)},
       onCleanup(fn){inst.cleanups.push(fn)},
       /** 注入实验私有样式（按 key 只注入一次）；选择器请以实验前缀开头，避免污染阅读页。 */
@@ -184,6 +237,7 @@ class Instance{
     live.add(this);
     try{const ret=spec.mount(ctx);if(ret&&typeof ret.destroy==='function')this.cleanups.push(ret.destroy)}
     catch(e){console.error('[SDLab]',spec.id,e);frame.append(h('div',{class:'sdl-error'},'实验加载失败：'+(e&&e.message||e)))}
+    this.updateTransport();
     const rec=labRecord(spec.id);rec.seen=rec.seen||Date.now();save();
   }
 }
@@ -191,42 +245,56 @@ class Instance{
 function renderScenarios(inst,box,list){
   box.hidden=false;box.replaceChildren();
   const rec=labRecord(inst.spec.id);
+  const stepping=inst.spec.transport!==false;
   const chips=h('div',{class:'sdl-chips',role:'group','aria-label':'预设场景'});
   const card=h('div',{class:'sdl-card',hidden:true});
-  box.append(h('p',{class:'sdl-scen-label'},'预设场景：先预测，再运行'),chips,card);
-  let active=null;
+  box.append(h('p',{class:'sdl-scen-label'},stepping?'预设场景：先预测，再逐步运行':'预设场景：先预测，再运行'),chips,card);
+  const S=inst.scen={active:null,running:false,done:false,steps:0};
   const btns=list.map(sc=>{
-    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>active===sc?deselect():select(sc)},sc.label,rec.done.includes(sc.id)?h('span',{class:'done','aria-label':'已完成'},'✓'):null);
+    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>S.active===sc?deselect():select(sc)},sc.label,rec.done.includes(sc.id)?h('span',{class:'done','aria-label':'已完成'},'✓'):null);
     chips.append(b);return b;
   });
   /** 收起场景卡、回到自由探索；正在运行的场景随之停止，实验保留当前状态。 */
   function deselect(){
-    inst.abort();active=null;
+    inst.abort();Object.assign(S,{active:null,running:false,done:false,steps:0});
     btns.forEach(b=>b.setAttribute('aria-pressed','false'));
-    card.hidden=true;card.replaceChildren();
+    card.hidden=true;card.replaceChildren();delete card.dataset.state;inst.updateTransport();
   }
   function select(sc){
-    inst.abort();active=sc;
+    inst.abort();Object.assign(S,{active:sc,running:false,done:false,steps:0});
     btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(list[i]===sc)));
     const status=h('span',{class:'status'});
-    const run=h('button',{type:'button',class:'primary'},'运行场景');
     const insight=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
-    card.replaceChildren();
-    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},run,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到自由探索',onclick:deselect},'收起')),insight]);
-    card.hidden=false;
-    run.onclick=async()=>{
+    // 默认逐步：开始后停在第一步，由「下一步」推进；「自动播放」按当前倍速连续运行
+    const stepBtn=stepping?h('button',{type:'button',class:'primary','data-act':'start',title:'开始后停住，由底部「下一步」逐步推进'},'逐步开始'):null;
+    const playBtn=h('button',{type:'button',class:stepping?null:'primary','data-act':'play'},stepping?'自动播放':'运行场景');
+    card.replaceChildren();delete card.dataset.state;
+    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},stepBtn,playBtn,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到自由探索',onclick:deselect},'收起')),insight]);
+    card.hidden=false;inst.updateTransport();
+    async function start(mode){
       inst.abort();const token=inst.token;
-      run.disabled=true;status.textContent='运行中…';insight.hidden=true;
+      Object.assign(S,{running:true,done:false,steps:0});card.dataset.state='running';
+      insight.hidden=true;status.textContent='';
+      if(stepBtn)stepBtn.textContent='从头逐步';playBtn.textContent=stepping?'从头自动播放':'运行中…';
+      if(!stepping)playBtn.disabled=true;
+      inst.setMode(mode);inst.updateTransport();
       try{
-        await sc.run();
-        if(token!==inst.token||active!==sc)return;
-        status.textContent='';insight.hidden=!sc.insight;
+        const p=sc.run();
+        // 等场景脚本同步部分和紧随其后的微任务执行完、停在第一个等待点，再重画一次
+        setTimeout(()=>{if(token===inst.token)inst.renderPass()},0);
+        await p;
+        if(token!==inst.token||S.active!==sc)return;
+        Object.assign(S,{running:false,done:true});card.dataset.state='done';
+        if(stepping)inst.setMode('pause');   // 定格在结束状态，方便对照「观察」
+        insight.hidden=!sc.insight;
         if(!rec.done.includes(sc.id)){rec.done.push(sc.id);save();const b=btns[list.indexOf(sc)];b.append(h('span',{class:'done','aria-label':'已完成'},'✓'))}
         inst.ctx.announce('场景完成：'+sc.label);
-      }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent='运行出错，请重置后再试'}}
-      finally{if(token===inst.token){run.disabled=false;run.textContent='再运行一次'}}
-    };
-    if(sc.autorun)run.click();
+      }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent='运行出错，请重置后再试';card.dataset.state='error'}}
+      finally{if(token===inst.token){S.running=false;if(!stepping){playBtn.disabled=false;playBtn.textContent='再运行一次'}inst.updateTransport()}}
+    }
+    if(stepBtn)stepBtn.onclick=()=>start('pause');
+    playBtn.onclick=()=>start('play');
+    if(sc.autorun)start('play');
   }
 }
 

@@ -31,49 +31,65 @@
         "lab": "scale-journey",
         "scenario": "从单机一路扩到分片",
         "status": "ok",
-        "ms": 16079
+        "ms": 16106
       },
       {
         "lab": "scale-journey",
         "scenario": "只加 Web 服务器",
         "status": "ok",
-        "ms": 8797
+        "ms": 8551
       },
       {
         "lab": "scale-journey",
         "scenario": "缓存命中率从 98% 掉到 80%",
         "status": "ok",
-        "ms": 10296
+        "ms": 10316
       },
       {
         "lab": "scale-journey",
         "scenario": "名人热点压垮一个分片",
         "status": "ok",
-        "ms": 8038
+        "ms": 8054
       },
       {
         "lab": "replica-lag",
         "scenario": "改完昵称马上刷新",
         "status": "ok",
-        "ms": 4271
+        "ms": 4278
       },
       {
         "lab": "replica-lag",
         "scenario": "写后 1 秒内读主库",
         "status": "ok",
-        "ms": 4273
+        "ms": 4272
       },
       {
         "lab": "replica-lag",
         "scenario": "带版本号读",
         "status": "ok",
-        "ms": 4269
+        "ms": 4282
       },
       {
         "lab": "replica-lag",
         "scenario": "缓存里还是旧值",
         "status": "ok",
-        "ms": 4271
+        "ms": 4284
+      }
+    ],
+    "steps": [
+      {
+        "lab": "scale-journey",
+        "scenario": "从单机一路扩到分片",
+        "status": "ok",
+        "clicks": 24,
+        "ms": 1200
+      },
+      {
+        "lab": "replica-lag",
+        "scenario": "改完昵称马上刷新",
+        "status": "ok",
+        "clicks": 5,
+        "ms": 166
       }
     ],
     "layout": {
@@ -120,15 +136,16 @@
         "lab": "scale-journey",
         "scenario": "从单机一路扩到分片",
         "status": "ok",
-        "ms": 16078
+        "ms": 16108
       },
       {
         "lab": "replica-lag",
         "scenario": "改完昵称马上刷新",
         "status": "ok",
-        "ms": 4272
+        "ms": 4280
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -172,43 +189,59 @@
         "lab": "estimate-calculator",
         "scenario": "复算正文 Twitter 示例",
         "status": "ok",
-        "ms": 9300
+        "ms": 9310
       },
       {
         "lab": "estimate-calculator",
         "scenario": "每天操作 2 次 → 10 次",
         "status": "ok",
-        "ms": 5027
+        "ms": 5033
       },
       {
         "lab": "estimate-calculator",
         "scenario": "只按平均 QPS 买机器",
         "status": "ok",
-        "ms": 10048
+        "ms": 10063
       },
       {
         "lab": "availability-nines",
         "scenario": "三个 99.9% 串联",
         "status": "ok",
-        "ms": 3016
+        "ms": 3020
       },
       {
         "lab": "availability-nines",
         "scenario": "给数据库加一个副本",
         "status": "ok",
-        "ms": 7789
+        "ms": 7550
       },
       {
         "lab": "availability-nines",
         "scenario": "副本共用一个机房",
         "status": "ok",
-        "ms": 5281
+        "ms": 5036
       },
       {
         "lab": "availability-nines",
         "scenario": "再接一个 99% 的短信服务",
         "status": "ok",
-        "ms": 6282
+        "ms": 6294
+      }
+    ],
+    "steps": [
+      {
+        "lab": "estimate-calculator",
+        "scenario": "复算正文 Twitter 示例",
+        "status": "ok",
+        "clicks": 10,
+        "ms": 598
+      },
+      {
+        "lab": "availability-nines",
+        "scenario": "三个 99.9% 串联",
+        "status": "ok",
+        "clicks": 3,
+        "ms": 99
       }
     ],
     "layout": {
@@ -254,15 +287,16 @@
         "lab": "estimate-calculator",
         "scenario": "复算正文 Twitter 示例",
         "status": "ok",
-        "ms": 9298
+        "ms": 9311
       },
       {
         "lab": "availability-nines",
         "scenario": "三个 99.9% 串联",
         "status": "ok",
-        "ms": 3018
+        "ms": 3021
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -306,43 +340,56 @@
         "lab": "interview-drill",
         "scenario": "一上来就深挖数据库",
         "status": "ok",
-        "ms": 15327
+        "ms": 15347
       },
       {
         "lab": "interview-drill",
         "scenario": "按建议节奏走完 45 分钟",
         "status": "ok",
-        "ms": 15320
+        "ms": 15345
       },
       {
         "lab": "interview-drill",
         "scenario": "只剩 5 分钟怎么收口",
         "status": "ok",
-        "ms": 16326
+        "ms": 16350
       },
       {
         "lab": "interview-drill",
         "scenario": "90 秒讲完一道题",
         "status": "ok",
-        "ms": 16841
+        "ms": 16851
       },
       {
         "lab": "interview-scope",
         "scenario": "三个问题改变三条路径",
         "status": "ok",
-        "ms": 12309
+        "ms": 12585
       },
       {
         "lab": "interview-scope",
         "scenario": "名人发帖压垮扇出队列",
         "status": "ok",
-        "ms": 14069
+        "ms": 14087
       },
       {
         "lab": "interview-scope",
         "scenario": "10 万到 1 亿日活",
         "status": "ok",
-        "ms": 12311
+        "ms": 12077
+      }
+    ],
+    "steps": [
+      {
+        "lab": "interview-drill",
+        "status": "no-step"
+      },
+      {
+        "lab": "interview-scope",
+        "scenario": "三个问题改变三条路径",
+        "status": "ok",
+        "clicks": 14,
+        "ms": 599
       }
     ],
     "layout": {
@@ -388,15 +435,16 @@
         "lab": "interview-drill",
         "scenario": "一上来就深挖数据库",
         "status": "ok",
-        "ms": 15328
+        "ms": 15352
       },
       {
         "lab": "interview-scope",
         "scenario": "三个问题改变三条路径",
         "status": "ok",
-        "ms": 12562
+        "ms": 12583
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -440,43 +488,59 @@
         "lab": "rate-limiter-arena",
         "scenario": "窗口边界突发",
         "status": "ok",
-        "ms": 12564
+        "ms": 12585
       },
       {
         "lab": "rate-limiter-arena",
         "scenario": "空闲后的大突发",
         "status": "ok",
-        "ms": 9047
+        "ms": 9057
       },
       {
         "lab": "rate-limiter-arena",
         "scenario": "持续两倍超速",
         "status": "ok",
-        "ms": 15067
+        "ms": 15092
       },
       {
         "lab": "rate-limiter-race",
         "scenario": "非原子写法交错执行",
         "status": "ok",
-        "ms": 4274
+        "ms": 4534
       },
       {
         "lab": "rate-limiter-race",
         "scenario": "改成原子 INCR",
         "status": "ok",
-        "ms": 3019
+        "ms": 3020
       },
       {
         "lab": "rate-limiter-race",
         "scenario": "滑动日志用 Lua 脚本",
         "status": "ok",
-        "ms": 1527
+        "ms": 1516
       },
       {
         "lab": "rate-limiter-race",
         "scenario": "跨地区各自计数",
         "status": "ok",
-        "ms": 4270
+        "ms": 4537
+      }
+    ],
+    "steps": [
+      {
+        "lab": "rate-limiter-arena",
+        "scenario": "窗口边界突发",
+        "status": "ok",
+        "clicks": 13,
+        "ms": 447
+      },
+      {
+        "lab": "rate-limiter-race",
+        "scenario": "非原子写法交错执行",
+        "status": "ok",
+        "clicks": 6,
+        "ms": 368
       }
     ],
     "layout": {
@@ -522,15 +586,16 @@
         "lab": "rate-limiter-arena",
         "scenario": "窗口边界突发",
         "status": "ok",
-        "ms": 12565
+        "ms": 12585
       },
       {
         "lab": "rate-limiter-race",
         "scenario": "非原子写法交错执行",
         "status": "ok",
-        "ms": 4274
+        "ms": 4534
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -574,43 +639,59 @@
         "lab": "hash-ring",
         "scenario": "3 台服务器、4 个 key",
         "status": "ok",
-        "ms": 6281
+        "ms": 6286
       },
       {
         "lab": "hash-ring",
         "scenario": "加入 S4=65",
         "status": "ok",
-        "ms": 4017
+        "ms": 4025
       },
       {
         "lab": "hash-ring",
         "scenario": "新节点加在 5（跨零点）",
         "status": "ok",
-        "ms": 7033
+        "ms": 7034
       },
       {
         "lab": "hash-ring",
         "scenario": "30 个 key：移除 S2",
         "status": "ok",
-        "ms": 4771
+        "ms": 4788
       },
       {
         "lab": "hash-ring-vnodes",
         "scenario": "虚拟节点降低偏差",
         "status": "ok",
-        "ms": 13065
+        "ms": 13084
       },
       {
         "lab": "hash-ring-vnodes",
         "scenario": "加入第 5 台：key 从谁那里来",
         "status": "ok",
-        "ms": 10052
+        "ms": 10117
       },
       {
         "lab": "hash-ring-vnodes",
         "scenario": "热门 key 不会被分摊",
         "status": "ok",
-        "ms": 8802
+        "ms": 8808
+      }
+    ],
+    "steps": [
+      {
+        "lab": "hash-ring",
+        "scenario": "3 台服务器、4 个 key",
+        "status": "ok",
+        "clicks": 18,
+        "ms": 1165
+      },
+      {
+        "lab": "hash-ring-vnodes",
+        "scenario": "虚拟节点降低偏差",
+        "status": "ok",
+        "clicks": 20,
+        "ms": 967
       }
     ],
     "layout": {
@@ -656,15 +737,16 @@
         "lab": "hash-ring",
         "scenario": "3 台服务器、4 个 key",
         "status": "ok",
-        "ms": 6282
+        "ms": 6289
       },
       {
         "lab": "hash-ring-vnodes",
         "scenario": "虚拟节点降低偏差",
         "status": "ok",
-        "ms": 13067
+        "ms": 13078
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -718,61 +800,84 @@
         "lab": "quorum-rw",
         "scenario": "R+W>N：任意读集合都相交",
         "status": "ok",
-        "ms": 10552
+        "ms": 10569
       },
       {
         "lab": "quorum-rw",
         "scenario": "相交仍会读到「1 后又 0」",
         "status": "ok",
-        "ms": 10549
+        "ms": 10557
       },
       {
         "lab": "quorum-rw",
         "scenario": "读前写回：不再倒退",
         "status": "ok",
-        "ms": 10801
+        "ms": 10570
       },
       {
         "lab": "quorum-rw",
         "scenario": "Sloppy quorum 不再相交",
         "status": "ok",
-        "ms": 8793
+        "ms": 8798
       },
       {
         "lab": "vector-clock",
         "scenario": "原书 D1 → D5",
         "status": "ok",
-        "ms": 12387
+        "ms": 12332
       },
       {
         "lab": "vector-clock",
         "scenario": "向量时钟能选出正确姓名吗",
         "status": "ok",
-        "ms": 9306
+        "ms": 9297
       },
       {
         "lab": "vector-clock",
         "scenario": "计数总和大≠更新",
         "status": "ok",
-        "ms": 11808
+        "ms": 11818
       },
       {
         "lab": "bloom-filter",
         "scenario": "gamma 从没插入，为何「可能存在」",
         "status": "ok",
-        "ms": 9540
+        "ms": 9564
       },
       {
         "lab": "bloom-filter",
         "scenario": "位数组小了会怎样",
         "status": "ok",
-        "ms": 8545
+        "ms": 8558
       },
       {
         "lab": "bloom-filter",
         "scenario": "为什么不能直接删",
         "status": "ok",
-        "ms": 8289
+        "ms": 8300
+      }
+    ],
+    "steps": [
+      {
+        "lab": "quorum-rw",
+        "scenario": "R+W>N：任意读集合都相交",
+        "status": "ok",
+        "clicks": 27,
+        "ms": 1633
+      },
+      {
+        "lab": "vector-clock",
+        "scenario": "原书 D1 → D5",
+        "status": "ok",
+        "clicks": 19,
+        "ms": 1033
+      },
+      {
+        "lab": "bloom-filter",
+        "scenario": "gamma 从没插入，为何「可能存在」",
+        "status": "ok",
+        "clicks": 15,
+        "ms": 898
       }
     ],
     "layout": {
@@ -829,21 +934,22 @@
         "lab": "quorum-rw",
         "scenario": "R+W>N：任意读集合都相交",
         "status": "ok",
-        "ms": 10550
+        "ms": 10569
       },
       {
         "lab": "vector-clock",
         "scenario": "原书 D1 → D5",
         "status": "ok",
-        "ms": 12310
+        "ms": 12337
       },
       {
         "lab": "bloom-filter",
         "scenario": "gamma 从没插入，为何「可能存在」",
         "status": "ok",
-        "ms": 9544
+        "ms": 9316
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -878,25 +984,34 @@
         "lab": "snowflake",
         "scenario": "同一毫秒序列用完",
         "status": "ok",
-        "ms": 8298
+        "ms": 8303
       },
       {
         "lab": "snowflake",
         "scenario": "时钟回拨 3 ms",
         "status": "ok",
-        "ms": 14813
+        "ms": 14861
       },
       {
         "lab": "snowflake",
         "scenario": "机器号重复",
         "status": "ok",
-        "ms": 8792
+        "ms": 8802
       },
       {
         "lab": "snowflake",
         "scenario": "唯一、连续、有序",
         "status": "ok",
-        "ms": 8043
+        "ms": 8052
+      }
+    ],
+    "steps": [
+      {
+        "lab": "snowflake",
+        "scenario": "同一毫秒序列用完",
+        "status": "ok",
+        "clicks": 11,
+        "ms": 1033
       }
     ],
     "layout": {
@@ -931,9 +1046,10 @@
         "lab": "snowflake",
         "scenario": "同一毫秒序列用完",
         "status": "ok",
-        "ms": 8299
+        "ms": 8302
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -977,49 +1093,65 @@
         "lab": "url-shortener",
         "scenario": "256 个码放 20 条",
         "status": "ok",
-        "ms": 5024
+        "ms": 5034
       },
       {
         "lab": "url-shortener",
         "scenario": "空间越满越难找",
         "status": "ok",
-        "ms": 6029
+        "ms": 6031
       },
       {
         "lab": "url-shortener",
         "scenario": "Bloom Filter 帮了什么",
         "status": "ok",
-        "ms": 11052
+        "ms": 11075
       },
       {
         "lab": "url-shortener",
         "scenario": "Base62 的下一个短码",
         "status": "ok",
-        "ms": 5845
+        "ms": 5820
       },
       {
         "lab": "url-redirect",
         "scenario": "301：只数到第一次",
         "status": "ok",
-        "ms": 5026
+        "ms": 5039
       },
       {
         "lab": "url-redirect",
         "scenario": "302 + no-store：逐次经过",
         "status": "ok",
-        "ms": 6780
+        "ms": 6788
       },
       {
         "lab": "url-redirect",
         "scenario": "302 也会被缓存",
         "status": "ok",
-        "ms": 5527
+        "ms": 5532
       },
       {
         "lab": "url-redirect",
         "scenario": "请求数 ≠ 点击数",
         "status": "ok",
-        "ms": 5026
+        "ms": 5030
+      }
+    ],
+    "steps": [
+      {
+        "lab": "url-shortener",
+        "scenario": "256 个码放 20 条",
+        "status": "ok",
+        "clicks": 20,
+        "ms": 1298
+      },
+      {
+        "lab": "url-redirect",
+        "scenario": "301：只数到第一次",
+        "status": "ok",
+        "clicks": 19,
+        "ms": 1234
       }
     ],
     "layout": {
@@ -1066,15 +1198,16 @@
         "lab": "url-shortener",
         "scenario": "256 个码放 20 条",
         "status": "ok",
-        "ms": 5021
+        "ms": 5031
       },
       {
         "lab": "url-redirect",
         "scenario": "301：只数到第一次",
         "status": "ok",
-        "ms": 5025
+        "ms": 5030
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1108,25 +1241,34 @@
         "lab": "crawler-frontier",
         "scenario": "关掉 URL 去重",
         "status": "ok",
-        "ms": 5530
+        "ms": 5545
       },
       {
         "lab": "crawler-frontier",
         "scenario": "关掉内容去重",
         "status": "ok",
-        "ms": 3268
+        "ms": 3027
       },
       {
         "lab": "crawler-frontier",
         "scenario": "加 worker 能快几倍",
         "status": "ok",
-        "ms": 7786
+        "ms": 7548
       },
       {
         "lab": "crawler-frontier",
         "scenario": "无限日历陷阱",
         "status": "ok",
-        "ms": 11806
+        "ms": 11569
+      }
+    ],
+    "steps": [
+      {
+        "lab": "crawler-frontier",
+        "scenario": "关掉 URL 去重",
+        "status": "ok",
+        "clicks": 27,
+        "ms": 1766
       }
     ],
     "layout": {
@@ -1161,9 +1303,10 @@
         "lab": "crawler-frontier",
         "scenario": "关掉 URL 去重",
         "status": "ok",
-        "ms": 5532
+        "ms": 5621
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1206,43 +1349,59 @@
         "lab": "notification-pipeline",
         "scenario": "短信服务商故障 16 秒",
         "status": "ok",
-        "ms": 9548
+        "ms": 9557
       },
       {
         "lab": "notification-pipeline",
         "scenario": "换成共用队列",
         "status": "ok",
-        "ms": 9541
+        "ms": 9563
       },
       {
         "lab": "notification-pipeline",
         "scenario": "营销邮件高峰",
         "status": "ok",
-        "ms": 4270
+        "ms": 4277
       },
       {
         "lab": "notification-dedup",
         "scenario": "发送后崩溃 · 先查后发",
         "status": "ok",
-        "ms": 5529
+        "ms": 5535
       },
       {
         "lab": "notification-dedup",
         "scenario": "两个 worker 同时查",
         "status": "ok",
-        "ms": 4775
+        "ms": 4785
       },
       {
         "lab": "notification-dedup",
         "scenario": "原子占用 + 幂等键",
         "status": "ok",
-        "ms": 5531
+        "ms": 5536
       },
       {
         "lab": "notification-dedup",
         "scenario": "第三方不支持幂等",
         "status": "ok",
-        "ms": 5531
+        "ms": 5535
+      }
+    ],
+    "steps": [
+      {
+        "lab": "notification-pipeline",
+        "scenario": "短信服务商故障 16 秒",
+        "status": "ok",
+        "clicks": 46,
+        "ms": 3053
+      },
+      {
+        "lab": "notification-dedup",
+        "scenario": "发送后崩溃 · 先查后发",
+        "status": "ok",
+        "clicks": 7,
+        "ms": 617
       }
     ],
     "layout": {
@@ -1288,15 +1447,16 @@
         "lab": "notification-pipeline",
         "scenario": "短信服务商故障 16 秒",
         "status": "ok",
-        "ms": 9550
+        "ms": 9563
       },
       {
         "lab": "notification-dedup",
         "scenario": "发送后崩溃 · 先查后发",
         "status": "ok",
-        "ms": 5531
+        "ms": 5535
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1339,37 +1499,53 @@
         "lab": "feed-fanout",
         "scenario": "名人发帖后 2 秒打开",
         "status": "ok",
-        "ms": 13064
+        "ms": 13069
       },
       {
         "lab": "feed-fanout",
         "scenario": "普通作者发帖",
         "status": "ok",
-        "ms": 4020
+        "ms": 4027
       },
       {
         "lab": "feed-fanout",
         "scenario": "挪动混合阈值",
         "status": "ok",
-        "ms": 7288
+        "ms": 7321
       },
       {
         "lab": "feed-hydrate",
         "scenario": "删帖后 ID 还在",
         "status": "ok",
-        "ms": 5781
+        "ms": 5793
       },
       {
         "lab": "feed-hydrate",
         "scenario": "拉黑之后",
         "status": "ok",
-        "ms": 5782
+        "ms": 5786
       },
       {
         "lab": "feed-hydrate",
         "scenario": "新帖插入时翻页",
         "status": "ok",
-        "ms": 11050
+        "ms": 11065
+      }
+    ],
+    "steps": [
+      {
+        "lab": "feed-fanout",
+        "scenario": "名人发帖后 2 秒打开",
+        "status": "ok",
+        "clicks": 51,
+        "ms": 3764
+      },
+      {
+        "lab": "feed-hydrate",
+        "scenario": "删帖后 ID 还在",
+        "status": "ok",
+        "clicks": 21,
+        "ms": 1367
       }
     ],
     "layout": {
@@ -1414,15 +1590,16 @@
         "lab": "feed-fanout",
         "scenario": "名人发帖后 2 秒打开",
         "status": "ok",
-        "ms": 13070
+        "ms": 13079
       },
       {
         "lab": "feed-hydrate",
         "scenario": "删帖后 ID 还在",
         "status": "ok",
-        "ms": 5820
+        "ms": 5794
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1467,49 +1644,65 @@
         "lab": "chat-delivery",
         "scenario": "在线推送，离线提醒",
         "status": "ok",
-        "ms": 5532
+        "ms": 5534
       },
       {
         "lab": "chat-delivery",
         "scenario": "万人群还能写扩散吗",
         "status": "ok",
-        "ms": 9045
+        "ms": 9052
       },
       {
         "lab": "chat-delivery",
         "scenario": "会话内 ID 配用户级游标",
         "status": "ok",
-        "ms": 10105
+        "ms": 10064
       },
       {
         "lab": "chat-delivery",
         "scenario": "唯一不等于有序",
         "status": "ok",
-        "ms": 6280
+        "ms": 6295
       },
       {
         "lab": "presence-heartbeat",
         "scenario": "电梯里断网 12 秒",
         "status": "ok",
-        "ms": 6032
+        "ms": 6296
       },
       {
         "lab": "presence-heartbeat",
         "scenario": "真的下线了",
         "status": "ok",
-        "ms": 5787
+        "ms": 5786
       },
       {
         "lab": "presence-heartbeat",
         "scenario": "阈值降到 10 秒",
         "status": "ok",
-        "ms": 6142
+        "ms": 6040
       },
       {
         "lab": "presence-heartbeat",
         "scenario": "手机断网，笔记本在线",
         "status": "ok",
-        "ms": 8038
+        "ms": 8070
+      }
+    ],
+    "steps": [
+      {
+        "lab": "chat-delivery",
+        "scenario": "在线推送，离线提醒",
+        "status": "ok",
+        "clicks": 7,
+        "ms": 299
+      },
+      {
+        "lab": "presence-heartbeat",
+        "scenario": "电梯里断网 12 秒",
+        "status": "ok",
+        "clicks": 30,
+        "ms": 1999
       }
     ],
     "layout": {
@@ -1556,15 +1749,16 @@
         "lab": "chat-delivery",
         "scenario": "在线推送，离线提醒",
         "status": "ok",
-        "ms": 5522
+        "ms": 5535
       },
       {
         "lab": "presence-heartbeat",
         "scenario": "电梯里断网 12 秒",
         "status": "ok",
-        "ms": 6276
+        "ms": 6038
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1598,25 +1792,34 @@
         "lab": "trie-topk",
         "scenario": "输入 ca：现算还是查表",
         "status": "ok",
-        "ms": 4771
+        "ms": 4785
       },
       {
         "lab": "trie-topk",
         "scenario": "cap 这周突然变热",
         "status": "ok",
-        "ms": 8795
+        "ms": 8804
       },
       {
         "lab": "trie-topk",
         "scenario": "边覆盖边服务",
         "status": "ok",
-        "ms": 7789
+        "ms": 7794
       },
       {
         "lab": "trie-topk",
         "scenario": "短前缀是热点",
         "status": "ok",
-        "ms": 2516
+        "ms": 2518
+      }
+    ],
+    "steps": [
+      {
+        "lab": "trie-topk",
+        "scenario": "输入 ca：现算还是查表",
+        "status": "ok",
+        "clicks": 15,
+        "ms": 933
       }
     ],
     "layout": {
@@ -1651,9 +1854,10 @@
         "lab": "trie-topk",
         "scenario": "输入 ca：现算还是查表",
         "status": "ok",
-        "ms": 4774
+        "ms": 4782
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1686,25 +1890,34 @@
         "lab": "transcode-dag",
         "scenario": "加 worker 能快几倍",
         "status": "ok",
-        "ms": 6347
+        "ms": 6546
       },
       {
         "lab": "transcode-dag",
         "scenario": "720p 分片崩溃",
         "status": "ok",
-        "ms": 8038
+        "ms": 8096
       },
       {
         "lab": "transcode-dag",
         "scenario": "过早的完成通知",
         "status": "ok",
-        "ms": 8044
+        "ms": 8048
       },
       {
         "lab": "transcode-dag",
         "scenario": "1080p 稍后可用",
         "status": "ok",
-        "ms": 7785
+        "ms": 7800
+      }
+    ],
+    "steps": [
+      {
+        "lab": "transcode-dag",
+        "scenario": "加 worker 能快几倍",
+        "status": "ok",
+        "clicks": 30,
+        "ms": 1965
       }
     ],
     "layout": {
@@ -1739,9 +1952,10 @@
         "lab": "transcode-dag",
         "scenario": "加 worker 能快几倍",
         "status": "ok",
-        "ms": 6285
+        "ms": 6293
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1774,25 +1988,34 @@
         "lab": "block-sync",
         "scenario": "只改一小段",
         "status": "ok",
-        "ms": 4270
+        "ms": 4269
       },
       {
         "lab": "block-sync",
         "scenario": "另存一份副本",
         "status": "ok",
-        "ms": 2766
+        "ms": 2769
       },
       {
         "lab": "block-sync",
         "scenario": "两台设备同时改",
         "status": "ok",
-        "ms": 4272
+        "ms": 4280
       },
       {
         "lab": "block-sync",
         "scenario": "上传中断",
         "status": "ok",
-        "ms": 7535
+        "ms": 7548
+      }
+    ],
+    "steps": [
+      {
+        "lab": "block-sync",
+        "scenario": "只改一小段",
+        "status": "ok",
+        "clicks": 11,
+        "ms": 700
       }
     ],
     "layout": {
@@ -1827,9 +2050,10 @@
         "lab": "block-sync",
         "scenario": "只改一小段",
         "status": "ok",
-        "ms": 4271
+        "ms": 4285
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1872,43 +2096,59 @@
         "lab": "geohash-nearby",
         "scenario": "原书例子：500 米",
         "status": "ok",
-        "ms": 4275
+        "ms": 4281
       },
       {
         "lab": "geohash-nearby",
         "scenario": "边界两侧：近在咫尺，前缀不同",
         "status": "ok",
-        "ms": 4525
+        "ms": 4530
       },
       {
         "lab": "geohash-nearby",
         "scenario": "精度选太细：九格盖不住圆",
         "status": "ok",
-        "ms": 4527
+        "ms": 4561
       },
       {
         "lab": "geohash-nearby",
         "scenario": "固定精度遇上密度差",
         "status": "ok",
-        "ms": 8790
+        "ms": 8813
       },
       {
         "lab": "quadtree-knn",
         "scenario": "按阈值递归拆分",
         "status": "ok",
-        "ms": 4020
+        "ms": 4024
       },
       {
         "lab": "quadtree-knn",
         "scenario": "最近 5 家：市中心与郊区",
         "status": "ok",
-        "ms": 3770
+        "ms": 3782
       },
       {
         "lab": "quadtree-knn",
         "scenario": "阈值变小，树变深",
         "status": "ok",
-        "ms": 6531
+        "ms": 6532
+      }
+    ],
+    "steps": [
+      {
+        "lab": "geohash-nearby",
+        "scenario": "原书例子：500 米",
+        "status": "ok",
+        "clicks": 12,
+        "ms": 699
+      },
+      {
+        "lab": "quadtree-knn",
+        "scenario": "按阈值递归拆分",
+        "status": "ok",
+        "clicks": 8,
+        "ms": 500
       }
     ],
     "layout": {
@@ -1954,15 +2194,16 @@
         "lab": "geohash-nearby",
         "scenario": "原书例子：500 米",
         "status": "ok",
-        "ms": 4275
+        "ms": 4281
       },
       {
         "lab": "quadtree-knn",
         "scenario": "按阈值递归拆分",
         "status": "ok",
-        "ms": 4023
+        "ms": 4026
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -1995,19 +2236,28 @@
         "lab": "nearby-pubsub",
         "scenario": "一次上报扇出几份",
         "status": "ok",
-        "ms": 5280
+        "ms": 5034
       },
       {
         "lab": "nearby-pubsub",
         "scenario": "原书规模：每秒多少推送",
         "status": "ok",
-        "ms": 11057
+        "ms": 11067
       },
       {
         "lab": "nearby-pubsub",
         "scenario": "加好友、删好友",
         "status": "ok",
-        "ms": 9797
+        "ms": 9813
+      }
+    ],
+    "steps": [
+      {
+        "lab": "nearby-pubsub",
+        "scenario": "一次上报扇出几份",
+        "status": "ok",
+        "clicks": 7,
+        "ms": 300
       }
     ],
     "layout": {
@@ -2041,9 +2291,10 @@
         "lab": "nearby-pubsub",
         "scenario": "一次上报扇出几份",
         "status": "ok",
-        "ms": 5279
+        "ms": 5033
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2085,37 +2336,53 @@
         "lab": "map-tiles",
         "scenario": "放大一级，瓦片 ×4",
         "status": "ok",
-        "ms": 8287
+        "ms": 8300
       },
       {
         "lab": "map-tiles",
         "scenario": "编号靠计算得出",
         "status": "ok",
-        "ms": 4272
+        "ms": 4279
       },
       {
         "lab": "map-tiles",
         "scenario": "平移只补新露出的瓦片",
         "status": "ok",
-        "ms": 5531
+        "ms": 5606
       },
       {
         "lab": "routing-tiles",
         "scenario": "整张图 vs 按需加载",
         "status": "ok",
-        "ms": 10046
+        "ms": 10065
       },
       {
         "lab": "routing-tiles",
         "scenario": "长途：换用分层瓦片",
         "status": "ok",
-        "ms": 4272
+        "ms": 4279
       },
       {
         "lab": "routing-tiles",
         "scenario": "短途只要一两块瓦片",
         "status": "ok",
-        "ms": 2266
+        "ms": 2267
+      }
+    ],
+    "steps": [
+      {
+        "lab": "map-tiles",
+        "scenario": "放大一级，瓦片 ×4",
+        "status": "ok",
+        "clicks": 12,
+        "ms": 565
+      },
+      {
+        "lab": "routing-tiles",
+        "scenario": "整张图 vs 按需加载",
+        "status": "ok",
+        "clicks": 28,
+        "ms": 1849
       }
     ],
     "layout": {
@@ -2160,15 +2427,16 @@
         "lab": "map-tiles",
         "scenario": "放大一级，瓦片 ×4",
         "status": "ok",
-        "ms": 8286
+        "ms": 8300
       },
       {
         "lab": "routing-tiles",
         "scenario": "整张图 vs 按需加载",
         "status": "ok",
-        "ms": 3268
+        "ms": 3274
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2213,49 +2481,65 @@
         "lab": "mq-consumer-group",
         "scenario": "消费者逐个加入",
         "status": "ok",
-        "ms": 18589
+        "ms": 18613
       },
       {
         "lab": "mq-consumer-group",
         "scenario": "拉到就提交，随后崩溃",
         "status": "ok",
-        "ms": 7033
+        "ms": 7049
       },
       {
         "lab": "mq-consumer-group",
         "scenario": "处理完再提交，随后崩溃",
         "status": "ok",
-        "ms": 8794
+        "ms": 8815
       },
       {
         "lab": "mq-consumer-group",
         "scenario": "按 key 保序与无 key",
         "status": "ok",
-        "ms": 12052
+        "ms": 12077
       },
       {
         "lab": "mq-isr-acks",
         "scenario": "ACK=1 时 Leader 宕机",
         "status": "ok",
-        "ms": 9294
+        "ms": 9063
       },
       {
         "lab": "mq-isr-acks",
         "scenario": "ACK=all 时同样宕机",
         "status": "ok",
-        "ms": 9050
+        "ms": 9305
       },
       {
         "lab": "mq-isr-acks",
         "scenario": "慢副本被移出 ISR",
         "status": "ok",
-        "ms": 13085
+        "ms": 13077
       },
       {
         "lab": "mq-isr-acks",
         "scenario": "ISR 只剩 Leader",
         "status": "ok",
-        "ms": 14566
+        "ms": 14592
+      }
+    ],
+    "steps": [
+      {
+        "lab": "mq-consumer-group",
+        "scenario": "消费者逐个加入",
+        "status": "ok",
+        "clicks": 93,
+        "ms": 6832
+      },
+      {
+        "lab": "mq-isr-acks",
+        "scenario": "ACK=1 时 Leader 宕机",
+        "status": "ok",
+        "clicks": 46,
+        "ms": 3069
       }
     ],
     "layout": {
@@ -2302,15 +2586,16 @@
         "lab": "mq-consumer-group",
         "scenario": "消费者逐个加入",
         "status": "ok",
-        "ms": 18592
+        "ms": 18613
       },
       {
         "lab": "mq-isr-acks",
         "scenario": "ACK=1 时 Leader 宕机",
         "status": "ok",
-        "ms": 9295
+        "ms": 9052
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2354,43 +2639,59 @@
         "lab": "alert-rule",
         "scenario": "不设持续时长",
         "status": "ok",
-        "ms": 12058
+        "ms": 12079
       },
       {
         "lab": "alert-rule",
         "scenario": "for：1 分钟",
         "status": "ok",
-        "ms": 12192
+        "ms": 12079
       },
       {
         "lab": "alert-rule",
         "scenario": "for：5 分钟",
         "status": "ok",
-        "ms": 11801
+        "ms": 12072
       },
       {
         "lab": "alert-rule",
         "scenario": "主机失联：没数据就是健康？",
         "status": "ok",
-        "ms": 12054
+        "ms": 12080
       },
       {
         "lab": "metrics-downsample",
         "scenario": "原文的 30 秒平均",
         "status": "ok",
-        "ms": 6536
+        "ms": 6543
       },
       {
         "lab": "metrics-downsample",
         "scenario": "20 秒的尖峰去哪了",
         "status": "ok",
-        "ms": 5782
+        "ms": 5787
       },
       {
         "lab": "metrics-downsample",
         "scenario": "一年要存多少点",
         "status": "ok",
-        "ms": 1765
+        "ms": 1515
+      }
+    ],
+    "steps": [
+      {
+        "lab": "alert-rule",
+        "scenario": "不设持续时长",
+        "status": "ok",
+        "clicks": 60,
+        "ms": 3999
+      },
+      {
+        "lab": "metrics-downsample",
+        "scenario": "原文的 30 秒平均",
+        "status": "ok",
+        "clicks": 14,
+        "ms": 833
       }
     ],
     "layout": {
@@ -2436,15 +2737,16 @@
         "lab": "alert-rule",
         "scenario": "不设持续时长",
         "status": "ok",
-        "ms": 12064
+        "ms": 12067
       },
       {
         "lab": "metrics-downsample",
         "scenario": "原文的 30 秒平均",
         "status": "ok",
-        "ms": 6532
+        "ms": 6536
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2489,49 +2791,65 @@
         "lab": "stream-window",
         "scenario": "按到达时刻归属",
         "status": "ok",
-        "ms": 10549
+        "ms": 10559
       },
       {
         "lab": "stream-window",
         "scenario": "乱序容忍 5 秒 vs 40 秒",
         "status": "ok",
-        "ms": 14818
+        "ms": 14836
       },
       {
         "lab": "stream-window",
         "scenario": "允许迟到：发更正版本",
         "status": "ok",
-        "ms": 10556
+        "ms": 10565
       },
       {
         "lab": "stream-window",
         "scenario": "滑动窗口：一次点击算几次",
         "status": "ok",
-        "ms": 11552
+        "ms": 11315
       },
       {
         "lab": "agg-exactly-once",
         "scenario": "先发结果再提交",
         "status": "ok",
-        "ms": 6284
+        "ms": 6285
       },
       {
         "lab": "agg-exactly-once",
         "scenario": "先存进度再发结果",
         "status": "ok",
-        "ms": 4773
+        "ms": 4783
       },
       {
         "lab": "agg-exactly-once",
         "scenario": "原子提交",
         "status": "ok",
-        "ms": 5529
+        "ms": 5534
       },
       {
         "lab": "agg-exactly-once",
         "scenario": "下游幂等写",
         "status": "ok",
-        "ms": 6282
+        "ms": 6293
+      }
+    ],
+    "steps": [
+      {
+        "lab": "stream-window",
+        "scenario": "按到达时刻归属",
+        "status": "ok",
+        "clicks": 53,
+        "ms": 3532
+      },
+      {
+        "lab": "agg-exactly-once",
+        "scenario": "先发结果再提交",
+        "status": "ok",
+        "clicks": 8,
+        "ms": 498
       }
     ],
     "layout": {
@@ -2578,15 +2896,16 @@
         "lab": "stream-window",
         "scenario": "按到达时刻归属",
         "status": "ok",
-        "ms": 10551
+        "ms": 10568
       },
       {
         "lab": "agg-exactly-once",
         "scenario": "先发结果再提交",
         "status": "ok",
-        "ms": 6278
+        "ms": 6294
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2630,43 +2949,59 @@
         "lab": "booking-race",
         "scenario": "无保护：先查后改",
         "status": "ok",
-        "ms": 6284
+        "ms": 6290
       },
       {
         "lab": "booking-race",
         "scenario": "悲观锁：一方等待",
         "status": "ok",
-        "ms": 5782
+        "ms": 5787
       },
       {
         "lab": "booking-race",
         "scenario": "乐观锁：提交时发现冲突",
         "status": "ok",
-        "ms": 7034
+        "ms": 7047
       },
       {
         "lab": "booking-race",
         "scenario": "约束应该限制什么",
         "status": "ok",
-        "ms": 14316
+        "ms": 14088
       },
       {
         "lab": "booking-multi-night",
         "scenario": "中间一晚没房",
         "status": "ok",
-        "ms": 10298
+        "ms": 10316
       },
       {
         "lab": "booking-multi-night",
         "scenario": "超时重试与两张订单",
         "status": "ok",
-        "ms": 11345
+        "ms": 11319
       },
       {
         "lab": "booking-multi-night",
         "scenario": "缓存显示有房",
         "status": "ok",
-        "ms": 9540
+        "ms": 9558
+      }
+    ],
+    "steps": [
+      {
+        "lab": "booking-race",
+        "scenario": "无保护：先查后改",
+        "status": "ok",
+        "clicks": 9,
+        "ms": 567
+      },
+      {
+        "lab": "booking-multi-night",
+        "scenario": "中间一晚没房",
+        "status": "ok",
+        "clicks": 18,
+        "ms": 1100
       }
     ],
     "layout": {
@@ -2712,15 +3047,16 @@
         "lab": "booking-race",
         "scenario": "无保护：先查后改",
         "status": "ok",
-        "ms": 6532
+        "ms": 6295
       },
       {
         "lab": "booking-multi-night",
         "scenario": "中间一晚没房",
         "status": "ok",
-        "ms": 10294
+        "ms": 10359
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2753,19 +3089,28 @@
         "lab": "mail-pipeline",
         "scenario": "对方回了 250",
         "status": "ok",
-        "ms": 6031
+        "ms": 5541
       },
       {
         "lab": "mail-pipeline",
         "scenario": "搜不到刚收到的信",
         "status": "ok",
-        "ms": 11301
+        "ms": 11321
       },
       {
         "lab": "mail-pipeline",
         "scenario": "发信积压：加 worker 有用吗",
         "status": "ok",
-        "ms": 12555
+        "ms": 12576
+      }
+    ],
+    "steps": [
+      {
+        "lab": "mail-pipeline",
+        "scenario": "对方回了 250",
+        "status": "ok",
+        "clicks": 26,
+        "ms": 1699
       }
     ],
     "layout": {
@@ -2799,9 +3144,10 @@
         "lab": "mail-pipeline",
         "scenario": "对方回了 250",
         "status": "ok",
-        "ms": 5779
+        "ms": 5785
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2844,43 +3190,59 @@
         "lab": "erasure-coding",
         "scenario": "坏 4 台，再坏第 5 台",
         "status": "ok",
-        "ms": 6533
+        "ms": 6543
       },
       {
         "lab": "erasure-coding",
         "scenario": "800 MB 占多少空间",
         "status": "ok",
-        "ms": 8784
+        "ms": 8800
       },
       {
         "lab": "erasure-coding",
         "scenario": "5 片挤在一个机架",
         "status": "ok",
-        "ms": 6281
+        "ms": 6297
       },
       {
         "lab": "erasure-coding",
         "scenario": "三副本的节点一起坏",
         "status": "ok",
-        "ms": 4776
+        "ms": 4785
       },
       {
         "lab": "object-commit",
         "scenario": "提交超时，其实回滚了",
         "status": "ok",
-        "ms": 9296
+        "ms": 9311
       },
       {
         "lab": "object-commit",
         "scenario": "超时了，其实已提交",
         "status": "ok",
-        "ms": 16329
+        "ms": 16358
       },
       {
         "lab": "object-commit",
         "scenario": "三份新字节，读到旧对象",
         "status": "ok",
-        "ms": 9798
+        "ms": 9807
+      }
+    ],
+    "steps": [
+      {
+        "lab": "erasure-coding",
+        "scenario": "坏 4 台，再坏第 5 台",
+        "status": "ok",
+        "clicks": 9,
+        "ms": 497
+      },
+      {
+        "lab": "object-commit",
+        "scenario": "提交超时，其实回滚了",
+        "status": "ok",
+        "clicks": 18,
+        "ms": 1168
       }
     ],
     "layout": {
@@ -2926,15 +3288,16 @@
         "lab": "erasure-coding",
         "scenario": "坏 4 台，再坏第 5 台",
         "status": "ok",
-        "ms": 6531
+        "ms": 6543
       },
       {
         "lab": "object-commit",
         "scenario": "提交超时，其实回滚了",
         "status": "ok",
-        "ms": 9292
+        "ms": 9310
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -2978,43 +3341,59 @@
         "lab": "leaderboard-zset",
         "scenario": "前 10 与我上下 4 名",
         "status": "ok",
-        "ms": 5780
+        "ms": 5784
       },
       {
         "lab": "leaderboard-zset",
         "scenario": "同分：位置不等于并列名次",
         "status": "ok",
-        "ms": 8042
+        "ms": 7797
       },
       {
         "lab": "leaderboard-zset",
         "scenario": "赢一场：加分、上升与重试",
         "status": "ok",
-        "ms": 9551
+        "ms": 9555
       },
       {
         "lab": "leaderboard-shard",
         "scenario": "一个大 ZSET 只在一个节点",
         "status": "ok",
-        "ms": 13061
+        "ms": 13083
       },
       {
         "lab": "leaderboard-shard",
         "scenario": "哈希分片：Top 3 散集-合并",
         "status": "ok",
-        "ms": 5526
+        "ms": 5537
       },
       {
         "lab": "leaderboard-shard",
         "scenario": "跨片查个人名次",
         "status": "ok",
-        "ms": 9860
+        "ms": 9573
       },
       {
         "lab": "leaderboard-shard",
         "scenario": "边界并列：前 K 人 ≠ 名次含并列",
         "status": "ok",
-        "ms": 10309
+        "ms": 10574
+      }
+    ],
+    "steps": [
+      {
+        "lab": "leaderboard-zset",
+        "scenario": "前 10 与我上下 4 名",
+        "status": "ok",
+        "clicks": 7,
+        "ms": 332
+      },
+      {
+        "lab": "leaderboard-shard",
+        "scenario": "一个大 ZSET 只在一个节点",
+        "status": "ok",
+        "clicks": 42,
+        "ms": 2665
       }
     ],
     "layout": {
@@ -3060,15 +3439,16 @@
         "lab": "leaderboard-zset",
         "scenario": "前 10 与我上下 4 名",
         "status": "ok",
-        "ms": 5782
+        "ms": 5786
       },
       {
         "lab": "leaderboard-shard",
         "scenario": "一个大 ZSET 只在一个节点",
         "status": "ok",
-        "ms": 13062
+        "ms": 13086
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -3102,25 +3482,34 @@
         "lab": "payment-retry",
         "scenario": "超时后换新键重试",
         "status": "ok",
-        "ms": 10548
+        "ms": 10566
       },
       {
         "lab": "payment-retry",
         "scenario": "沿用原键重试",
         "status": "ok",
-        "ms": 8293
+        "ms": 8300
       },
       {
         "lab": "payment-retry",
         "scenario": "重复 webhook 遇上非幂等入账",
         "status": "ok",
-        "ms": 10297
+        "ms": 10315
       },
       {
         "lab": "payment-retry",
         "scenario": "PSP 宕机，靠对账收敛",
         "status": "ok",
-        "ms": 15075
+        "ms": 15090
+      }
+    ],
+    "steps": [
+      {
+        "lab": "payment-retry",
+        "scenario": "超时后换新键重试",
+        "status": "ok",
+        "clicks": 17,
+        "ms": 961
       }
     ],
     "layout": {
@@ -3155,9 +3544,10 @@
         "lab": "payment-retry",
         "scenario": "超时后换新键重试",
         "status": "ok",
-        "ms": 10551
+        "ms": 10568
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -3190,25 +3580,34 @@
         "lab": "wallet-event-sourcing",
         "scenario": "回放到任意序号",
         "status": "ok",
-        "ms": 7549
+        "ms": 7545
       },
       {
         "lab": "wallet-event-sourcing",
         "scenario": "快照边界多算一次",
         "status": "ok",
-        "ms": 4279
+        "ms": 4281
       },
       {
         "lab": "wallet-event-sourcing",
         "scenario": "错误事件照样能重放",
         "status": "ok",
-        "ms": 8036
+        "ms": 8051
       },
       {
         "lab": "wallet-event-sourcing",
         "scenario": "新旧版本逐事件比对",
         "status": "ok",
-        "ms": 4023
+        "ms": 4032
+      }
+    ],
+    "steps": [
+      {
+        "lab": "wallet-event-sourcing",
+        "scenario": "回放到任意序号",
+        "status": "ok",
+        "clicks": 12,
+        "ms": 700
       }
     ],
     "layout": {
@@ -3243,9 +3642,10 @@
         "lab": "wallet-event-sourcing",
         "scenario": "回放到任意序号",
         "status": "ok",
-        "ms": 7537
+        "ms": 7551
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],
@@ -3289,49 +3689,65 @@
         "lab": "order-book",
         "scenario": "同价先到先成交",
         "status": "ok",
-        "ms": 6035
+        "ms": 6049
       },
       {
         "lab": "order-book",
         "scenario": "市价大单扫过多档",
         "status": "ok",
-        "ms": 11811
+        "ms": 11831
       },
       {
         "lab": "order-book",
         "scenario": "部分成交后挂簿",
         "status": "ok",
-        "ms": 7041
+        "ms": 7051
       },
       {
         "lab": "order-book",
         "scenario": "撤单与成交的先后",
         "status": "ok",
-        "ms": 9051
+        "ms": 9062
       },
       {
         "lab": "exchange-failover",
         "scenario": "宕机切换：5 秒够吗",
         "status": "ok",
-        "ms": 10807
+        "ms": 10854
       },
       {
         "lab": "exchange-failover",
         "scenario": "假死旧主醒来，没有 fencing",
         "status": "ok",
-        "ms": 9301
+        "ms": 9321
       },
       {
         "lab": "exchange-failover",
         "scenario": "接收端 fencing 拦住旧主",
         "status": "ok",
-        "ms": 9303
+        "ms": 9085
       },
       {
         "lab": "exchange-failover",
         "scenario": "本地确认的数据缺口",
         "status": "ok",
-        "ms": 6791
+        "ms": 6823
+      }
+    ],
+    "steps": [
+      {
+        "lab": "order-book",
+        "scenario": "同价先到先成交",
+        "status": "ok",
+        "clicks": 14,
+        "ms": 901
+      },
+      {
+        "lab": "exchange-failover",
+        "scenario": "宕机切换：5 秒够吗",
+        "status": "ok",
+        "clicks": 45,
+        "ms": 2900
       }
     ],
     "layout": {
@@ -3378,15 +3794,16 @@
         "lab": "order-book",
         "scenario": "同价先到先成交",
         "status": "ok",
-        "ms": 6036
+        "ms": 6037
       },
       {
         "lab": "exchange-failover",
         "scenario": "宕机切换：5 秒够吗",
         "status": "ok",
-        "ms": 10806
+        "ms": 10819
       }
     ],
+    "steps": [],
     "layout": {
       "pageScroll": false,
       "overflow": [],

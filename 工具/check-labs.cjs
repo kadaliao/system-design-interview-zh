@@ -40,18 +40,40 @@ fs.mkdirSync(out,{recursive:true});
           for(let si=0;si<n;si++){
             const frame=page.locator('.sd-lab').nth(li);
             await frame.locator('.sdl-chips button').nth(si).click();
-            const run=frame.locator('.sdl-card button.primary');
+            const run=frame.locator('.sdl-card [data-act=play]');
             await run.scrollIntoViewIfNeeded();
             await run.click();
             const t0=Date.now();
             let status='timeout';
             try{
-              await page.waitForFunction(([i])=>{const f=document.querySelectorAll('.sd-lab')[i];const st=f.querySelector('.sdl-card .status')?.textContent||'';const b=f.querySelector('.sdl-card button.primary');return st.includes('出错')||(b&&!b.disabled&&b.textContent.includes('再运行'))},[li],{timeout:scenarioTimeout,polling:250});
-              status=await frame.locator('.sdl-card .status').textContent().then(t=>t.includes('出错')?'error':'ok');
+              await page.waitForFunction(([i])=>['done','error'].includes(document.querySelectorAll('.sd-lab')[i].querySelector('.sdl-card')?.dataset.state),[li],{timeout:scenarioTimeout,polling:250});
+              status=await frame.locator('.sdl-card').getAttribute('data-state').then(v=>v==='done'?'ok':'error');
             }catch{}
             scenarioResults.push({lab:lab.id,scenario:lab.scenarios[si],status,ms:Date.now()-t0});
             if(status!=='ok')failed=true;
           }
+        }
+        // 单步模式：每个实验的第一个场景用「逐步开始」+ 反复「下一步」走完，确认单步能推进到结束且不报错。
+        const stepResults=[];
+        if(vp.name==='desktop')for(let li=0;li<labs.length;li++){
+          const frame=page.locator('.sd-lab').nth(li);
+          if(!labs[li].scenarios.length||!(await frame.locator('.sdl-card [data-act=start]').count()>0||await frame.locator('.sdl-transport').count()>0))continue;
+          const chip=frame.locator('.sdl-chips button').first();
+          if(await chip.getAttribute('aria-pressed')!=='true')await chip.click();
+          const startBtn=frame.locator('.sdl-card [data-act=start]');
+          if(!(await startBtn.count())){stepResults.push({lab:labs[li].id,status:'no-step'});continue}
+          await startBtn.click();
+          let clicks=0,state='running';const t0=Date.now();
+          while(clicks<600){
+            state=await frame.locator('.sdl-card').getAttribute('data-state');if(state!=='running')break;
+            const stepBtn=frame.locator('.sdl-transport [data-act=step]');
+            await page.waitForFunction(([i])=>{const f=document.querySelectorAll('.sd-lab')[i];const b=f.querySelector('.sdl-transport [data-act=step]');return (b&&!b.disabled)||f.querySelector('.sdl-card')?.dataset.state!=='running'},[li],{timeout:10000}).catch(()=>{});
+            if(await frame.locator('.sdl-card').getAttribute('data-state')!=='running')continue;
+            if(await stepBtn.isDisabled()){state='stuck';break}
+            await stepBtn.click();clicks++;
+          }
+          const ok=state==='done';if(!ok)failed=true;
+          stepResults.push({lab:labs[li].id,scenario:labs[li].scenarios[0],status:ok?'ok':state,clicks,ms:Date.now()-t0});
         }
         const layout=await page.evaluate(()=>{
           const frames=[...document.querySelectorAll('.sdl-frame')];
@@ -70,8 +92,9 @@ fs.mkdirSync(out,{recursive:true});
         const shot=shots.join(',');
         const bad=errors.length||labs.some(l=>!l.mounted||l.error)||layout.pageScroll||layout.overflow.length;
         if(bad)failed=true;
-        report.push({file,viewport:vp.name,labs,scenarios:scenarioResults,layout,errors,screenshot:shot});
-        console.log(`${bad?'✗':'✓'} ${file} [${vp.name}] 实验 ${labs.length}，场景 ${scenarioResults.filter(s=>s.status==='ok').length}/${scenarioResults.length}，错误 ${errors.length}，溢出 ${layout.pageScroll||layout.overflow.length?'有':'无'}，小字 ${layout.tiny}`);
+        report.push({file,viewport:vp.name,labs,scenarios:scenarioResults,steps:stepResults,layout,errors,screenshot:shot});
+        console.log(`${bad||stepResults.some(s=>s.status!=='ok'&&s.status!=='no-step')?'✗':'✓'} ${file} [${vp.name}] 实验 ${labs.length}，场景 ${scenarioResults.filter(s=>s.status==='ok').length}/${scenarioResults.length}${stepResults.length?`，逐步 ${stepResults.filter(s=>s.status==='ok').length}/${stepResults.filter(s=>s.status!=='no-step').length}（${stepResults.map(s=>s.clicks??'-').join('/')} 步）`:''}，错误 ${errors.length}，溢出 ${layout.pageScroll||layout.overflow.length?'有':'无'}，小字 ${layout.tiny}`);
+        for(const s of stepResults.filter(s=>s.status!=='ok'&&s.status!=='no-step'))console.log('    逐步未完成：',s.lab,s.scenario,s.status,s.clicks);
         for(const e of errors.slice(0,5))console.log('   ',e);
         for(const s of scenarioResults.filter(s=>s.status!=='ok'))console.log('    场景未完成：',s.lab,s.scenario,s.status);
         if(layout.tiny)console.log('    小字样例：',layout.tinySamples.join(' | '));
