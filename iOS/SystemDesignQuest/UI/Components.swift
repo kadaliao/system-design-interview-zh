@@ -144,7 +144,7 @@ struct ContentImage: View {
     let name: String
 
     var body: some View {
-        if let url = CourseLibrary.imageURL(name), let image = UIImage(contentsOfFile: url.path()) {
+        if let url = CourseLibrary.imageURL(name), let image = UIImage(contentsOfFile: url.path(percentEncoded: false)) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFit()

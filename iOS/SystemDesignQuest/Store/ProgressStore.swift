@@ -294,7 +294,7 @@ final class ProgressStore {
     // MARK: - 存档
 
     private func load(from url: URL) {
-        guard FileManager.default.fileExists(atPath: url.path()) else { return }
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return }
         do {
             state = try JSONDecoder().decode(ProgressState.self, from: Data(contentsOf: url))
         } catch {

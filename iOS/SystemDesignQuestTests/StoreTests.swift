@@ -163,6 +163,24 @@ struct StoreTests {
         #expect(raw.contains("\"2026-09-01\""))
     }
 
+    /// 默认存档在 `Application Support` 下，路径带空格也要能读回来（不能按百分号编码的路径判断文件是否存在）。
+    @Test func reloadsFromDirectoryWithSpaces() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let dir = root.appending(path: "Application Support")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = dir.appending(path: "progress.json")
+        let clock = TestClock(Fixtures.date(1))
+        let store = makeStore(clock, file: file)
+        _ = try play("c01-01", in: store, wrongFirst: false)
+        store.saveNow()
+
+        let reloaded = makeStore(clock, file: file)
+        #expect(reloaded.loadWarning == nil)
+        #expect(reloaded.completedLessonCount == 1)
+        #expect(reloaded.state == store.state)
+    }
+
     @Test func unreadableFileIsBackedUpNotOverwritten() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -171,7 +189,7 @@ struct StoreTests {
         try Data("不是 JSON".utf8).write(to: file)
         let store = makeStore(TestClock(Fixtures.date(1)), file: file)
         #expect(store.loadWarning != nil)
-        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.path()).filter { $0.hasPrefix("progress-unreadable-") }
+        let backups = try FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false)).filter { $0.hasPrefix("progress-unreadable-") }
         #expect(backups.count == 1)
     }
 
