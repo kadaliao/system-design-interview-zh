@@ -1,10 +1,6 @@
 .DS_Store
 __pycache__/
 *.pyc
-.ebook-build/
-.ebook-book.html
-电子书/*.epub
-电子书/*.azw3
 xcuserdata/
 *.xcuserstate
 DerivedData/

@@ -2,7 +2,7 @@
 
 每章正文里嵌入了可操作的小实验：拖动参数、运行预设场景，亲眼看到机制在突发、并发和故障下怎样表现。每个实验都有几个「预设场景」，先读题预测结果，再点运行对照。每章末尾还有自测练习卡，第 29 章顶部是跨章节的练习模式。
 
-实验只在[在线阅读版](https://kadaliao.github.io/system-design-interview-zh/)或本地打开的 `index.html` 中可操作；在 GitHub 或电子书里看到的是一行文字说明。实验进度、自测自评和答案草稿只保存在你自己的浏览器里（localStorage），清除站点数据后会丢失。
+实验只在[在线阅读版](https://kadaliao.github.io/system-design-interview-zh/)或本地打开的 `index.html` 中可操作；在 GitHub 上看到的是一行文字说明。实验进度、自测自评和答案草稿只保存在你自己的浏览器里（localStorage），清除站点数据后会丢失。
 
 ## 实验清单
 

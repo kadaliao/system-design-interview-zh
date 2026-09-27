@@ -6,7 +6,7 @@
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [交互实验总览](./交互实验/README.md) · [iOS 闯关 App](./iOS/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [交互实验总览](./交互实验/README.md) · [iOS 闯关 App](./iOS/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
 
 ## 动手实验与自测练习
 
@@ -110,7 +110,7 @@ PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-labs.cjs --jobs 
 python3 工具/build_app_content.py      # 校验题库并生成 iOS/SystemDesignQuest/Resources/Content
 ```
 
-完整的检查步骤见 [验收说明](./校验/验收说明.md#后续编辑)。电子书不进 Git，重新构建后发布到 [Releases](https://github.com/kadaliao/system-design-interview-zh/releases)，步骤见 [电子书/README.md](./电子书/README.md)。
+完整的检查步骤见 [验收说明](./校验/验收说明.md#后续编辑)。
 
 推送到 `main` 后，GitHub Actions（`.github/workflows/pages.yml`）会重新编译阅读页并发布到 [GitHub Pages](https://kadaliao.github.io/system-design-interview-zh/)；如果仓库里的 `index.html` 没有同步更新，该工作流会给出警告，但线上仍以最新 Markdown 为准。
 
