@@ -6,11 +6,15 @@
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [交互实验总览](./交互实验/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [下载 EPUB](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.epub) · [下载 AZW3](https://github.com/kadaliao/system-design-interview-zh/releases/latest/download/system-design-interview-zh.azw3) · [交互实验总览](./交互实验/README.md) · [iOS 闯关 App](./iOS/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
 
 ## 动手实验与自测练习
 
 在线阅读版的每一章都嵌入了交互实验：拖动参数、运行预设场景，亲眼看到限流算法在窗口边界放过两倍流量、一致性哈希增删节点时哪些 key 搬家、两个人怎样同时订走最后一间房。每个场景先让你预测结果，再运行对照：默认逐步运行，每点一次「下一步」推进一步，点「播放」才连续播放，速度可在 0.25×～2× 之间调，选择会被记住。有章末自测题的章节，末尾有练习卡（先作答，再展开答案并自评）；第 29 章顶部的练习模式可以按章节和掌握程度筛题复习。进度只保存在你自己的浏览器里。完整清单见[交互实验总览](./交互实验/README.md)。
+
+## iOS 闯关练习 App
+
+[`iOS/`](./iOS/README.md) 把这套课程做成了多邻国式的学习 App：沿学习路径一关关闯，28 章对应 28 个单元，每关 8～10 道短题（单选、多选、判断、选词填空、排序、配对），答错当场给出正确答案和解析，并可跳回在线阅读版的对应小节。错题按间隔复习，第 29 章的 58 道开放题做成口述卡（先讲、再对照答案自评），48 个交互实验在 App 里离线运行，另有红心、经验、连胜、每日目标和成就。题目全部依据正文编写，维护在 [`练习题库/`](./练习题库/README.md)，每道题都经过对照正文的独立审校。
 
 阅读页右上角可切换夜间模式：默认跟随系统设置，手动切换后会记住；夜间模式下插图和实验都会转成深色，减少夜里的眩光。
 
@@ -98,6 +102,12 @@ PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-reader.cjs   # �
 ```bash
 python3 工具/build_lab_index.py --write                                          # 更新实验清单，检查占位块与实验定义一一对应
 PLAYWRIGHT_MODULE="$(npm root -g)/playwright" node 工具/check-labs.cjs --jobs 6   # 每个实验在桌面/手机宽度下运行全部预设场景
+```
+
+改动章节正文、第 29 章答案、交互实验或 `练习题库/` 后，重新生成 iOS App 的内容包（需要 `rsvg-convert`）：
+
+```bash
+python3 工具/build_app_content.py      # 校验题库并生成 iOS/SystemDesignQuest/Resources/Content
 ```
 
 完整的检查步骤见 [验收说明](./校验/验收说明.md#后续编辑)。电子书不进 Git，重新构建后发布到 [Releases](https://github.com/kadaliao/system-design-interview-zh/releases)，步骤见 [电子书/README.md](./电子书/README.md)。

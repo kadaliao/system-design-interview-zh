@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>交互实验</title>
+<!-- iOS App 内嵌实验的宿主页，由 工具/build_app_content.py 复制为 Content/Labs/lab.html。
+     App 在页面加载前注入 window.SDQ_CONFIG = {file, lab, theme}。 -->
+<script>
+(function(){
+  var c=window.SDQ_CONFIG||{};
+  if(c.theme)document.documentElement.dataset.theme=c.theme;
+})();
+</script>
+<link rel="stylesheet" href="runtime.css">
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}
+body{margin:0;background:#fcfaf5;color:#23352f;font:16px/1.75 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;-webkit-text-size-adjust:100%}
+a{color:#176b52}button,input,select{font:inherit}
+button{cursor:pointer;border:1px solid #dbe2da;border-radius:9px;padding:6px 12px;background:#fff;color:#23352f}
+article{padding:12px 14px calc(40px + env(safe-area-inset-bottom));overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow:auto}
+th,td{text-align:left;padding:8px 10px;border:1px solid #dbe2da}th{background:#eaf0e5}
+code{font-family:ui-monospace,SFMono-Regular,monospace;background:#eef2ec;border-radius:4px;padding:2px 4px;font-size:.88em}
+.sd-lab{margin:0 !important}
+.error{color:#b42318;padding:20px}
+:root[data-theme=dark]{color-scheme:dark}
+:root[data-theme=dark] body{background:#121614;color:#d3dbd4}
+:root[data-theme=dark] code{background:#1d2421}
+:root[data-theme=dark] button{background:#1d2421;color:#d3dbd4;border-color:#34403b}
+</style>
+</head>
+<body>
+<article id="app"></article>
+<script src="runtime.js"></script>
+<script>
+(function(){
+  var c=window.SDQ_CONFIG||{};
+  var app=document.getElementById('app');
+  function fail(msg){app.innerHTML='<p class="error"></p>';app.firstChild.textContent=msg}
+  if(!c.file){fail('没有指定实验文件');return}
+  var before=SDLab.specs.length;
+  var s=document.createElement('script');
+  s.src='labs/'+c.file;
+  s.onerror=function(){fail('无法加载实验 '+c.file)};
+  s.onload=function(){
+    var specs=SDLab.specs.slice(before).filter(function(spec){return !c.lab||spec.id===c.lab});
+    if(!specs.length){fail('找不到实验 '+c.lab);return}
+    specs.forEach(function(spec){
+      var div=document.createElement('div');
+      div.className='sd-lab';div.dataset.lab=spec.id;div.id='lab-'+spec.id;
+      app.append(div);SDLab.mountEl(div);
+    });
+  };
+  document.body.append(s);
+})();
+</script>
+</body>
+</html>
