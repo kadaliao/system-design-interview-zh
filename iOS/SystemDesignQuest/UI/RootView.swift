@@ -32,6 +32,17 @@ struct RootView: View {
             OutOfHeartsSheet()
                 .presentationDetents([.medium])
         }
+        .overlay(alignment: .top) {
+            if let toast = router.toast {
+                ToastBanner(text: toast)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: toast) {
+                        try? await Task.sleep(for: .seconds(3))
+                        router.toast = nil
+                    }
+            }
+        }
+        .animation(.spring(duration: 0.35), value: router.toast)
         .alert("学习记录", isPresented: .constant(store.loadWarning != nil && !dismissedWarning)) {
             Button("知道了") { dismissedWarning = true }
         } message: {

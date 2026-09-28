@@ -22,6 +22,8 @@ final class Router {
     var screen: Screen?
     /// 红心不足时弹出的提示。
     var showsOutOfHearts = false
+    /// 全屏页面关闭后在顶部短暂显示的提示，如「实验完成，获得 10 XP」。
+    var toast: String?
     var selectedTab: Tab = .learn
 
     enum Tab: Hashable { case learn, practice, profile }

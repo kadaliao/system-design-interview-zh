@@ -133,6 +133,22 @@ struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
 }
 
+/// 顶部短暂出现的绿色提示条。
+struct ToastBanner: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .font(.rounded(15, .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(Palette.green))
+            .padding(.top, 8)
+            .onAppear { UIAccessibility.post(notification: .announcement, argument: text) }
+    }
+}
+
 /// 用于 `.sheet(item:)` 的 URL 包装。
 struct WebLink: Identifiable, Hashable {
     let url: URL

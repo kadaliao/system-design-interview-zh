@@ -5,11 +5,12 @@ import WebKit
 struct LabScreen: View {
     let lab: Lab
     @Environment(ProgressStore.self) private var store
+    @Environment(Router.self) private var router
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
-    @State private var celebration: Celebration?
 
     var body: some View {
+        let done = store.isLabCompleted(lab)
         NavigationStack {
             // 网页视图延伸到屏幕底边：实验的播放控制条固定在底部，手机上不用滚到最后才能点「下一步」
             LabWebView(file: lab.file, labID: lab.id, dark: colorScheme == .dark)
@@ -26,52 +27,39 @@ struct LabScreen: View {
                         .accessibilityLabel("关闭")
                     }
                     ToolbarItem(placement: .principal) {
-                        Text(lab.title)
-                            .font(.rounded(15, .bold))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .minimumScaleFactor(0.85)
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        completeButton
-                    }
-                }
-                .overlay(alignment: .top) {
-                    if let celebration {
-                        Label("实验完成，获得 \(celebration.xp) XP", systemImage: "checkmark.circle.fill")
-                            .font(.rounded(15, .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(Capsule().fill(Palette.green))
-                            .padding(.top, 8)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            .task {
-                                try? await Task.sleep(for: .seconds(2.5))
-                                withAnimation { self.celebration = nil }
+                        VStack(spacing: 2) {
+                            Text(lab.title)
+                                .font(.rounded(15, .bold))
+                                .lineLimit(done ? 1 : 2)
+                                .multilineTextAlignment(.center)
+                                .minimumScaleFactor(0.85)
+                            if done {
+                                Label("已完成", systemImage: "checkmark.circle.fill")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.rounded(12, .bold))
+                                    .foregroundStyle(Palette.green)
                             }
+                        }
+                    }
+                    // 「做完了」记录完成并返回，和只关闭的 ✕ 区分开；已完成的实验不再显示
+                    if !done {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                if let celebration = store.completeLab(lab) {
+                                    router.toast = "实验完成，获得 \(celebration.xp) XP"
+                                }
+                                Haptics.success()
+                                dismiss()
+                            } label: {
+                                Text("做完了").font(.rounded(15, .heavy)).foregroundStyle(.white)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Palette.green)
+                            .accessibilityLabel("做完了")
+                            .accessibilityHint("记录完成，获得 \(XPRules.lab) XP 并返回")
+                        }
                     }
                 }
-        }
-    }
-
-    @ViewBuilder
-    private var completeButton: some View {
-        if store.isLabCompleted(lab) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Palette.green)
-                .accessibilityLabel("实验已完成")
-        } else {
-            Button {
-                withAnimation { celebration = store.completeLab(lab) }
-                Haptics.success()
-            } label: {
-                Text("做完了").font(.rounded(15, .heavy)).foregroundStyle(.white)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Palette.green)
-            .accessibilityLabel("我做完了，获得 \(XPRules.lab) XP")
         }
     }
 }

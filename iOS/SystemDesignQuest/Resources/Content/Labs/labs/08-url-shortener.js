@@ -42,7 +42,7 @@ SDLab.define({
 .us-div{font-size:12px;color:#44544b}
 .us-grid{display:grid;gap:2px;margin:6px 0 2px}
 .sdl-frame .us-c{aspect-ratio:1;border-radius:3px;background:#eef2ec;border:1px solid #e1e7df;cursor:pointer;display:flex;align-items:center;justify-content:center;font:13px/1 ui-monospace,Menlo,monospace;color:#66756d;padding:0;min-width:0;width:100%;transition:background .15s}
-.sdl-frame .us-c:hover:not(:disabled){background:#dde9f6;border-color:#9dbbe0}
+@media(hover:hover){.sdl-frame .us-c:hover:not(:disabled){background:#dde9f6;border-color:#9dbbe0}}
 .sdl-frame .us-c.on{background:#a9d3b9;border-color:#86bf9c;color:#1d4a33}
 .sdl-frame .us-c.new{background:#2f8f5b;border-color:#2f8f5b;color:#fff}
 .sdl-frame .us-c.hit{background:#c2413b;border-color:#c2413b;color:#fff}

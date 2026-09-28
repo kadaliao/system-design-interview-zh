@@ -17,10 +17,11 @@
 .sdl-summary{margin:0;color:var(--lab-muted);font-size:14px}
 .sdl-head button{flex:none}
 .sdl-frame button,.sdp button{font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--lab-line);border-radius:8px;padding:5px 12px;background:var(--lab-card);color:var(--lab-ink);line-height:1.5;transition:background .12s,border-color .12s}
-.sdl-frame button:hover:not(:disabled),.sdp button:hover:not(:disabled){background:var(--lab-soft);border-color:#b9cbbd}
+/* 悬停反馈只给有鼠标的设备：触屏点按后 :hover 会粘在按钮上，看起来像选中了一半；已选中的按钮悬停时保持选中色 */
+@media(hover:hover){.sdl-frame button:hover:not(:disabled):not([aria-pressed=true]),.sdp button:hover:not(:disabled):not([aria-pressed=true]){background:var(--lab-soft);border-color:#b9cbbd}}
 .sdl-frame button:disabled,.sdp button:disabled{opacity:.45;cursor:default}
 .sdl-frame button.primary,.sdp button.primary{background:var(--lab-accent);border-color:var(--lab-accent);color:#fff;font-weight:650}
-.sdl-frame button.primary:hover:not(:disabled),.sdp button.primary:hover:not(:disabled){background:#12573f}
+@media(hover:hover){.sdl-frame button.primary:hover:not(:disabled),.sdp button.primary:hover:not(:disabled){background:#12573f}}
 .sdl-frame button.danger{border-color:#e3b3ae;color:var(--lab-bad)}
 .sdl-frame button[aria-pressed=true]{background:var(--lab-accent-soft);border-color:#8fbf9e;color:#124832;font-weight:650}
 .sdl-frame :focus-visible,.sdp :focus-visible{outline:2px solid var(--lab-info);outline-offset:2px}
@@ -170,7 +171,7 @@ nav a .sdl-badge .on{color:var(--accent,#2f8f5b);font-weight:650}
 :root[data-theme=dark] .sdl-frame{filter:invert(.88) hue-rotate(180deg);box-shadow:none;color-scheme:light}
 /* 实心主按钮反色后会变成亮薄荷色：预先换成浅底深字，反色后得到暗绿底浅字 */
 :root[data-theme=dark] .sdl-frame button.primary{background:#a9d6bd;border-color:#a9d6bd;color:#12301f}
-:root[data-theme=dark] .sdl-frame button.primary:hover:not(:disabled){background:#bfe2cd}
+@media(hover:hover){:root[data-theme=dark] .sdl-frame button.primary:hover:not(:disabled){background:#bfe2cd}}
 :root[data-theme=dark] .sdl-transport{box-shadow:none}
 :root[data-theme=dark] .sdl-transport button[data-act=toggle][aria-pressed=false]{background:#a9d6bd;border-color:#a9d6bd;color:#12301f}
 :root[data-theme=dark] .sd-lab:not(.sdl-mounted){border-color:#3e5a4a;background:#17201b}
@@ -180,9 +181,9 @@ nav a .sdl-badge .on{color:var(--accent,#2f8f5b);font-weight:650}
 :root[data-theme=dark] .sdp-bar{background:#171d1a}
 :root[data-theme=dark] .sdp-answer{background:#151c18;border-left-color:#3e7a58}
 :root[data-theme=dark] .sdp-draft,:root[data-theme=dark] .sdp-bar select{background:#131815;border-color:#3a4640;color:var(--lab-ink)}
-:root[data-theme=dark] .sdp button:hover:not(:disabled){border-color:#4a5a51}
+@media(hover:hover){:root[data-theme=dark] .sdp button:hover:not(:disabled){border-color:#4a5a51}}
 :root[data-theme=dark] .sdp button.primary{color:#f2f7f3}
-:root[data-theme=dark] .sdp button.primary:hover:not(:disabled){background:#379a6e}
+@media(hover:hover){:root[data-theme=dark] .sdp button.primary:hover:not(:disabled){background:#379a6e}}
 :root[data-theme=dark] .sdp-rate button[aria-pressed=true].good{border-color:#3f8a5f;color:var(--lab-ok)}
 :root[data-theme=dark] .sdp-rate button[aria-pressed=true].fuzzy{border-color:#8a6a2f;color:var(--lab-warn)}
 :root[data-theme=dark] .sdp-rate button[aria-pressed=true].bad{border-color:#8f4a44;color:var(--lab-bad)}
