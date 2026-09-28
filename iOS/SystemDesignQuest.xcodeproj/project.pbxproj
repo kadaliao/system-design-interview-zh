@@ -17,6 +17,7 @@
 		2A5B2CACD090C8C59AE8645E /* Content in Resources */ = {isa = PBXBuildFile; fileRef = 7933345208B658CFB7A27D29 /* Content */; };
 		2DCAC42B8D0A9648CBC335E7 /* Exercise.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8782F6CCE4C13157D97136D /* Exercise.swift */; };
 		3896A95FAB74724820312F63 /* ProgressState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AEECA804E6038B7D4696993 /* ProgressState.swift */; };
+		3D2EDE664A820BC62D90A69A /* ImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF98EE5422BFC96B31A549F /* ImageViewer.swift */; };
 		3DD050415CE76A0218F2FDC8 /* LearningPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B87966264A86AB425B4D325 /* LearningPath.swift */; };
 		4B35DD773D0DCBACEFF7716F /* ProgressStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5176973D8D22809F67719F23 /* ProgressStore.swift */; };
 		4D0EEA1A1039C6894200ED68 /* CourseLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 743594D3D27E4934FE5CA02E /* CourseLibrary.swift */; };
@@ -79,6 +80,7 @@
 		9E81B34C307191063A26C5DC /* LessonSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LessonSession.swift; sourceTree = "<group>"; };
 		B8782F6CCE4C13157D97136D /* Exercise.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Exercise.swift; sourceTree = "<group>"; };
 		B94386CF44D0B479028929B7 /* Router.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Router.swift; sourceTree = "<group>"; };
+		BAF98EE5422BFC96B31A549F /* ImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewer.swift; sourceTree = "<group>"; };
 		BC256E41E9B3392AE2EA5DBC /* DemoData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoData.swift; sourceTree = "<group>"; };
 		CC249F37A2556B241D13FB49 /* SystemDesignQuest.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SystemDesignQuest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFFEE4AB9B18C46EF5AAFA8D /* ReminderScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderScheduler.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				5E9E3B56CD493C070217C74F /* Components.swift */,
+				BAF98EE5422BFC96B31A549F /* ImageViewer.swift */,
 				3FD8A9173759AFFC06AF6C8F /* RootView.swift */,
 				2D6CEA9DA608F4F896B983FE /* Theme.swift */,
 				234CD0A811BF543282D72705 /* Lab */,
@@ -345,6 +348,7 @@
 				82FCA876DB0BBB7865C96ABB /* ExerciseViews.swift in Sources */,
 				0EB79CA95A12D2A4022A9318 /* Grading.swift in Sources */,
 				61BDB1E1E0EF8F8666595E93 /* GuidebookSheet.swift in Sources */,
+				3D2EDE664A820BC62D90A69A /* ImageViewer.swift in Sources */,
 				5E33AF43C37B5FCB616292A4 /* LabScreen.swift in Sources */,
 				3DD050415CE76A0218F2FDC8 /* LearningPath.swift in Sources */,
 				CA552710131FB9E7C5C09F58 /* LessonResultView.swift in Sources */,

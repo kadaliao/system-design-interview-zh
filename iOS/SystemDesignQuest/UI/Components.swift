@@ -139,17 +139,36 @@ struct WebLink: Identifiable, Hashable {
     var id: String { url.absoluteString }
 }
 
-/// 读取内容包里的图片（PNG）。
+/// 读取内容包里的图片（PNG），点按后全屏查看、可缩放。
 struct ContentImage: View {
     let name: String
+    @State private var zoomed = false
 
     var body: some View {
         if let url = CourseLibrary.imageURL(name), let image = UIImage(contentsOfFile: url.path(percentEncoded: false)) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.border, lineWidth: 1))
+            Button {
+                zoomed = true
+            } label: {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Palette.border, lineWidth: 1))
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(Circle().fill(.black.opacity(0.4)))
+                            .padding(8)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("图片")
+            .accessibilityHint("全屏查看，可缩放")
+            .fullScreenCover(isPresented: $zoomed) {
+                ImageViewer(image: image)
+            }
         }
     }
 }
