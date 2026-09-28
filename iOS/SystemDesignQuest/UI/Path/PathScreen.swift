@@ -10,8 +10,6 @@ struct PathScreen: View {
     @State private var didInitialScroll = false
     /// 当前关卡是否在屏幕上；nil 表示还没渲染过。
     @State private var currentVisible: Bool?
-    /// 滚动定位到的单元（章号）；懒加载列表靠它跳到还没渲染的单元。
-    @State private var scrolledUnit: Int?
 
     var body: some View {
         let states = store.nodeStates()
@@ -33,14 +31,13 @@ struct PathScreen: View {
                         }
                         CourseFooter()
                     }
-                    .scrollTargetLayout()
                     .readableWidth()
                     .padding(.bottom, 40)
                     // 点关卡之间的空白处收起介绍卡片
                     .background { Color.clear.contentShape(Rectangle()).onTapGesture { selectedNode = nil } }
                 }
                 .scrollIndicators(.hidden)
-                .scrollPosition(id: $scrolledUnit, anchor: .top)
+                // 不用 scrollPosition(id:) 绑定：它会在每次重绘时把视图拉回记录的单元，点关卡时整条路径跳动
                 .onScrollPhaseChange { _, phase in
                     if phase == .interacting { selectedNode = nil }
                 }
@@ -60,8 +57,6 @@ struct PathScreen: View {
                     if let current, currentVisible == false {
                         Button {
                             selectedNode = nil
-                            // 手动滚动不会回写 scrolledUnit，它可能还停在当前单元；先清空，再设回去才会真正触发滚动
-                            scrolledUnit = nil
                             locate(current, proxy: proxy, attempt: 0)
                         } label: {
                             Image(systemName: "scope")
@@ -145,12 +140,12 @@ struct PathScreen: View {
         .transition(.scale(scale: 0.9, anchor: below ? .top : .bottom).combined(with: .opacity))
     }
 
-    /// 启动时定位到当前关卡。懒加载列表只认得直接子项：先滚到所在单元，等关卡加载出来再对准；
+    /// 定位到当前关卡。懒加载列表只认得直接子项：先滚到所在单元，等关卡加载出来再对准；
     /// 首屏布局完成的时机因设备而异，所以重试到当前关卡真正出现在屏幕上为止。
     private func locate(_ node: PathNode, proxy: ScrollViewProxy, attempt: Int) {
         guard attempt < 10, currentVisible != true else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            scrolledUnit = node.chapter
+            proxy.scrollTo(node.chapter, anchor: .top)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 proxy.scrollTo(node.id, anchor: .center)
                 locate(node, proxy: proxy, attempt: attempt + 1)
