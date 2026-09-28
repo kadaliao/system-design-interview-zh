@@ -36,9 +36,21 @@ struct PathScreen: View {
                     .scrollTargetLayout()
                     .readableWidth()
                     .padding(.bottom, 40)
+                    // 点关卡之间的空白处收起介绍卡片
+                    .background { Color.clear.contentShape(Rectangle()).onTapGesture { selectedNode = nil } }
                 }
                 .scrollIndicators(.hidden)
                 .scrollPosition(id: $scrolledUnit, anchor: .top)
+                .onScrollPhaseChange { _, phase in
+                    if phase == .interacting { selectedNode = nil }
+                }
+                .overlayPreferenceValue(SelectedNodeKey.self) { anchor in
+                    GeometryReader { geo in
+                        if let anchor, let id = selectedNode, let node = store.pathNodes.first(where: { $0.id == id }) {
+                            nodeCard(node, state: states[node.id] ?? .locked, rect: geo[anchor], in: geo.size)
+                        }
+                    }
+                }
                 .onAppear {
                     guard !didInitialScroll, let current else { return }
                     didInitialScroll = true
@@ -47,7 +59,10 @@ struct PathScreen: View {
                 .overlay(alignment: .bottomTrailing) {
                     if let current, currentVisible == false {
                         Button {
-                            withAnimation { proxy.scrollTo(current.id, anchor: .center) }
+                            selectedNode = nil
+                            // 手动滚动不会回写 scrolledUnit，它可能还停在当前单元；先清空，再设回去才会真正触发滚动
+                            scrolledUnit = nil
+                            locate(current, proxy: proxy, attempt: 0)
                         } label: {
                             Image(systemName: "scope")
                                 .font(.system(size: 18, weight: .bold))
@@ -80,10 +95,11 @@ struct PathScreen: View {
                 ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
                     PathNodeView(node: node, state: states[node.id] ?? .locked, colors: colors,
                                  isSelected: selectedNode == node.id,
-                                 onTap: { selectedNode = selectedNode == node.id ? nil : node.id },
-                                 onStart: { start(node, chapter: chapter) },
-                                 onDismiss: { selectedNode = nil })
+                                 onTap: {
+                                     withAnimation(.spring(duration: 0.25)) { selectedNode = selectedNode == node.id ? nil : node.id }
+                                 })
                         .offset(x: zigzag(index, mirrored: chapter.number.isMultiple(of: 2)))
+                        .anchorPreference(key: SelectedNodeKey.self, value: .bounds) { selectedNode == node.id ? $0 : nil }
                         .id(node.id)
                         .onScrollVisibilityChange(threshold: 0.3) { visible in
                             if states[node.id] == .current { currentVisible = visible }
@@ -106,6 +122,27 @@ struct PathScreen: View {
                 guideChapter = chapter
             }
         }
+    }
+
+    /// 关卡介绍卡片：浮在路径上层，不改变布局也不滚动；下方放得下就放在关卡下方，否则放在上方，箭头指向关卡。
+    private func nodeCard(_ node: PathNode, state: NodeState, rect: CGRect, in size: CGSize) -> some View {
+        let below = size.height - rect.maxY >= min(rect.minY, 240)
+        let width = min(size.width - 32, 340)
+        let sectionIndex = store.library.course.sections.firstIndex { $0.chapters.contains(node.chapter) } ?? 0
+        let chapter = store.library.chapter(node.chapter)
+        // 锚点取的是布局位置，不含关卡左右摆动的 offset，这里补上
+        let index = store.pathNodes.filter { $0.chapter == node.chapter }.firstIndex { $0.id == node.id } ?? 0
+        let nodeX = rect.midX + zigzag(index, mirrored: node.chapter.isMultiple(of: 2))
+        return NodeCard(node: node, state: state, colors: Palette.section(sectionIndex),
+                        arrowX: min(max(nodeX - size.width / 2, -width / 2 + 28), width / 2 - 28),
+                        arrowOnTop: below) {
+            if let chapter { start(node, chapter: chapter) }
+        }
+        .frame(width: width)
+        .frame(width: size.width, height: max(0, below ? size.height - rect.maxY - 14 : rect.minY - 14),
+               alignment: below ? .top : .bottom)
+        .offset(y: below ? rect.maxY + 14 : 0)
+        .transition(.scale(scale: 0.9, anchor: below ? .top : .bottom).combined(with: .opacity))
     }
 
     /// 启动时定位到当前关卡。懒加载列表只认得直接子项：先滚到所在单元，等关卡加载出来再对准；
@@ -222,8 +259,6 @@ struct PathNodeView: View {
     let colors: (Color, Color)
     let isSelected: Bool
     let onTap: () -> Void
-    let onStart: () -> Void
-    let onDismiss: () -> Void
     @State private var bounce = false
 
     private var isTest: Bool { if case .unitTest = node.kind { true } else { false } }
@@ -268,10 +303,6 @@ struct PathNodeView: View {
                     .onAppear { bounce = true }
                     .allowsHitTesting(false)
             }
-        }
-        .popover(isPresented: Binding(get: { isSelected }, set: { if !$0 { onDismiss() } }), arrowEdge: .bottom) {
-            NodePopover(node: node, state: state, colors: colors, onStart: onStart)
-                .presentationCompactAdaptation(.popover)
         }
         .accessibilityLabel("\(node.title)，\(stateLabel)")
     }
@@ -331,13 +362,25 @@ private struct StartBubble: View {
     }
 }
 
-private struct NodePopover: View {
+/// 选中关卡的位置，交给路径上层画介绍卡片。
+private struct SelectedNodeKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
+    }
+}
+
+private struct NodeCard: View {
     let node: PathNode
     let state: NodeState
     let colors: (Color, Color)
+    /// 箭头相对卡片中线的横向偏移。
+    let arrowX: CGFloat
+    let arrowOnTop: Bool
     let onStart: () -> Void
 
     var body: some View {
+        let fill = state == .locked ? Palette.surface : colors.0
         VStack(alignment: .leading, spacing: 10) {
             Text(node.title)
                 .font(.rounded(19, .heavy))
@@ -360,8 +403,21 @@ private struct NodePopover: View {
         }
         .foregroundStyle(state == .locked ? Palette.secondaryText : .white)
         .padding(16)
-        .frame(width: 290, alignment: .leading)
-        .presentationBackground(state == .locked ? Palette.surface : colors.0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(fill))
+        .overlay(alignment: arrowOnTop ? .top : .bottom) {
+            CardArrow(pointsUp: arrowOnTop)
+                .fill(fill)
+                .frame(width: 24, height: 12)
+                .offset(x: arrowX, y: arrowOnTop ? -11 : 11)
+        }
+        .overlay {
+            if state == .locked {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Palette.border, lineWidth: 1.5)
+            }
+        }
+        .shadow(color: .black.opacity(0.14), radius: 14, y: 6)
+        .accessibilityElement(children: .contain)
     }
 
     private var buttonTitle: String {
@@ -371,6 +427,25 @@ private struct NodePopover: View {
         case .cards: "开始口述"
         case .unitTest: state == .completed ? "再测一次 +\(XPRules.unitTest) XP" : "开始测验 +\(XPRules.unitTest) XP"
         }
+    }
+}
+
+private struct CardArrow: Shape {
+    let pointsUp: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if pointsUp {
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }
 
