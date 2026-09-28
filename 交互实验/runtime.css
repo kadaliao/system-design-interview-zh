@@ -29,7 +29,6 @@
 .sdl-scen-label{font-size:12px;color:var(--lab-muted);margin:0 0 6px;font-weight:650}
 .sdl-chips{display:flex;flex-wrap:wrap;gap:6px}
 .sdl-chips button{font-size:13px;border-radius:999px;padding:3px 12px}
-.sdl-chips button .done{color:var(--lab-ok);margin-left:4px;font-weight:700}
 .sdl-card{margin:10px 0 10px;padding:10px 14px;border-radius:10px;background:var(--lab-soft);font-size:14px}
 .sdl-card[hidden]{display:none}
 .sdl-card p{margin:4px 0}
@@ -43,6 +42,12 @@
 .sdl-body{padding:14px 20px 6px}
 .sdl-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 18px;margin-bottom:12px}
 .sdl-controls:empty{display:none}
+/* 选中预设场景时：控件区换成一行说明，舞台里的控件变灰锁定 */
+.sdl-frame.sdl-scen-on .sdl-controls{display:none}
+.sdl-lock{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:0 0 12px;padding:7px 12px;border:1px dashed #b9cbbd;border-radius:10px;background:var(--lab-soft);font-size:13px;color:var(--lab-muted)}
+.sdl-lock[hidden]{display:none}
+.sdl-frame .sdl-lock button{margin-left:auto;font-size:13px;padding:3px 10px}
+.sdl-locked{opacity:.45;pointer-events:none}
 .sdl-ctrl{display:flex;flex-direction:column;gap:2px;font-size:13px;min-width:0}
 .sdl-ctrl .lbl{display:flex;justify-content:space-between;gap:8px;color:var(--lab-muted)}
 .sdl-ctrl .lbl output{color:var(--lab-ink);font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}

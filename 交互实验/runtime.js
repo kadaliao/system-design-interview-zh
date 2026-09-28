@@ -10,11 +10,10 @@ const ABORT={abort:true};
 const STORE='sd-labs:v1';
 const colors={ink:'#23352f',muted:'#66756d',line:'#dbe2da',soft:'#f0f4ed',soft2:'#e6eee2',card:'#fff',paper:'#fcfaf5',accent:'#176b52',accentSoft:'#d4e8d7',ok:'#2f8f5b',okSoft:'#dcefe2',bad:'#c2413b',badSoft:'#f7dedb',warn:'#b7791f',warnSoft:'#f6ead2',info:'#2f6fb3',infoSoft:'#dde9f6',series:['#2f6fb3','#c98a16','#2f8f5b','#b8477a','#1f8a8a','#7b5cb8']};
 
-/* ---------- 本地进度（浏览器存储不可用时静默降级） ---------- */
-let store=(()=>{try{const v=JSON.parse(localStorage.getItem(STORE));if(v&&typeof v==='object')return {labs:v.labs||{},q:v.q||{},draft:v.draft||{}}}catch{}return {labs:{},q:{},draft:{}}})();
+/* ---------- 本地进度：自测自评与答案草稿（浏览器存储不可用时静默降级） ---------- */
+let store=(()=>{try{const v=JSON.parse(localStorage.getItem(STORE));if(v&&typeof v==='object')return {q:v.q||{},draft:v.draft||{}}}catch{}return {q:{},draft:{}}})();
 let saveTimer=0;
 function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(store))}catch{}},120)}
-function labRecord(id){return store.labs[id]||(store.labs[id]={done:[]})}
 
 /* ---------- DOM 工具 ---------- */
 function add(el,kids){for(const k of kids){if(k==null||k===false)continue;if(Array.isArray(k))add(el,k);else el.append(k instanceof Node?k:String(k))}return el}
@@ -148,7 +147,7 @@ class Instance{
   remount(){this.destroy();this.mount()}
   mount(){
     const spec=this.spec,host=this.host,inst=this;
-    this.mode='play';this.stepping=false;this.scen=null;this.clock=0;
+    this.mode='play';this.stepping=false;this.scen=null;this.clock=0;this.ctrlEls=[];
     host.classList.add('sdl-mounted');host.replaceChildren();
     const resetBtn=h('button',{type:'button',title:'恢复初始参数与状态',onclick:()=>inst.remount()},'重置');
     const head=h('header',{class:'sdl-head'},h('div',{class:'sdl-head-text'},
@@ -169,6 +168,8 @@ class Instance{
     if(io)io.observe(frame);
     let logBox=null;
     const ensureLog=()=>{if(!logBox){const ol=h('ol',{reversed:true});logBox=h('details',{class:'sdl-log',open:!!spec.logOpen},h('summary',null,spec.logTitle||'事件日志'),ol);frame.insertBefore(logBox,frame.querySelector('.sdl-foot'));logBox.ol=ol}return logBox};
+    // 控件 API 建出的元素都登记下来：选中预设场景时要锁住放在控件区以外的那些
+    const place=(el,parent)=>{(parent||controls).append(el);inst.ctrlEls.push(el);return el};
     const ctx={
       id:spec.id,chapter:spec.chapter,frame,stage,controls,colors,util,el:h,svgEl:s,attr,
       get visible(){return inst.visible},
@@ -180,7 +181,7 @@ class Instance{
         input.addEventListener('input',()=>{show();o.onInput&&o.onInput(+input.value)});
         input.addEventListener('change',()=>{o.onChange&&o.onChange(+input.value)});
         const el=h('label',{class:'sdl-ctrl'+(o.wide?' wide':'')},h('span',{class:'lbl'},h('span',null,o.label),out),input,o.hint?h('span',{class:'sdl-note'},o.hint):null);
-        (o.parent||controls).append(el);
+        place(el,o.parent);
         return {el,input,get:()=>+input.value,set(v,silent){input.value=v;show();if(!silent){o.onInput&&o.onInput(+input.value);o.onChange&&o.onChange(+input.value)}}};
       },
       select(o){
@@ -189,14 +190,14 @@ class Instance{
         if(o.value!=null)sel.value=o.value;
         sel.addEventListener('change',()=>o.onChange&&o.onChange(sel.value));
         const el=h('label',{class:'sdl-ctrl'+(o.wide?' wide':'')},h('span',{class:'lbl'},h('span',null,o.label)),sel);
-        (o.parent||controls).append(el);
+        place(el,o.parent);
         return {el,input:sel,get:()=>sel.value,set(v,silent){sel.value=v;if(!silent)o.onChange&&o.onChange(sel.value)}};
       },
       toggle(o){
         const input=h('input',{type:'checkbox',checked:!!o.value});
         input.addEventListener('change',()=>o.onChange&&o.onChange(input.checked));
         const el=h('label',{class:'sdl-ctrl sdl-toggle'+(o.wide?' wide':'')},input,h('span',null,o.label));
-        (o.parent||controls).append(el);
+        place(el,o.parent);
         return {el,input,get:()=>input.checked,set(v,silent){input.checked=!!v;if(!silent)o.onChange&&o.onChange(input.checked)}};
       },
       /** 分段按钮组：options 为 [值, 文本] 数组。 */
@@ -204,11 +205,11 @@ class Instance{
         const row=h('div',{class:'sdl-btnrow',role:'group','aria-label':o.label});let value=o.value;const btns=new Map();
         for(const opt of o.options){const [v,l]=Array.isArray(opt)?opt:[opt.value,opt.label];const b=h('button',{type:'button','aria-pressed':String(v===value),onclick:()=>api.set(v)},l);btns.set(v,b);row.append(b)}
         const el=h('div',{class:'sdl-ctrl'+(o.wide?' wide':'')},o.label?h('span',{class:'lbl'},h('span',null,o.label)):null,row);
-        (o.parent||controls).append(el);
+        place(el,o.parent);
         const api={el,get:()=>value,set(v,silent){value=v;for(const [k,b] of btns)b.setAttribute('aria-pressed',String(k===v));if(!silent)o.onChange&&o.onChange(v)}};
         return api;
       },
-      button(label,onclick,o={}){const b=h('button',{type:'button',class:[o.primary?'primary':'',o.danger?'danger':''].join(' ').trim()||null,title:o.title,onclick});b.textContent=label;if(o.parent!==null)(o.parent||ctx.buttonRow()).append(b);return b},
+      button(label,onclick,o={}){const b=h('button',{type:'button',class:[o.primary?'primary':'',o.danger?'danger':''].join(' ').trim()||null,title:o.title,onclick});b.textContent=label;inst.ctrlEls.push(b);if(o.parent!==null)(o.parent||ctx.buttonRow()).append(b);return b},
       /** 控件区里的一行按钮（重复调用返回同一行，除非传 fresh）。 */
       buttonRow(fresh,parent){if(fresh||!ctx._row){ctx._row=h('div',{class:'sdl-btnrow wide'});(parent||controls).append(ctx._row)}return ctx._row},
       stats(defs){
@@ -238,38 +239,48 @@ class Instance{
     try{const ret=spec.mount(ctx);if(ret&&typeof ret.destroy==='function')this.cleanups.push(ret.destroy)}
     catch(e){console.error('[SDLab]',spec.id,e);frame.append(h('div',{class:'sdl-error'},'实验加载失败：'+(e&&e.message||e)))}
     this.updateTransport();
-    const rec=labRecord(spec.id);rec.seen=rec.seen||Date.now();save();
   }
 }
 
 function renderScenarios(inst,box,list){
   box.hidden=false;box.replaceChildren();
-  const rec=labRecord(inst.spec.id);
   const stepping=inst.spec.transport!==false;
+  const controls=inst.ctx.controls;
   const chips=h('div',{class:'sdl-chips',role:'group','aria-label':'预设场景'});
   const card=h('div',{class:'sdl-card',hidden:true});
   box.append(h('p',{class:'sdl-scen-label'},stepping?'预设场景：先预测，再逐步运行':'预设场景：先预测，再运行'),chips,card);
   const S=inst.scen={active:null,running:false,done:false,steps:0};
   const btns=list.map(sc=>{
-    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>S.active===sc?deselect():select(sc)},sc.label,rec.done.includes(sc.id)?h('span',{class:'done','aria-label':'已完成'},'✓'):null);
+    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>S.active===sc?deselect():select(sc)},sc.label);
     chips.append(b);return b;
   });
-  /** 收起场景卡、回到自由探索；正在运行的场景随之停止，实验保留当前状态。 */
+  /* 场景自己设定策略和参数：选中场景时收起控件区、锁住放在舞台里的控件，
+     免得手动选择与场景互相打架；收起场景后恢复，参数停在场景留下的值。 */
+  inst.lockNote?.remove();
+  const lockNote=inst.lockNote=h('div',{class:'sdl-lock',hidden:true},h('span',null,'参数由预设场景设定'),h('button',{type:'button',onclick:()=>deselect()},'收起场景，手动调整'));
+  controls.before(lockNote);
+  function lock(on){
+    inst.frame.classList.toggle('sdl-scen-on',on);
+    lockNote.hidden=!on||!controls.childElementCount;
+    for(const el of inst.ctrlEls)if(!controls.contains(el)){el.inert=on;el.classList.toggle('sdl-locked',on)}
+  }
+  /** 收起场景卡、回到手动调整；正在运行的场景随之停止，实验保留当前状态。 */
   function deselect(){
     inst.abort();Object.assign(S,{active:null,running:false,done:false,steps:0});
     btns.forEach(b=>b.setAttribute('aria-pressed','false'));
-    card.hidden=true;card.replaceChildren();delete card.dataset.state;inst.updateTransport();
+    card.hidden=true;card.replaceChildren();delete card.dataset.state;lock(false);inst.updateTransport();
   }
   function select(sc){
     inst.abort();Object.assign(S,{active:sc,running:false,done:false,steps:0});
     btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(list[i]===sc)));
+    lock(true);
     const status=h('span',{class:'status'});
     const insight=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
     // 默认逐步：开始后停在第一步，由「下一步」推进；「自动播放」按当前倍速连续运行
     const stepBtn=stepping?h('button',{type:'button',class:'primary','data-act':'start',title:'开始后停住，由底部「下一步」逐步推进'},'逐步开始'):null;
     const playBtn=h('button',{type:'button',class:stepping?null:'primary','data-act':'play'},stepping?'自动播放':'运行场景');
     card.replaceChildren();delete card.dataset.state;
-    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},stepBtn,playBtn,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到自由探索',onclick:deselect},'收起')),insight]);
+    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},stepBtn,playBtn,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到手动调整',onclick:deselect},'收起')),insight]);
     card.hidden=false;inst.updateTransport();
     async function start(mode){
       inst.abort();const token=inst.token;
@@ -287,7 +298,6 @@ function renderScenarios(inst,box,list){
         Object.assign(S,{running:false,done:true});card.dataset.state='done';
         if(stepping)inst.setMode('pause');   // 定格在结束状态，方便对照「观察」
         insight.hidden=!sc.insight;
-        if(!rec.done.includes(sc.id)){rec.done.push(sc.id);save();const b=btns[list.indexOf(sc)];b.append(h('span',{class:'done','aria-label':'已完成'},'✓'))}
         inst.ctx.announce('场景完成：'+sc.label);
       }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent='运行出错，请重置后再试';card.dataset.state='error'}}
       finally{if(token===inst.token){S.running=false;if(!stepping){playBtn.disabled=false;playBtn.textContent='再运行一次'}inst.updateTransport()}}
@@ -435,9 +445,8 @@ function badge(docId){
   else if(docId==='d29')qs=questions();
   if(!labsN&&!qs.length)return null;
   const good=qs.filter(q=>store.q[q.key]==='good').length;
-  const labDone=[...art.querySelectorAll('.sd-lab[data-lab]')].filter(el=>(store.labs[el.dataset.lab]?.done||[]).length).length;
   const b=h('span',{class:'sdl-badge'});
-  if(labsN)b.append(h('span',{class:labDone?'on':null},`实验 ${labDone?labDone+'/':''}${labsN}`));
+  if(labsN)b.append(h('span',null,`实验 ${labsN}`));
   if(labsN&&qs.length)b.append(' · ');
   if(qs.length)b.append(h('span',{class:good?'on':null},`自测 ${good}/${qs.length}`));
   return b;

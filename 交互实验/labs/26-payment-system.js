@@ -278,7 +278,7 @@ SDLab.define({
         run:wrap(async()=>{prepare({policy:'samekey',fault:'resplost',hook:'normal',dedupe:true});await pay();await sleep(1500);await reconcile()})},
       {id:'dup-webhook',label:'重复 webhook 遇上非幂等入账',
         ask:'超时后先查询 PSP，查到已成功；PSP 又把 webhook 重复投递了 3 次。如果钱包入账时不检查 wallet_updated，卖家钱包会入账多少？',
-        insight:'查询结果入账 1 次，3 个重复 webhook 又各入账 1 次：钱包 $12.60、账本凭证 4 张，而买家只被扣 $3.15。对账发现内部多记 $9.45，只能追加冲正凭证。消息被重复投递是常态，消费端要按 payment_order_id 去重；打开「去重」开关后再点「发起支付」，钱包只入账 $3.15。',
+        insight:'查询结果入账 1 次，3 个重复 webhook 又各入账 1 次：钱包 $12.60、账本凭证 4 张，而买家只被扣 $3.15。对账发现内部多记 $9.45，只能追加冲正凭证。消息被重复投递是常态，消费端要按 payment_order_id 去重；收起场景，打开「去重」开关后再点「发起支付」，钱包只入账 $3.15。',
         run:wrap(async()=>{prepare({policy:'query',fault:'resplost',hook:'dup',dedupe:false});await pay();await sleep(4000);await reconcile()})},
       {id:'recon',label:'PSP 宕机，靠对账收敛',
         ask:'PSP 扣款成功后立刻宕机：响应丢了，webhook 发不出来，3 次重试（退避 0.5、1、2 秒）也全部超时。订单最后停在什么状态？夜间对账怎么处理？',

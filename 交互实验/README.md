@@ -1,8 +1,8 @@
 # 交互实验总览
 
-每章正文里嵌入了可操作的小实验：拖动参数、运行预设场景，亲眼看到机制在突发、并发和故障下怎样表现。每个实验都有几个「预设场景」，先读题预测结果，再点运行对照。每章末尾还有自测练习卡，第 29 章顶部是跨章节的练习模式。
+每章正文里嵌入了可操作的小实验：拖动参数、运行预设场景，亲眼看到机制在突发、并发和故障下怎样表现。每个实验都有几个「预设场景」，先读题预测结果，再点运行对照；选中场景时参数由场景设定，收起场景后可以接着手动调整。每章末尾还有自测练习卡，第 29 章顶部是跨章节的练习模式。
 
-实验只在[在线阅读版](https://kadaliao.github.io/system-design-interview-zh/)或本地打开的 `index.html` 中可操作；在 GitHub 上看到的是一行文字说明。实验进度、自测自评和答案草稿只保存在你自己的浏览器里（localStorage），清除站点数据后会丢失。
+实验只在[在线阅读版](https://kadaliao.github.io/system-design-interview-zh/)或本地打开的 `index.html` 中可操作；在 GitHub 上看到的是一行文字说明。自测自评和答案草稿只保存在你自己的浏览器里（localStorage），清除站点数据后会丢失。
 
 ## 实验清单
 
@@ -97,7 +97,7 @@ SDLab.define({
 - 控件：`ctx.slider/select/toggle/segmented/button`。
 - 统计与日志：`ctx.stats([...]).set(key,值,tone)`、`ctx.log(文本,tone)`。
 - 时间：`ctx.loop((dt,秒)=>…)` 是只在可见时运行的动画循环；`await ctx.wait(毫秒)` 按可见时间等待，重置或切换场景会中断，自己捕获时用 `SDLab.isAbort(e)` 区分。
-- 场景：`ctx.scenarios([{id,label,ask,insight,run}])`。
+- 场景：`ctx.scenarios([{id,label,ask,insight,run}])`。选中场景时运行时会收起控件区、锁住放在别处的控件，参数只能由 `run` 设定；收起场景后控件恢复，停在场景留下的值。
 - 其他：`ctx.css(key,样式)`（选择器加实验前缀）、`ctx.onResize(w=>…)`、`ctx.colors`、`util.rng(种子)`。
 
 右上角「重置」会整体重新挂载实验。
