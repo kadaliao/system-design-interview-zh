@@ -81,6 +81,7 @@ const io='IntersectionObserver' in window?new IntersectionObserver(entries=>{for
 
 /* ---------- 播放控制：倍速偏好全站共用；单步推进到下一个节拍，至少 0.2 秒、至多 1 秒实验时间 ---------- */
 const SPEEDS=[0.25,0.5,1,2],STEP_MIN=200,STEP_MAX=1000,CHUNK=1000/60;
+const narrow=matchMedia('(max-width: 760px)');
 let speedPref=(()=>{try{const v=+localStorage.getItem('sd-lab-speed');return SPEEDS.includes(v)?v:1}catch{return 1}})();
 function setSpeedPref(v){speedPref=v;try{localStorage.setItem('sd-lab-speed',String(v))}catch{}for(const i of live){i.speed=v;i.updateTransport()}}
 const ICON={play:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>',pause:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4.2" height="14" rx="1" fill="currentColor"/><rect x="13.8" y="5" width="4.2" height="14" rx="1" fill="currentColor"/></svg>',step:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5v14l10.5-7z" fill="currentColor"/><rect x="16.5" y="5" width="3" height="14" rx="1" fill="currentColor"/></svg>'};
@@ -120,8 +121,10 @@ class Instance{
     const step=h('button',{type:'button','data-act':'step',title:'推进一步（至多 1 秒实验时间）',onclick:()=>inst.stepOnce()});step.innerHTML=ICON.step+'<span>下一步</span>';
     const spd=new Map(SPEEDS.map(v=>[v,h('button',{type:'button',onclick:()=>setSpeedPref(v)},v+'×')]));
     const status=h('span',{class:'tst','aria-live':'polite'});
-    const el=h('div',{class:'sdl-transport',role:'group','aria-label':'播放控制'},toggle,step,h('span',{class:'spd'},h('span',{class:'lbl'},'速度'),[...spd.values()]),status);
-    this.transport={el,toggle,step,spd,status};
+    // 场景结束时「观察」出现在场景卡里；手机上场景卡往往已滚出屏幕，给一个回去看的入口
+    const insight=h('button',{type:'button','data-act':'insight',hidden:true,onclick:()=>inst.scen?.insightEl?.scrollIntoView({behavior:'smooth',block:'center'})},'看观察 ↑');
+    const el=h('div',{class:'sdl-transport',role:'group','aria-label':'播放控制'},toggle,step,h('span',{class:'spd'},h('span',{class:'lbl'},'速度'),[...spd.values()]),insight,status);
+    this.transport={el,toggle,step,spd,status,insight};
     // 暂停时在实验里点按钮、拖滑块，时间不动，但重画一次界面
     this.frame.addEventListener('input',()=>{if(inst.mode==='pause'&&!inst.stepping)requestAnimationFrame(()=>inst.renderPass())});
     this.frame.addEventListener('click',e=>{if(inst.mode==='pause'&&!inst.stepping&&!el.contains(e.target))requestAnimationFrame(()=>inst.renderPass())});
@@ -136,6 +139,7 @@ class Instance{
     t.toggle.setAttribute('aria-pressed',String(playing));t.toggle.title=playing?'暂停':'连续播放';
     t.step.disabled=this.stepping||!this.hasWork();
     for(const [v,b] of t.spd)b.setAttribute('aria-pressed',String(v===this.speed));
+    t.insight.hidden=!(S&&S.done&&S.insightEl&&!S.insightEl.hidden);
     t.status.textContent=S&&S.running?(playing?'场景播放中':(S.steps?`已推进 ${S.steps} 步 · 点「下一步」继续`:'已开始 · 点「下一步」推进')):S&&S.done?'场景结束 · 已暂停':(playing?'播放中':'已暂停');
   }
   abort(){this.token++;const w=this.waits;this.waits=[];for(const x of w)x.reject(ABORT)}
@@ -275,7 +279,7 @@ function renderScenarios(inst,box,list){
     btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(list[i]===sc)));
     lock(true);
     const status=h('span',{class:'status'});
-    const insight=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
+    const insight=S.insightEl=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
     // 默认逐步：开始后停在第一步，由「下一步」推进；「自动播放」按当前倍速连续运行
     const stepBtn=stepping?h('button',{type:'button',class:'primary','data-act':'start',title:'开始后停住，由底部「下一步」逐步推进'},'逐步开始'):null;
     const playBtn=h('button',{type:'button',class:stepping?null:'primary','data-act':'play'},stepping?'自动播放':'运行场景');
@@ -302,8 +306,10 @@ function renderScenarios(inst,box,list){
       }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent='运行出错，请重置后再试';card.dataset.state='error'}}
       finally{if(token===inst.token){S.running=false;if(!stepping){playBtn.disabled=false;playBtn.textContent='再运行一次'}inst.updateTransport()}}
     }
-    if(stepBtn)stepBtn.onclick=()=>start('pause');
-    playBtn.onclick=()=>start('play');
+    /** 手机上场景卡和舞台隔得远：点了开始就把舞台滚进视野，边点「下一步」边看变化。 */
+    function reveal(){const st=inst.ctx.stage;if(narrow.matches&&st.getBoundingClientRect().top>innerHeight*0.4)st.scrollIntoView({behavior:'smooth',block:'start'})}
+    if(stepBtn)stepBtn.onclick=()=>{start('pause');reveal()};
+    playBtn.onclick=()=>{start('play');reveal()};
     if(sc.autorun)start('play');
   }
 }

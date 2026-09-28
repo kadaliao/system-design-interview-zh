@@ -23,6 +23,10 @@ table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow:
 th,td{text-align:left;padding:8px 10px;border:1px solid #dbe2da}th{background:#eaf0e5}
 code{font-family:ui-monospace,SFMono-Regular,monospace;background:#eef2ec;border-radius:4px;padding:2px 4px;font-size:.88em}
 .sd-lab{margin:0 !important}
+/* App 导航栏已显示实验标题；网页视图延伸到屏幕底边，播放控制条让出主屏幕指示条 */
+.sdl-kicker,.sdl-title{display:none}
+.sdl-stage{scroll-margin-top:10px}
+.sdl-frame .sdl-transport{padding-bottom:calc(7px + env(safe-area-inset-bottom))}
 .error{color:#b42318;padding:20px}
 :root[data-theme=dark]{color-scheme:dark}
 :root[data-theme=dark] body{background:#121614;color:#d3dbd4}

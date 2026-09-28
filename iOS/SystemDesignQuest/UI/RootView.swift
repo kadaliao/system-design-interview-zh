@@ -42,7 +42,7 @@ struct RootView: View {
 
     @State private var dismissedWarning = false
 
-    /// 截图与调试用：`-tab practice|profile`、`-openLesson c04-01`、`-openExercises c04-01-01,c04-04-03`。
+    /// 截图与调试用：`-tab practice|profile`、`-openLesson c04-01`、`-openExercises c04-01-01,c04-04-03`、`-openLab rate-limiter-race`。
     private func applyLaunchArguments() {
         let args = ProcessInfo.processInfo.arguments
         func value(_ flag: String) -> String? {
@@ -58,6 +58,9 @@ struct RootView: View {
         if let ids = value("-openExercises") {
             let exercises = ids.split(separator: ",").compactMap { store.library.exercise(String($0)) }
             router.screen = .session(LessonSession(kind: .practice, exercises: exercises, seed: 1), title: "调试")
+        }
+        if let id = value("-openLab"), let lab = store.library.course.chapters.flatMap(\.labs).first(where: { $0.id == id }) {
+            router.openLab(lab)
         }
     }
 }

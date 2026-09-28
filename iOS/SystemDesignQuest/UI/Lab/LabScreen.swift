@@ -11,10 +11,10 @@ struct LabScreen: View {
 
     var body: some View {
         NavigationStack {
+            // 网页视图延伸到屏幕底边：实验的播放控制条固定在底部，手机上不用滚到最后才能点「下一步」
             LabWebView(file: lab.file, labID: lab.id, dark: colorScheme == .dark)
                 .id(colorScheme)
                 .ignoresSafeArea(edges: .bottom)
-                .navigationTitle(lab.title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -25,35 +25,54 @@ struct LabScreen: View {
                         }
                         .accessibilityLabel("关闭")
                     }
+                    ToolbarItem(placement: .principal) {
+                        Text(lab.title)
+                            .font(.rounded(15, .bold))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.85)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        completeButton
+                    }
                 }
-                .safeAreaInset(edge: .bottom) {
-                    bottomBar
+                .overlay(alignment: .top) {
+                    if let celebration {
+                        Label("实验完成，获得 \(celebration.xp) XP", systemImage: "checkmark.circle.fill")
+                            .font(.rounded(15, .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Capsule().fill(Palette.green))
+                            .padding(.top, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .task {
+                                try? await Task.sleep(for: .seconds(2.5))
+                                withAnimation { self.celebration = nil }
+                            }
+                    }
                 }
         }
     }
 
-    private var bottomBar: some View {
-        VStack(spacing: 8) {
-            if let celebration {
-                Label("实验完成，获得 \(celebration.xp) XP", systemImage: "checkmark.circle.fill")
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(Palette.correctText)
+    @ViewBuilder
+    private var completeButton: some View {
+        if store.isLabCompleted(lab) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(Palette.green)
+                .accessibilityLabel("实验已完成")
+        } else {
+            Button {
+                withAnimation { celebration = store.completeLab(lab) }
+                Haptics.success()
+            } label: {
+                Text("做完了").font(.rounded(15, .heavy)).foregroundStyle(.white)
             }
-            if store.isLabCompleted(lab) {
-                Button("返回") { dismiss() }
-                    .buttonStyle(ChunkyButtonStyle(fill: Palette.card, shadow: Palette.border, foreground: Palette.blue, height: 46))
-            } else {
-                Button("我做完了 +\(XPRules.lab) XP") {
-                    celebration = store.completeLab(lab)
-                    Haptics.success()
-                }
-                .buttonStyle(ChunkyButtonStyle(height: 46))
-            }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.green)
+            .accessibilityLabel("我做完了，获得 \(XPRules.lab) XP")
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
-        .background(.bar)
     }
 }
 
