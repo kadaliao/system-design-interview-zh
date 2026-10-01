@@ -57,7 +57,7 @@ private final class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         contentInsetAdjustmentBehavior = .never
         alwaysBounceVertical = true
         imageView.isAccessibilityElement = true
-        imageView.accessibilityLabel = "图片，双指缩放，双击放大或还原"
+        imageView.accessibilityLabel = String(localized: "图片，双指缩放，双击放大或还原")
         addSubview(imageView)
         contentSize = image.size
 

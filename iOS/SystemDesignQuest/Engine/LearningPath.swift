@@ -24,9 +24,9 @@ struct PathNode: Identifiable, Hashable, Sendable {
     var title: String {
         switch kind {
         case let .lesson(lesson): lesson.title
-        case let .labs(labs): labs.count == 1 ? "交互实验" : "交互实验 ×\(labs.count)"
-        case let .cards(cards): "口述练习 ×\(cards.count)"
-        case .unitTest: "单元测验"
+        case let .labs(labs): labs.count == 1 ? String(localized: "交互实验") : String(localized: "交互实验 ×\(labs.count)")
+        case let .cards(cards): String(localized: "口述练习 ×\(cards.count)")
+        case .unitTest: String(localized: "单元测验")
         }
     }
 
@@ -34,8 +34,8 @@ struct PathNode: Identifiable, Hashable, Sendable {
         switch kind {
         case let .lesson(lesson): lesson.summary
         case let .labs(labs): labs.map(\.title).joined(separator: "；")
-        case .cards: "合上书，把答案讲出来，再对照参考答案自评"
-        case .unitTest: "从本单元各课抽 \(SessionBuilder.unitTestSize) 题，全部答对即通关"
+        case .cards: String(localized: "合上书，把答案讲出来，再对照参考答案自评")
+        case .unitTest: String(localized: "从本单元各课抽 \(SessionBuilder.unitTestSize) 题，全部答对即通关")
         }
     }
 
@@ -55,6 +55,8 @@ enum NodeState: Equatable, Sendable {
     /// 当前该学的关卡（第一个未完成的必修关卡）。
     case current
     case completed
+    /// 需要完整版的章节：不受自由模式影响，点按弹出付费墙。
+    case premium
 }
 
 enum LearningPath {
@@ -78,11 +80,17 @@ enum LearningPath {
     }
 
     /// 计算整条路径上每个关卡的状态。关卡解锁条件：它之前的必修关卡都已完成（自由模式下全部解锁）。
-    static func states(for nodes: [PathNode], isCompleted: (PathNode) -> Bool, freeMode: Bool) -> [String: NodeState] {
+    /// 未购买的章节一律是 `.premium`，不占当前关卡、也不挡后面的关卡；自由模式不能绕过它。
+    static func states(for nodes: [PathNode], isCompleted: (PathNode) -> Bool, freeMode: Bool,
+                       isChapterUnlocked: (Int) -> Bool = { _ in true }) -> [String: NodeState] {
         var result: [String: NodeState] = [:]
         var blocked = false
         var currentAssigned = false
         for node in nodes {
+            if !isChapterUnlocked(node.chapter) {
+                result[node.id] = .premium
+                continue
+            }
             let done = isCompleted(node)
             if done {
                 result[node.id] = .completed

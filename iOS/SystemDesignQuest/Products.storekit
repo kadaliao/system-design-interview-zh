@@ -1,0 +1,48 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "zh_CN",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "A7D1C2E4",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "88.00",
+      "familyShareable" : false,
+      "internalID" : "6816876607",
+      "localizations" : [
+        {
+          "description" : "解锁第 2–28 章全部课程、口述卡与视频，一次购买永久使用。",
+          "displayName" : "完整版",
+          "locale" : "zh_Hans"
+        }
+      ],
+      "productID" : "com.kadaliao.SystemDesignQuest.full",
+      "referenceName" : "完整版",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "zh_CN",
+    "_storefront" : "CHN",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "sourceLanguage" : "zh-Hans",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "App 在主屏幕上显示的名称",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Design Quest"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统设计闯关"
+          }
+        }
+      }
+    },
+    "CFBundleName" : {
+      "comment" : "App 的短名称",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Design Quest"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统设计闯关"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

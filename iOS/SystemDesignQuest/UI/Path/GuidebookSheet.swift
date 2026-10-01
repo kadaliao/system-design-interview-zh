@@ -68,6 +68,7 @@ struct GuidebookSheet: View {
                             }
                         }
                     }
+                    VideoEntryButton(chapter: chapter.number)
                     Button {
                         link = WebLink(url: store.library.readerURL(anchor: chapter.docID))
                     } label: {

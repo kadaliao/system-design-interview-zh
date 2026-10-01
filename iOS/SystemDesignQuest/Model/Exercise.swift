@@ -25,24 +25,24 @@ struct Exercise: Identifiable, Sendable, Hashable {
 
     var typeLabel: String {
         switch kind {
-        case .single: "单选"
-        case .multi: "多选"
-        case .judge: "判断"
-        case .fill: "填空"
-        case .order: "排序"
-        case .match: "配对"
+        case .single: String(localized: "单选")
+        case .multi: String(localized: "多选")
+        case .judge: String(localized: "判断")
+        case .fill: String(localized: "填空")
+        case .order: String(localized: "排序")
+        case .match: String(localized: "配对")
         }
     }
 
     /// 题目上方的动作提示，类似多邻国的「选择正确的翻译」。
     var instruction: String {
         switch kind {
-        case .single: "选出正确答案"
-        case .multi: "选出所有正确的选项"
-        case .judge: "这句话对吗？"
-        case .fill: "点选词块，填入空白"
-        case .order: "按正确顺序排列"
-        case .match: "把左右两列配成对"
+        case .single: String(localized: "选出正确答案")
+        case .multi: String(localized: "选出所有正确的选项")
+        case .judge: String(localized: "这句话对吗？")
+        case .fill: String(localized: "点选词块，填入空白")
+        case .order: String(localized: "按正确顺序排列")
+        case .match: String(localized: "把左右两列配成对")
         }
     }
 }

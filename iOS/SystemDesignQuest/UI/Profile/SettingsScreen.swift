@@ -6,10 +6,10 @@ struct SettingsScreen: View {
     @State private var confirmReset = false
     @State private var notificationsDenied = false
 
-    private static let repoURL = URL(string: "https://github.com/kadaliao/system-design-interview-zh")!
-
     var body: some View {
         Form {
+            FullVersionSection()
+
             Section {
                 Picker("每日目标", selection: binding(\.dailyGoal)) {
                     Text("轻松 10").tag(10)
@@ -62,15 +62,20 @@ struct SettingsScreen: View {
                 Text("当天已经学过就不再提醒。")
             }
 
+            VideoCacheSection()
+
             Section("课程") {
-                Link(destination: store.library.course.readerURL) {
+                Link(destination: store.library.readerHomeURL) {
                     Label("在线阅读版", systemImage: "safari")
                 }
-                Link(destination: Self.repoURL) {
+                Link(destination: ReadingLinks.repo(language: store.library.language)) {
                     Label("GitHub 仓库", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
-                LabeledContent("题目", value: "\(store.library.allExercises.count) 道闯关题 · \(store.library.course.cards.count) 张口述卡")
-                LabeledContent("交互实验", value: "\(store.library.chapters.reduce(0) { $0 + $1.labs.count }) 个")
+                Link(destination: ReadingLinks.privacyPolicy(language: store.library.language)) {
+                    Label("隐私政策", systemImage: "hand.raised")
+                }
+                LabeledContent("题目", value: String(localized: "\(store.library.allExercises.count) 道闯关题 · \(store.library.course.cards.count) 张口述卡"))
+                LabeledContent("交互实验", value: store.library.chapters.reduce(0) { $0 + $1.labs.count }, format: .number)
                 LabeledContent("内容版本", value: store.library.course.version)
             }
 
@@ -114,5 +119,31 @@ struct SettingsScreen: View {
                     $0.reminderMinute = parts.minute ?? 0
                 }
             })
+    }
+}
+
+/// 设置页的「完整版」小节：已解锁显示状态，未解锁给出购买和恢复购买。
+private struct FullVersionSection: View {
+    @Environment(Entitlements.self) private var entitlements
+
+    var body: some View {
+        Section {
+            if entitlements.hasFullAccess {
+                Label("已解锁完整版", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(Palette.correctText)
+                Button("恢复购买") { Task { await entitlements.restore() } }
+                    .disabled(entitlements.purchaseState == .restoring)
+            } else {
+                Text("第 1 章免费，其余章节、口述卡与视频需要完整版。一次购买，永久解锁。")
+                    .font(.rounded(15))
+                    .foregroundStyle(Palette.secondaryText)
+                PurchaseControls()
+                    .listRowBackground(Color.clear)
+            }
+        } header: {
+            Text("完整版")
+        }
+        .onDisappear { entitlements.resetTransientState() }
+        .task { if entitlements.product == nil { await entitlements.loadProduct() } }
     }
 }

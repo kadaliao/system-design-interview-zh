@@ -103,7 +103,7 @@ struct LessonResultView: View {
         }
     }
 
-    private var headline: String {
+    private var headline: LocalizedStringKey {
         switch result.kind {
         case .unitTest: "单元通关！"
         case .practice: "练习完成！"
@@ -117,7 +117,7 @@ struct LessonResultView: View {
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
-    private var streakLine: String? {
+    private var streakLine: LocalizedStringKey? {
         switch celebration.streakEvent {
         case .alreadyCounted: nil
         case .started: "连胜开始！明天再来就是 2 天"
@@ -129,7 +129,7 @@ struct LessonResultView: View {
 }
 
 private struct ResultTile: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let symbol: String
     let color: Color

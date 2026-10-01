@@ -20,6 +20,8 @@ final class ProgressStore {
     private(set) var state: ProgressState
     let library: CourseLibrary
     let pathNodes: [PathNode]
+    /// 内容门控：免费章节之外需要完整版。
+    let entitlements: any EntitlementProviding
     /// 存档读取失败时的提示（旧档已另存备份）。
     private(set) var loadWarning: String?
     /// 学习活动变化后回调，用于重新安排每日提醒。
@@ -31,8 +33,10 @@ final class ProgressStore {
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     init(library: CourseLibrary, fileURL: URL? = ProgressStore.defaultFileURL(),
-         calendar: Calendar = .current, clock: @escaping () -> Date = { .now }) {
+         calendar: Calendar = .current, clock: @escaping () -> Date = { .now },
+         entitlements: any EntitlementProviding = StaticEntitlements(hasFullAccess: true)) {
         self.library = library
+        self.entitlements = entitlements
         self.fileURL = fileURL
         self.calendar = calendar
         self.clock = clock
@@ -86,7 +90,8 @@ final class ProgressStore {
     }
 
     func nodeStates() -> [String: NodeState] {
-        LearningPath.states(for: pathNodes, isCompleted: isCompleted, freeMode: state.settings.freeMode)
+        LearningPath.states(for: pathNodes, isCompleted: isCompleted, freeMode: state.settings.freeMode,
+                            isChapterUnlocked: { [entitlements] in entitlements.isUnlocked(chapter: $0) })
     }
 
     func unitProgress(_ chapter: Int) -> (done: Int, total: Int) {
@@ -105,7 +110,8 @@ final class ProgressStore {
     /// 已完成课程里的全部题目，随机练习从这里抽。
     var learnedExercises: [Exercise] {
         library.chapters.flatMap { chapter in
-            chapter.lessons.filter { state.lessons[$0.id] != nil }.flatMap(\.exercises)
+            guard entitlements.isUnlocked(chapter: chapter.number) else { return [Exercise]() }
+            return chapter.lessons.filter { state.lessons[$0.id] != nil }.flatMap(\.exercises)
         }
     }
 
@@ -113,14 +119,19 @@ final class ProgressStore {
     var practicePool: [Exercise] {
         let learned = learnedExercises
         if !learned.isEmpty { return learned }
-        let chapter = currentNode?.chapter ?? library.chapters.first?.number ?? 1
+        var chapter = currentNode?.chapter ?? library.chapters.first?.number ?? 1
+        if !entitlements.isUnlocked(chapter: chapter) { chapter = library.chapters.first?.number ?? 1 }
+        guard entitlements.isUnlocked(chapter: chapter) else { return [] }
         return library.chapter(chapter)?.lessons.first?.exercises ?? []
     }
 
     // MARK: - 错题本
 
     var mistakeIDs: [String] {
-        state.mistakes.sorted { $0.value.due < $1.value.due }.map(\.key).filter { library.exercise($0) != nil }
+        state.mistakes.sorted { $0.value.due < $1.value.due }.map(\.key).filter { id in
+            guard let exercise = library.exercise(id) else { return false }
+            return entitlements.isUnlocked(chapter: exercise.chapter)
+        }
     }
 
     var dueMistakeIDs: [String] {
@@ -137,7 +148,8 @@ final class ProgressStore {
     func dueCards(chapter: Int? = nil) -> [Card] {
         let now = now
         return library.course.cards.filter { card in
-            (chapter == nil || card.chapter == chapter) && (state.cards[card.id]?.isDue(at: now) ?? true)
+            entitlements.isUnlockedCard(card) && (chapter == nil || card.chapter == chapter)
+                && (state.cards[card.id]?.isDue(at: now) ?? true)
         }
     }
 
@@ -302,7 +314,7 @@ final class ProgressStore {
             let backup = url.deletingLastPathComponent()
                 .appending(path: "progress-unreadable-\(Int(Date().timeIntervalSince1970)).json")
             try? FileManager.default.copyItem(at: url, to: backup)
-            loadWarning = "学习记录无法读取，已另存为 \(backup.lastPathComponent)，这次从头开始。"
+            loadWarning = String(localized: "学习记录无法读取，已另存为 \(backup.lastPathComponent)，这次从头开始。")
         }
     }
 

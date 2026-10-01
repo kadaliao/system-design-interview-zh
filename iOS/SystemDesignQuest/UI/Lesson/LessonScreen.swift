@@ -14,7 +14,8 @@ struct LessonScreen: View {
     @State private var link: WebLink?
     @State private var praise = LessonScreen.praises.randomElement()!
 
-    static let praises = ["答对了！", "漂亮！", "正确！", "太棒了！", "思路清楚！", "稳！"]
+    static let praises = [String(localized: "答对了！"), String(localized: "漂亮！"), String(localized: "正确！"),
+                          String(localized: "太棒了！"), String(localized: "思路清楚！"), String(localized: "稳！")]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -124,9 +125,9 @@ struct LessonScreen: View {
         guard let item = session.current, let outcome = session.submit(response) else { return }
         store.record(outcome, for: item.exercise, in: session.kind)
         if case let .match(mistakes) = response, mistakes > 0 {
-            praise = "配完了，错了 \(mistakes) 次"
+            praise = String(localized: "配完了，错了 \(mistakes) 次")
         } else {
-            praise = session.combo >= 3 ? "连对 \(session.combo) 题！" : LessonScreen.praises.randomElement()!
+            praise = session.combo >= 3 ? String(localized: "连对 \(session.combo) 题！") : LessonScreen.praises.randomElement()!
         }
         if outcome.correct { Haptics.success() } else { Haptics.error() }
     }
@@ -188,7 +189,7 @@ struct FeedbackPanel: View {
             HStack(spacing: 10) {
                 Image(systemName: correct ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .font(.system(size: 28, weight: .bold))
-                Text(correct ? praise : "差一点")
+                Text(correct ? praise : String(localized: "差一点"))
                     .font(.rounded(22, .heavy))
                 Spacer()
                 if let onReference {
@@ -219,7 +220,7 @@ struct FeedbackPanel: View {
             }
             .frame(maxHeight: 220)
             .fixedSize(horizontal: false, vertical: true)
-            Button(correct ? "继续" : "知道了") { onContinue() }
+            Button(correct ? continueLabel : gotItLabel) { onContinue() }
                 .buttonStyle(correct ? ChunkyButtonStyle() : ChunkyButtonStyle(fill: Palette.red, shadow: Palette.redShadow))
                 .padding(.top, 4)
         }
@@ -231,6 +232,8 @@ struct FeedbackPanel: View {
     }
 
     private var isMatch: Bool { if case .match = exercise.kind { true } else { false } }
+    private var continueLabel: LocalizedStringKey { "继续" }
+    private var gotItLabel: LocalizedStringKey { "知道了" }
 }
 
 private struct OutOfHeartsInLesson: View {

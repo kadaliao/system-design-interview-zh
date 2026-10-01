@@ -233,10 +233,10 @@ enum CardGrade: Int, Codable, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .again: "没想起来"
-        case .hard: "想起一部分"
-        case .good: "基本讲清"
-        case .easy: "讲得很透"
+        case .again: String(localized: "没想起来")
+        case .hard: String(localized: "想起一部分")
+        case .good: String(localized: "基本讲清")
+        case .easy: String(localized: "讲得很透")
         }
     }
 }

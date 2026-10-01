@@ -13,6 +13,8 @@ settings:
     DEVELOPMENT_TEAM: ""
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_EMIT_LOC_STRINGS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 targets:
   SystemDesignQuest:
     type: application
@@ -21,9 +23,14 @@ targets:
       - path: SystemDesignQuest
         excludes:
           - Resources/Content
+          - Products.storekit
       - path: SystemDesignQuest/Resources/Content
         type: folder
         buildPhase: resources
+    info:
+      path: SystemDesignQuest/Info.plist
+      properties:
+        CFBundleLocalizations: [zh-Hans, en]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kadaliao.SystemDesignQuest
@@ -34,7 +41,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.education
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_CFBundleDevelopmentRegion: zh-Hans
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
@@ -56,6 +63,8 @@ targets:
         BUNDLE_LOADER: $(TEST_HOST)
 schemes:
   SystemDesignQuest:
+    run:
+      storeKitConfiguration: SystemDesignQuest/Products.storekit
     build:
       targets:
         SystemDesignQuest: all

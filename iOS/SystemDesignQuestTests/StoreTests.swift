@@ -216,7 +216,7 @@ struct StoreTests {
 @Suite("内容包")
 struct BundledContentTests {
     @Test func bundledCourseIsComplete() throws {
-        let library = try CourseLibrary.loadBundled()
+        let library = try CourseLibrary.loadBundled(language: .zh)
         let course = library.course
         #expect(course.chapters.map(\.number) == Array(1...28))
         #expect(course.sections.flatMap(\.chapters) == Array(1...28))
@@ -238,7 +238,7 @@ struct BundledContentTests {
     }
 
     @Test func everyExerciseIsAnswerable() throws {
-        let library = try CourseLibrary.loadBundled()
+        let library = try CourseLibrary.loadBundled(language: .zh)
         var ids = Set<String>()
         for exercise in library.allExercises {
             #expect(ids.insert(exercise.id).inserted, "重复编号 \(exercise.id)")

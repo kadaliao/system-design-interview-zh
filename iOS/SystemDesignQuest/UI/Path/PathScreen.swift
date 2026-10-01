@@ -16,6 +16,8 @@ struct PathScreen: View {
     var body: some View {
         let states = store.nodeStates()
         let current = store.pathNodes.first { states[$0.id] == .current }
+        // 免费内容学完后没有当前关卡：定位到第一个需要完整版的必修关卡
+        let focus = current ?? store.pathNodes.first { states[$0.id] == .premium && $0.isRequired }
         VStack(spacing: 0) {
             StatsBar()
             Divider().overlay(Palette.border)
@@ -39,7 +41,7 @@ struct PathScreen: View {
                     .background { Color.clear.contentShape(Rectangle()).onTapGesture { selectedNode = nil } }
                 }
                 .scrollIndicators(.hidden)
-                .opacity(located || current == nil ? 1 : 0)
+                .opacity(located || focus == nil ? 1 : 0)
                 .animation(.easeOut(duration: 0.2), value: located)
                 // 不用 scrollPosition(id:) 绑定：它会在每次重绘时把视图拉回记录的单元，点关卡时整条路径跳动
                 .onScrollPhaseChange { _, phase in
@@ -53,9 +55,9 @@ struct PathScreen: View {
                     }
                 }
                 .onAppear {
-                    guard !didInitialScroll, let current else { return }
+                    guard !didInitialScroll, let focus else { return }
                     didInitialScroll = true
-                    locate(current, proxy: proxy)
+                    locate(focus, proxy: proxy)
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if let current, currentVisible == false {
@@ -95,6 +97,11 @@ struct PathScreen: View {
                     PathNodeView(node: node, state: states[node.id] ?? .locked, colors: colors,
                                  isSelected: selectedNode == node.id,
                                  onTap: {
+                                     if states[node.id] == .premium {
+                                         selectedNode = nil
+                                         router.paywall = .chapter(chapter.number)
+                                         return
+                                     }
                                      withAnimation(.spring(duration: 0.25)) { selectedNode = selectedNode == node.id ? nil : node.id }
                                  })
                         .offset(x: zigzag(index, mirrored: chapter.number.isMultiple(of: 2)))
@@ -117,8 +124,13 @@ struct PathScreen: View {
                     .accessibilityHidden(true)
             }
         } header: {
-            UnitHeader(chapter: chapter, colors: colors, progress: store.unitProgress(chapter.number)) {
-                guideChapter = chapter
+            UnitHeader(chapter: chapter, colors: colors, progress: store.unitProgress(chapter.number),
+                       locked: !store.entitlements.isUnlocked(chapter: chapter.number)) {
+                if store.entitlements.isUnlocked(chapter: chapter.number) {
+                    guideChapter = chapter
+                } else {
+                    router.paywall = .chapter(chapter.number)
+                }
             }
         }
     }
@@ -172,7 +184,7 @@ struct PathScreen: View {
             if labs.count == 1 { router.openLab(labs[0]) } else { labChapter = chapter }
         case let .cards(cards):
             let due = store.cardSession(chapter: chapter.number)
-            router.startCards(due.isEmpty ? cards : due, title: "第 \(chapter.number) 章口述练习")
+            router.startCards(due.isEmpty ? cards : due, title: String(localized: "第 \(chapter.number) 章口述练习"))
         case .unitTest:
             router.startUnitTest(chapter: chapter, store: store)
         }
@@ -211,14 +223,18 @@ struct UnitHeader: View {
     let chapter: Chapter
     let colors: (Color, Color)
     let progress: (done: Int, total: Int)
+    var locked = false
     let onGuide: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("第 \(chapter.number) 单元 · \(progress.done)/\(progress.total)")
-                    .font(.rounded(13, .heavy))
-                    .opacity(0.85)
+                HStack(spacing: 4) {
+                    Text("第 \(chapter.number) 单元 · \(progress.done)/\(progress.total)")
+                    if locked { Image(systemName: "lock.fill") }
+                }
+                .font(.rounded(13, .heavy))
+                .opacity(0.85)
                 Text(chapter.title)
                     .font(.rounded(19, .heavy))
                     .lineLimit(1)
@@ -309,6 +325,7 @@ struct PathNodeView: View {
     private var icon: String {
         switch state {
         case .locked: node.isRequired ? (isTest ? "trophy.fill" : "lock.fill") : node.symbol
+        case .premium: "lock.fill"
         case .completed: isTest ? "trophy.fill" : (node.isRequired ? "checkmark" : node.symbol)
         default: node.symbol
         }
@@ -317,6 +334,7 @@ struct PathNodeView: View {
     private var palette: (Color, Color, Color) {
         switch state {
         case .locked: (Palette.locked, Palette.lockedShadow, Palette.lockedIcon)
+        case .premium: (Palette.locked, Palette.lockedShadow, Palette.gold)
         case .completed where isTest: (Palette.gold, Palette.goldShadow, .white)
         default: (colors.0, colors.1, .white)
         }
@@ -324,10 +342,11 @@ struct PathNodeView: View {
 
     private var stateLabel: String {
         switch state {
-        case .locked: "未解锁"
-        case .available: "可以开始"
-        case .current: "当前关卡"
-        case .completed: "已完成"
+        case .locked: String(localized: "未解锁")
+        case .premium: String(localized: "完整版内容，点按解锁")
+        case .available: String(localized: "可以开始")
+        case .current: String(localized: "当前关卡")
+        case .completed: String(localized: "已完成")
         }
     }
 }
@@ -379,7 +398,7 @@ private struct NodeCard: View {
     let onStart: () -> Void
 
     var body: some View {
-        let fill = state == .locked ? Palette.surface : colors.0
+        let fill = state == .locked || state == .premium ? Palette.surface : colors.0
         VStack(alignment: .leading, spacing: 10) {
             Text(node.title)
                 .font(.rounded(19, .heavy))
@@ -387,7 +406,11 @@ private struct NodeCard: View {
                 .font(.rounded(15))
                 .fixedSize(horizontal: false, vertical: true)
                 .opacity(0.9)
-            if state == .locked {
+            if state == .premium {
+                Label("完整版内容", systemImage: "lock.fill")
+                    .font(.rounded(13, .semibold))
+                    .opacity(0.85)
+            } else if state == .locked {
                 Label("先完成前面的关卡；也可以在「我的 → 设置」里打开自由模式", systemImage: "lock.fill")
                     .font(.rounded(13, .semibold))
                     .opacity(0.85)
@@ -400,7 +423,7 @@ private struct NodeCard: View {
                 .padding(.top, 4)
             }
         }
-        .foregroundStyle(state == .locked ? Palette.secondaryText : .white)
+        .foregroundStyle(state == .locked || state == .premium ? Palette.secondaryText : .white)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(fill))
@@ -419,7 +442,7 @@ private struct NodeCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var buttonTitle: String {
+    private var buttonTitle: LocalizedStringKey {
         switch node.kind {
         case .lesson: state == .completed ? "再练一次 +\(XPRules.lesson) XP" : "开始 +\(XPRules.lesson) XP"
         case .labs: "打开实验"

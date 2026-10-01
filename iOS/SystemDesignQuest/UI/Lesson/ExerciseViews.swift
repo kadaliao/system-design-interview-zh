@@ -161,7 +161,7 @@ private struct JudgeButtons: View {
         }
     }
 
-    private func option(_ value: Bool, title: String, symbol: String) -> some View {
+    private func option(_ value: Bool, title: LocalizedStringKey, symbol: String) -> some View {
         Button {
             Haptics.tap()
             onSelect(value)

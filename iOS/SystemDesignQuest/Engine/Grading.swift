@@ -47,7 +47,7 @@ enum Grader {
         case let .multi(options, answers):
             return answers.sorted().map { options[$0] }.joined(separator: "；")
         case let .judge(answer):
-            return answer ? "正确" : "错误"
+            return answer ? String(localized: "正确") : String(localized: "错误")
         case let .fill(segments, answers, _):
             return segments.map { segment in
                 switch segment {

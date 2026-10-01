@@ -29,6 +29,14 @@ struct PracticeScreen: View {
                         .padding(16)
                     }
                     .buttonStyle(OutlineCardStyle())
+                    if !store.entitlements.hasFullAccess {
+                        Button {
+                            router.paywall = .general
+                        } label: {
+                            Label("解锁完整版，练习覆盖全部章节", systemImage: "lock.open.fill")
+                        }
+                        .buttonStyle(ChunkyButtonStyle(fill: Palette.gold, shadow: Palette.goldShadow))
+                    }
                 }
                 .padding(20)
                 .readableWidth()
@@ -42,10 +50,10 @@ struct PracticeScreen: View {
         let due = store.dueMistakeIDs.count
         let total = store.mistakeIDs.count
         return PracticeCard(
-            symbol: "arrow.uturn.backward.circle.fill", color: Palette.red, title: "错题复习",
-            detail: total == 0 ? "答错的题会自动进入错题本，按 1、3、7、16 天的间隔复习，连续答对 5 次即掌握。"
-                : "\(due) 道到期 · 错题本共 \(total) 道。复习答对升一级，答错回到第一级。",
-            buttonTitle: due > 0 ? "复习 \(min(due, SessionBuilder.mistakeSessionSize)) 道到期错题" : nextDueText,
+            symbol: "arrow.uturn.backward.circle.fill", color: Palette.red, title: String(localized: "错题复习"),
+            detail: total == 0 ? String(localized: "答错的题会自动进入错题本，按 1、3、7、16 天的间隔复习，连续答对 5 次即掌握。")
+                : String(localized: "\(due) 道到期 · 错题本共 \(total) 道。复习答对升一级，答错回到第一级。"),
+            buttonTitle: due > 0 ? String(localized: "复习 \(min(due, SessionBuilder.mistakeSessionSize)) 道到期错题") : nextDueText,
             enabled: due > 0
         ) {
             router.startMistakes(store: store)
@@ -53,19 +61,23 @@ struct PracticeScreen: View {
     }
 
     private var nextDueText: String {
-        guard let next = store.state.mistakes.values.map(\.due).min() else { return "暂无错题" }
-        return "下一道 \(next.formatted(.relative(presentation: .named))) 到期"
+        guard let next = store.state.mistakes.values.map(\.due).min() else { return String(localized: "暂无错题") }
+        return String(localized: "下一道 \(next.formatted(.relative(presentation: .named))) 到期")
     }
 
     private var cardsCard: some View {
         let due = store.dueCards().count
-        let total = store.library.course.cards.count
+        let all = store.library.course.cards.count
+        let total = store.library.course.cards.filter(store.entitlements.isUnlockedCard).count
+        let locked = all - total
         return PracticeCard(
-            symbol: "mic.fill", color: Palette.purple, title: "口述练习",
-            detail: "\(total) 道开放题来自各章自测与复盘。先合上书讲出来，再对照参考答案自评。已掌握 \(store.masteredCardCount)/\(total)，\(due) 张待练。",
-            buttonTitle: "开始口述", enabled: due > 0
+            symbol: "mic.fill", color: Palette.purple, title: String(localized: "口述练习"),
+            detail: locked > 0
+                ? String(localized: "\(total) 道开放题来自各章自测与复盘。先合上书讲出来，再对照参考答案自评。已掌握 \(store.masteredCardCount)/\(total)，\(due) 张待练。完整版再解锁 \(locked) 张。")
+                : String(localized: "\(total) 道开放题来自各章自测与复盘。先合上书讲出来，再对照参考答案自评。已掌握 \(store.masteredCardCount)/\(total)，\(due) 张待练。"),
+            buttonTitle: String(localized: "开始口述"), enabled: due > 0
         ) {
-            router.startCards(store.cardSession(), title: "口述练习")
+            router.startCards(store.cardSession(), title: String(localized: "口述练习"))
         } footer: {
             NavigationLink {
                 CardChapterScreen()
@@ -79,14 +91,22 @@ struct PracticeScreen: View {
         }
     }
 
+    private func practiceDetail(hearts: Bool) -> String {
+        if store.learnedExercises.isEmpty {
+            return String(localized: "学完一课后，就能从学过的题里随机抽 \(SessionBuilder.practiceSize) 道练习。")
+        }
+        let learned = store.learnedExercises.count
+        return hearts
+            ? String(localized: "从学过的 \(learned) 道题里抽 \(SessionBuilder.practiceSize) 道，错题优先。不扣红心，完成还能赚回 1 颗。")
+            : String(localized: "从学过的 \(learned) 道题里抽 \(SessionBuilder.practiceSize) 道，错题优先。不扣红心。")
+    }
+
     private var practiceCard: some View {
         let hearts = store.heartsEnabled && store.hearts < HeartState.maximum
         return PracticeCard(
-            symbol: "dumbbell.fill", color: Palette.blue, title: "随机练习",
-            detail: store.learnedExercises.isEmpty
-                ? "学完一课后，就能从学过的题里随机抽 \(SessionBuilder.practiceSize) 道练习。"
-                : "从学过的 \(store.learnedExercises.count) 道题里抽 \(SessionBuilder.practiceSize) 道，错题优先。不扣红心\(hearts ? "，完成还能赚回 1 颗" : "")。",
-            buttonTitle: "开始练习", enabled: !store.practicePool.isEmpty
+            symbol: "dumbbell.fill", color: Palette.blue, title: String(localized: "随机练习"),
+            detail: practiceDetail(hearts: hearts),
+            buttonTitle: String(localized: "开始练习"), enabled: !store.practicePool.isEmpty
         ) {
             router.startPractice(store: store)
         }
@@ -190,25 +210,28 @@ struct CardChapterScreen: View {
     private var groups: [(chapter: Int, title: String, cards: [Card])] {
         let chapters = Set(store.library.course.cards.map(\.chapter)).sorted { ($0 == 0 ? 99 : $0) < ($1 == 0 ? 99 : $1) }
         return chapters.map { number in
-            let title = number == 0 ? "通用复盘" : "第 \(number) 章 · \(store.library.chapter(number)?.title ?? "")"
+            let title = number == 0 ? String(localized: "通用复盘") : String(localized: "第 \(number) 章 · \(store.library.chapter(number)?.title ?? "")")
             return (number, title, store.library.cards(chapter: number))
         }
     }
 
     private func icon(for card: Card) -> String {
+        guard store.entitlements.isUnlockedCard(card) else { return "lock.fill" }
         guard let memory = store.state.cards[card.id] else { return "circle" }
         return memory.isMastered ? "checkmark.circle.fill" : "circle.lefthalf.filled"
     }
 
     private func color(for card: Card) -> Color {
+        guard store.entitlements.isUnlockedCard(card) else { return Palette.gold }
         guard let memory = store.state.cards[card.id] else { return Palette.lockedIcon }
         return memory.isMastered ? Palette.green : Palette.purple
     }
 
     private func status(for card: Card) -> String {
-        guard let memory = store.state.cards[card.id] else { return "未练过" }
-        if memory.isDue(at: store.now) { return "到期" }
-        return memory.isMastered ? "已掌握" : "\(memory.due.formatted(.relative(presentation: .named)))复习"
+        guard store.entitlements.isUnlockedCard(card) else { return String(localized: "完整版") }
+        guard let memory = store.state.cards[card.id] else { return String(localized: "未练过") }
+        if memory.isDue(at: store.now) { return String(localized: "到期") }
+        return memory.isMastered ? String(localized: "已掌握") : String(localized: "\(memory.due.formatted(.relative(presentation: .named)))复习")
     }
 }
 
@@ -240,7 +263,7 @@ struct MistakeNotebookScreen: View {
                                     HStack(spacing: 8) {
                                         Text(exercise.typeLabel)
                                         BoxMeter(box: memory.box)
-                                        Text(memory.isDue(at: store.now) ? "到期" : memory.due.formatted(.relative(presentation: .named)))
+                                        Text(memory.isDue(at: store.now) ? String(localized: "到期") : memory.due.formatted(.relative(presentation: .named)))
                                     }
                                     .font(.rounded(12))
                                     .foregroundStyle(Palette.secondaryText)

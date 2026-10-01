@@ -73,7 +73,7 @@ struct ProfileScreen: View {
                 Text("\(store.todayXP) / \(store.dailyGoal) XP")
                     .font(.rounded(24, .heavy))
                     .foregroundStyle(Palette.text)
-                Text(store.goalProgress >= 1 ? "今天的目标完成了，明天继续！" : "再得 \(store.dailyGoal - store.todayXP) XP，大约 \(Int(ceil(Double(store.dailyGoal - store.todayXP) / 10))) 课")
+                Text(goalHint)
                     .font(.rounded(14))
                     .foregroundStyle(Palette.secondaryText)
             }
@@ -81,6 +81,13 @@ struct ProfileScreen: View {
         }
         .padding(18)
         .modifier(CardBackground())
+    }
+
+    private var goalHint: LocalizedStringKey {
+        if store.goalProgress >= 1 { return "今天的目标完成了，明天继续！" }
+        let remaining = store.dailyGoal - store.todayXP
+        let lessons = Int(ceil(Double(remaining) / 10))
+        return "再得 \(remaining) XP，大约 \(lessons) 课"
     }
 
     private var weekChart: some View {
@@ -120,9 +127,8 @@ struct ProfileScreen: View {
     }
 
     private func weekday(_ day: DayKey) -> String {
-        if day == store.today { return "今天" }
-        let symbols = ["日", "一", "二", "三", "四", "五", "六"]
-        return "周" + symbols[store.calendar.component(.weekday, from: day.date(in: store.calendar)) - 1]
+        if day == store.today { return String(localized: "今天") }
+        return day.date(in: store.calendar).formatted(.dateTime.weekday(.abbreviated))
     }
 
     private var achievements: some View {
@@ -151,7 +157,7 @@ struct ProfileScreen: View {
                             .lineLimit(2)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(achievement.title)，\(achievement.detail)，\(unlocked ? "已解锁" : "进度 \(achievement.progress(stats))/\(achievement.target)")")
+                    .accessibilityLabel("\(achievement.title)，\(achievement.detail)，\(unlocked ? String(localized: "已解锁") : String(localized: "进度 \(achievement.progress(stats))/\(achievement.target)"))")
                 }
             }
         }
@@ -164,8 +170,8 @@ private struct StatTile: View {
     let symbol: String
     let color: Color
     let value: String
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -266,7 +272,7 @@ private struct StreakCalendar: View {
         .modifier(CardBackground())
     }
 
-    private func legend(_ color: Color, _ text: String) -> some View {
+    private func legend(_ color: Color, _ text: LocalizedStringKey) -> some View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 10, height: 10)
             Text(text)

@@ -46,7 +46,7 @@ struct LabScreen: View {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button {
                                 if let celebration = store.completeLab(lab) {
-                                    router.toast = "实验完成，获得 \(celebration.xp) XP"
+                                    router.toast = String(localized: "实验完成，获得 \(celebration.xp) XP")
                                 }
                                 Haptics.success()
                                 dismiss()
@@ -73,7 +73,7 @@ struct LabWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        let settings: [String: String] = ["file": file, "lab": labID, "theme": dark ? "dark" : "light"]
+        let settings: [String: String] = ["file": file, "lab": labID, "theme": dark ? "dark" : "light", "lang": AppLanguage.current.rawValue]
         let json = (try? JSONSerialization.data(withJSONObject: settings)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
         config.userContentController.addUserScript(
             WKUserScript(source: "window.SDQ_CONFIG=\(json);", injectionTime: .atDocumentStart, forMainFrameOnly: true))

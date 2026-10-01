@@ -1,0 +1,3242 @@
+{
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "%@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@复习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review %@"
+          }
+        }
+      }
+    },
+    "%@，%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@，%@，%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld"
+          }
+        }
+      }
+    },
+    "%lld / %lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld / %2$lld XP"
+          }
+        }
+      }
+    },
+    "%lld 道 · 已掌握 %lld 道": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@n@ · %2$lld mastered"
+          },
+          "substitutions": {
+            "n": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg mistake"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg mistakes"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld 道到期 · 错题本共 %lld 道。复习答对升一级，答错回到第一级。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld due · %2$lld in total. Answer correctly to move up a level; a wrong answer sends it back to level 1."
+          }
+        }
+      }
+    },
+    "%lld 道开放题来自各章自测与复盘。先合上书讲出来，再对照参考答案自评。已掌握 %lld/%lld，%lld 张待练。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open-ended questions (%1$lld) from every chapter’s self-checks and reviews. Close the book, say your answer out loud, then compare with the reference and rate yourself. Mastered %2$lld/%3$lld, %4$lld due."
+          }
+        }
+      }
+    },
+    "%lld 道开放题来自各章自测与复盘。先合上书讲出来，再对照参考答案自评。已掌握 %lld/%lld，%lld 张待练。完整版再解锁 %lld 张。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open-ended questions (%1$lld) from every chapter’s self-checks and reviews. Close the book, say your answer out loud, then compare with the reference and rate yourself. Mastered %2$lld/%3$lld, %4$lld due. Full Version unlocks %5$lld more."
+          }
+        }
+      }
+    },
+    "%lld 道闯关题 · %lld 张口述卡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld questions · %2$lld self-check cards"
+          }
+        }
+      }
+    },
+    "%lld 道题已记入错题本，到「练习」里复习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%#@n@ added to Mistakes. Review in Practice."
+          },
+          "substitutions": {
+            "n": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg question was"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg questions were"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "5 节课全部一次答对": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ace 5 lessons on the first try"
+          }
+        }
+      }
+    },
+    "GitHub 仓库": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub Repository"
+          }
+        }
+      }
+    },
+    "XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XP"
+          }
+        }
+      }
+    },
+    "一周打卡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One Week Strong"
+          }
+        }
+      }
+    },
+    "一次全对": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfect"
+          }
+        }
+      }
+    },
+    "一次答对": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accuracy"
+          }
+        }
+      }
+    },
+    "一次答对率": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First-Try Accuracy"
+          }
+        }
+      }
+    },
+    "一次购买永久使用，后续内容更新免费": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One purchase, yours forever, with free content updates"
+          }
+        }
+      }
+    },
+    "一次购买，永久解锁，无订阅。购买记录跟随你的 Apple 账号，换设备可恢复购买。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One purchase, unlocked forever. No subscription. Your purchase is tied to your Apple Account and can be restored on any device."
+          }
+        }
+      }
+    },
+    "一课约 10～15 XP。每天至少完成一次学习就能续上连胜；每连续 7 天奖励一次连胜保护。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A lesson is worth about 10–15 XP. Finish any lesson each day to keep your streak going. Every 7 days in a row earns a streak freeze."
+          }
+        }
+      }
+    },
+    "三千经验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3,000 XP"
+          }
+        }
+      }
+    },
+    "三天不断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3-Day Streak"
+          }
+        }
+      }
+    },
+    "上个月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Month"
+          }
+        }
+      }
+    },
+    "下一道 %@ 到期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next one due %@"
+          }
+        }
+      }
+    },
+    "下一颗将在 %@后恢复。闯关答错扣一颗，练习模式不扣，还能赚回一颗。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next heart in %@. Wrong answers in levels cost a heart; Practice is free and can earn one back."
+          }
+        }
+      }
+    },
+    "下个月": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Month"
+          }
+        }
+      }
+    },
+    "之前的 %lld 天连胜断了，今天重新开始": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your %lld-day streak ended. Starting fresh today."
+          }
+        }
+      }
+    },
+    "也可以在这里写几个关键词（可选）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jot down a few keywords here (optional)"
+          }
+        }
+      }
+    },
+    "五百经验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "500 XP"
+          }
+        }
+      }
+    },
+    "交互实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interactive Lab"
+          }
+        }
+      }
+    },
+    "交互实验 ×%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interactive Labs ×%lld"
+          }
+        }
+      }
+    },
+    "仅 Wi-Fi 下载": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download on Wi-Fi Only"
+          }
+        }
+      }
+    },
+    "今天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "今天的目标完成了，明天继续！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goal complete. See you tomorrow!"
+          }
+        }
+      }
+    },
+    "今日 %lld XP，目标 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld XP today, goal %2$lld"
+          }
+        }
+      }
+    },
+    "今日目标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily Goal"
+          }
+        }
+      }
+    },
+    "今日目标 %lld/%lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily goal %1$lld/%2$lld XP"
+          }
+        }
+      }
+    },
+    "今日目标达成！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily goal reached!"
+          }
+        }
+      }
+    },
+    "从学过的 %lld 道题里抽 %lld 道，错题优先。不扣红心。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld questions picked from what you’ve learned (%1$lld in all), mistakes first. No hearts lost."
+          }
+        }
+      }
+    },
+    "从学过的 %lld 道题里抽 %lld 道，错题优先。不扣红心，完成还能赚回 1 颗。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld questions picked from what you’ve learned (%1$lld in all), mistakes first. No hearts lost, and you earn 1 back when you finish."
+          }
+        }
+      }
+    },
+    "从本单元各课抽 %lld 题，全部答对即通关": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld questions from this unit’s lessons. Get them all right to pass."
+          }
+        }
+      }
+    },
+    "你的要点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Notes"
+          }
+        }
+      }
+    },
+    "做完了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "先完成前面的关卡；也可以在「我的 → 设置」里打开自由模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the earlier levels first, or turn on Free Mode in Profile → Settings."
+          }
+        }
+      }
+    },
+    "先说结论，再讲原因，举一个会出错的反例，最后说清方案在什么前提下成立。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start with the conclusion, explain why, give a counterexample where it breaks, and finish with the conditions under which your design holds."
+          }
+        }
+      }
+    },
+    "先读题预测结果，再运行场景对照。完成一个实验即可点亮这一关。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read the question and predict the outcome, then run the scenarios to compare. Finish one lab to light up this level."
+          }
+        }
+      }
+    },
+    "全对通关！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfect Score!"
+          }
+        }
+      }
+    },
+    "全屏查看，可缩放": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens full screen; pinch to zoom"
+          }
+        }
+      }
+    },
+    "全部 %lld 张口述卡与通用复盘题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All %lld self-check cards plus the general review questions"
+          }
+        }
+      }
+    },
+    "共答 %lld 题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld answered"
+          }
+        }
+      }
+    },
+    "关闭": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "关闭红心限制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Off Hearts"
+          }
+        }
+      }
+    },
+    "内容版本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content Version"
+          }
+        }
+      }
+    },
+    "再得 %lld XP，大约 %lld 课": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld XP to go · about %#@n@"
+          },
+          "substitutions": {
+            "n": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg lesson"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg lessons"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "再测一次 +%lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retake Quiz +%lld XP"
+          }
+        }
+      }
+    },
+    "再练一次 +%lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Practice Again +%lld XP"
+          }
+        }
+      }
+    },
+    "再试一次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try Again"
+          }
+        }
+      }
+    },
+    "冲刺 50": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intense 50"
+          }
+        }
+      }
+    },
+    "判断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "True/False"
+          }
+        }
+      }
+    },
+    "到期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Due"
+          }
+        }
+      }
+    },
+    "动手派": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hands-On"
+          }
+        }
+      }
+    },
+    "单元测验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit Quiz"
+          }
+        }
+      }
+    },
+    "单元通关！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit Cleared!"
+          }
+        }
+      }
+    },
+    "单选": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Single Choice"
+          }
+        }
+      }
+    },
+    "去设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
+          }
+        }
+      }
+    },
+    "取消": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "口述完成！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicely Spoken!"
+          }
+        }
+      }
+    },
+    "口述练习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak It Out"
+          }
+        }
+      }
+    },
+    "口述练习 ×%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak It Out ×%lld"
+          }
+        }
+      }
+    },
+    "口述练习的这些题目属于完整版内容。第 1 章的口述卡可以免费练。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These Speak It Out questions are part of the Full Version. Chapter 1 cards are free to practice."
+          }
+        }
+      }
+    },
+    "口述自评 30 次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Self-rate 30 times in Speak It Out"
+          }
+        }
+      }
+    },
+    "可以开始": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready to start"
+          }
+        }
+      }
+    },
+    "各章讲解视频": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animated lesson videos for every chapter"
+          }
+        }
+      }
+    },
+    "合上书讲一道面试题，比再读一遍记得牢。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the book and talk through one interview question. It sticks better than rereading."
+          }
+        }
+      }
+    },
+    "合上书，出声讲 3～5 句": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the book and say 3–5 sentences out loud"
+          }
+        }
+      }
+    },
+    "合上书，把答案讲出来，再对照参考答案自评": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the book, say your answer out loud, then compare with the reference and rate yourself."
+          }
+        }
+      }
+    },
+    "回到当前关卡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Current Level"
+          }
+        }
+      }
+    },
+    "回看原文": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review Text"
+          }
+        }
+      }
+    },
+    "回看原文：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review the text: %@"
+          }
+        }
+      }
+    },
+    "图片": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        }
+      }
+    },
+    "图片，双指缩放，双击放大或还原": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image. Pinch to zoom, double-tap to zoom in or reset."
+          }
+        }
+      }
+    },
+    "在线查看完整解析": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Full Explanation Online"
+          }
+        }
+      }
+    },
+    "在线阅读版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Online"
+          }
+        }
+      }
+    },
+    "基本讲清": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostly there"
+          }
+        }
+      }
+    },
+    "填空": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill in the Blank"
+          }
+        }
+      }
+    },
+    "复习 %lld 道到期错题": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Review %lld Due Question"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Review %lld Due Questions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "复习完成！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review Complete!"
+          }
+        }
+      }
+    },
+    "多选": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiple Choice"
+          }
+        }
+      }
+    },
+    "太棒了！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Awesome!"
+          }
+        }
+      }
+    },
+    "好": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "学习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Learn"
+          }
+        }
+      }
+    },
+    "学习 %lld 天": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day studied"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days studied"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "学习记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progress"
+          }
+        }
+      }
+    },
+    "学习记录无法读取，已另存为 %@，这次从头开始。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your progress couldn’t be read. It was saved as %@, and you’re starting fresh this time."
+          }
+        }
+      }
+    },
+    "学习过": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Studied"
+          }
+        }
+      }
+    },
+    "学完一课后，就能从学过的题里随机抽 %lld 道练习。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish a lesson and you can practice %lld random questions from what you’ve learned."
+          }
+        }
+      }
+    },
+    "完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "完成 10 个交互实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete 10 interactive labs"
+          }
+        }
+      }
+    },
+    "完成实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Labs Done"
+          }
+        }
+      }
+    },
+    "完成第一课": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete your first lesson"
+          }
+        }
+      }
+    },
+    "完成课程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lessons Done"
+          }
+        }
+      }
+    },
+    "完整版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Version"
+          }
+        }
+      }
+    },
+    "完整版内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Version content"
+          }
+        }
+      }
+    },
+    "完整版内容，点按解锁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Version content. Tap to unlock."
+          }
+        }
+      }
+    },
+    "完整版已解锁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Version unlocked"
+          }
+        }
+      }
+    },
+    "实验完成，获得 %lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lab complete! +%lld XP"
+          }
+        }
+      }
+    },
+    "差一点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Almost"
+          }
+        }
+      }
+    },
+    "已完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completed"
+          }
+        }
+      }
+    },
+    "已掌握": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mastered"
+          }
+        }
+      }
+    },
+    "已经连续学习 %lld 天，今天做一课就能续上。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re on a %lld-day streak. Do one lesson today to keep it going."
+          }
+        }
+      }
+    },
+    "已缓存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cached"
+          }
+        }
+      }
+    },
+    "已解锁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlocked"
+          }
+        }
+      }
+    },
+    "已解锁完整版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Version Unlocked"
+          }
+        }
+      }
+    },
+    "常规 20": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regular 20"
+          }
+        }
+      }
+    },
+    "开口就讲": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak Up"
+          }
+        }
+      }
+    },
+    "开始": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        }
+      }
+    },
+    "开始 +%lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start +%lld XP"
+          }
+        }
+      }
+    },
+    "开始口述": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Speaking"
+          }
+        }
+      }
+    },
+    "开始测验 +%lld XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Quiz +%lld XP"
+          }
+        }
+      }
+    },
+    "开始练习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Practice"
+          }
+        }
+      }
+    },
+    "当前使用蜂窝网络，观看本章约消耗 %@ 流量。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re on cellular. Watching this chapter uses about %@ of data."
+          }
+        }
+      }
+    },
+    "当前关卡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current level"
+          }
+        }
+      }
+    },
+    "当前没有网络，这一章的视频还没有缓存。联网后再来看吧。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re offline and this chapter’s video isn’t cached yet. Connect to the internet and try again."
+          }
+        }
+      }
+    },
+    "当天已经学过就不再提醒。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No reminder if you’ve already studied that day."
+          }
+        }
+      }
+    },
+    "思路清楚！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear thinking!"
+          }
+        }
+      }
+    },
+    "总经验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total XP"
+          }
+        }
+      }
+    },
+    "恢复购买": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Purchase"
+          }
+        }
+      }
+    },
+    "恢复购买失败：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t restore purchase: %@"
+          }
+        }
+      }
+    },
+    "想起一部分": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got part of it"
+          }
+        }
+      }
+    },
+    "成就": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Achievements"
+          }
+        }
+      }
+    },
+    "我的": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile"
+          }
+        }
+      }
+    },
+    "我的进度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progress"
+          }
+        }
+      }
+    },
+    "打开实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Lab"
+          }
+        }
+      }
+    },
+    "把左右两列配成对": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match the two columns"
+          }
+        }
+      }
+    },
+    "指南": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guide"
+          }
+        }
+      }
+    },
+    "按正确顺序排列": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Put in the correct order"
+          }
+        }
+      }
+    },
+    "按章节选题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose by Chapter"
+          }
+        }
+      }
+    },
+    "掌握 20 道错题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Master 20 mistakes"
+          }
+        }
+      }
+    },
+    "掌握口述卡": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cards Mastered"
+          }
+        }
+      }
+    },
+    "排序": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordering"
+          }
+        }
+      }
+    },
+    "提醒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        }
+      }
+    },
+    "提醒时间": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminder Time"
+          }
+        }
+      }
+    },
+    "无法验证这笔购买，请稍后重试，或点「恢复购买」。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We couldn’t verify this purchase. Try again later, or tap “Restore Purchase”."
+          }
+        }
+      }
+    },
+    "日期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
+          }
+        }
+      }
+    },
+    "显示参考答案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Reference Answer"
+          }
+        }
+      }
+    },
+    "暂无错题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No mistakes yet"
+          }
+        }
+      }
+    },
+    "暂时找不到该商品，请稍后再试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This purchase isn't available right now. Please try again later."
+          }
+        }
+      }
+    },
+    "暂时拿不到视频地址，请稍后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t get the video address right now. Please try again later."
+          }
+        }
+      }
+    },
+    "暂时无法连接 App Store，请检查网络后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't reach the App Store right now. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "最近 7 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 7 Days"
+          }
+        }
+      }
+    },
+    "最长 %lld 天 · 保护 %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Best %1$lld · Freezes %2$lld"
+          }
+        }
+      }
+    },
+    "月度坚持": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly Habit"
+          }
+        }
+      }
+    },
+    "未练过": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not practiced"
+          }
+        }
+      }
+    },
+    "未解锁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locked"
+          }
+        }
+      }
+    },
+    "本章要点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key Takeaways"
+          }
+        }
+      }
+    },
+    "本课完成！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesson Complete!"
+          }
+        }
+      }
+    },
+    "检查": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check"
+          }
+        }
+      }
+    },
+    "正在加载": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
+          }
+        }
+      }
+    },
+    "正确": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "True"
+          }
+        }
+      }
+    },
+    "正确答案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct Answer"
+          }
+        }
+      }
+    },
+    "正确！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correct!"
+          }
+        }
+      }
+    },
+    "每日提醒": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily Reminder"
+          }
+        }
+      }
+    },
+    "每日目标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily Goal"
+          }
+        }
+      }
+    },
+    "每日目标（XP）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily Goal (XP)"
+          }
+        }
+      }
+    },
+    "没想起来": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blanked"
+          }
+        }
+      }
+    },
+    "没有找到可恢复的购买记录。请确认登录的是购买时的 Apple 账号。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No purchase to restore was found. Make sure you’re signed in with the Apple Account you bought with."
+          }
+        }
+      }
+    },
+    "没有找到本章的动画讲解。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No animated lesson found for this chapter."
+          }
+        }
+      }
+    },
+    "没有通知权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications Are Off"
+          }
+        }
+      }
+    },
+    "清空全部课程进度、经验、连胜、错题和口述记录？此操作无法撤销。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase all lesson progress, XP, streaks, mistakes, and Speak It Out history? This can’t be undone."
+          }
+        }
+      }
+    },
+    "清除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        }
+      }
+    },
+    "清除全部已缓存的视频？之后观看会重新下载。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear all cached videos? They’ll be downloaded again when you watch them."
+          }
+        }
+      }
+    },
+    "清除视频缓存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Video Cache"
+          }
+        }
+      }
+    },
+    "漂亮！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nice!"
+          }
+        }
+      }
+    },
+    "点选词块，填入空白": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the word chips to fill the blanks"
+          }
+        }
+      }
+    },
+    "熟练度 %lld/%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proficiency %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "现在退出，这一轮的进度不会保存。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you quit now, this round’s progress won’t be saved."
+          }
+        }
+      }
+    },
+    "用掉 %lld 次连胜保护，连胜 %lld 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used %#@n@. Your streak is %2$lld days."
+          },
+          "substitutions": {
+            "n": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg streak freeze"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg streak freezes"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "用时": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time"
+          }
+        }
+      }
+    },
+    "目标": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Goal"
+          }
+        }
+      }
+    },
+    "看过的动画讲解会缓存在本机，下次可以离线观看。开启后，只在 Wi-Fi 下自动缓存；蜂窝网络下仍可手动观看，每章约 5 MB。第 1 章的视频已内置，不占缓存。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videos you watch are cached on this device so you can watch them offline. When on, videos only cache over Wi-Fi; you can still watch manually on cellular (about 5 MB per chapter). Chapter 1’s video is built in and doesn’t use the cache."
+          }
+        }
+      }
+    },
+    "知道了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got It"
+          }
+        }
+      }
+    },
+    "积木齐备": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Building Blocks"
+          }
+        }
+      }
+    },
+    "稳！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solid!"
+          }
+        }
+      }
+    },
+    "第 %lld 单元 · %lld/%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit %1$lld · %2$lld/%3$lld"
+          }
+        }
+      }
+    },
+    "第 %lld 单元指南": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit %lld Guide"
+          }
+        }
+      }
+    },
+    "第 %lld 单元测验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit %lld Quiz"
+          }
+        }
+      }
+    },
+    "第 %lld 步：点下方选项放进来": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %lld: tap an option below"
+          }
+        }
+      }
+    },
+    "第 %lld 空，未填": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blank %lld, empty"
+          }
+        }
+      }
+    },
+    "第 %lld 空：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blank %1$lld: %2$@"
+          }
+        }
+      }
+    },
+    "第 %lld 章": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %lld"
+          }
+        }
+      }
+    },
+    "第 %lld 章 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "第 %lld 章「%@」属于完整版内容。第 1 章可以免费学完，其余章节一次购买后全部解锁。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %1$lld, “%2$@”, is part of the Full Version. Chapter 1 is free to finish; one purchase unlocks the rest."
+          }
+        }
+      }
+    },
+    "第 %lld 章口述练习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %lld Speak It Out"
+          }
+        }
+      }
+    },
+    "第 %lld 章实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %lld Labs"
+          }
+        }
+      }
+    },
+    "第 %lld 章的讲解视频属于完整版内容。第 1 章的视频可以免费看。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter %lld’s lesson video is part of the Full Version. Chapter 1’s video is free to watch."
+          }
+        }
+      }
+    },
+    "第 %lld 部分": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Part %lld"
+          }
+        }
+      }
+    },
+    "第 1 章免费，其余章节、口述卡与视频需要完整版。一次购买，永久解锁。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter 1 is free. The remaining chapters, self-check cards, and videos need the Full Version. One purchase, unlocked forever."
+          }
+        }
+      }
+    },
+    "第 1 章可以免费学完，其余章节一次购买后全部解锁。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter 1 is free to finish; one purchase unlocks the rest."
+          }
+        }
+      }
+    },
+    "第 1 章的动画讲解免费，其余章节需要完整版。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapter 1’s animated lesson is free. Other chapters need the Full Version."
+          }
+        }
+      }
+    },
+    "第 2–%lld 章全部课程、单元测验与交互实验，%lld 道闯关题": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapters 2–%1$lld: every lesson, unit quiz, and interactive lab, plus %2$lld questions"
+          }
+        }
+      }
+    },
+    "第一步": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First Steps"
+          }
+        }
+      }
+    },
+    "答对了！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You got it!"
+          }
+        }
+      }
+    },
+    "答错的题会自动进入错题本，按 1、3、7、16 天的间隔复习，连续答对 5 次即掌握。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions you miss land in Mistakes and come back after 1, 3, 7, and 16 days. Get one right 5 times in a row to master it."
+          }
+        }
+      }
+    },
+    "系统设计通关": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Design Master"
+          }
+        }
+      }
+    },
+    "累计获得 3,000 XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earn 3,000 XP in total"
+          }
+        }
+      }
+    },
+    "累计获得 500 XP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earn 500 XP in total"
+          }
+        }
+      }
+    },
+    "红心 %lld 颗": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld heart"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hearts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "红心无限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlimited hearts"
+          }
+        }
+      }
+    },
+    "红心用完了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Out of Hearts"
+          }
+        }
+      }
+    },
+    "红心限制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hearts Limit"
+          }
+        }
+      }
+    },
+    "红心：闯关答错扣一颗，每 30 分钟恢复一颗。自由模式：不按顺序解锁，所有关卡都能直接进入，适合已经学过一部分的读者。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hearts: a wrong answer in a level costs one heart, and one refills every 30 minutes. Free Mode: levels aren’t locked in order, so you can jump to any of them. Handy if you already know some of the material."
+          }
+        }
+      }
+    },
+    "练习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Practice"
+          }
+        }
+      }
+    },
+    "练习完成！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Practice Complete!"
+          }
+        }
+      }
+    },
+    "练习赚红心": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Practice to Earn Hearts"
+          }
+        }
+      }
+    },
+    "练了 %lld 道题，获得 %lld XP。自评结果决定下次复习的时间：讲得越透，间隔越长。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You practiced %#@n@ and earned %2$lld XP. Your self-ratings decide when each card returns: the clearer your answer, the longer the gap."
+          },
+          "substitutions": {
+            "n": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg question"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg questions"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "练本章": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Practice Chapter"
+          }
+        }
+      }
+    },
+    "结束": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End"
+          }
+        }
+      }
+    },
+    "结论": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conclusion"
+          }
+        }
+      }
+    },
+    "继续": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "继续学习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Learning"
+          }
+        }
+      }
+    },
+    "继续观看": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue Watching"
+          }
+        }
+      }
+    },
+    "自由模式": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free Mode"
+          }
+        }
+      }
+    },
+    "自评 %lld 次": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld self-rating"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld self-ratings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "花 5 分钟闯一关：限流、分片、幂等，今天练哪个？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take 5 minutes for a level: rate limiting, sharding, or idempotency. Which one today?"
+          }
+        }
+      }
+    },
+    "获得经验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XP Earned"
+          }
+        }
+      }
+    },
+    "观看动画讲解（%@）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watch Animated Lesson (%@)"
+          }
+        }
+      }
+    },
+    "视频加载失败，请检查网络后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video failed to load. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "视频文件无法播放。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This video file can’t be played."
+          }
+        }
+      }
+    },
+    "视频缓存": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video Cache"
+          }
+        }
+      }
+    },
+    "解锁完整版": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Full Version"
+          }
+        }
+      }
+    },
+    "解锁完整版 · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Full Version · %@"
+          }
+        }
+      }
+    },
+    "解锁完整版后可观看本章动画讲解。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock the Full Version to watch this chapter’s animated lesson."
+          }
+        }
+      }
+    },
+    "解锁完整版后观看": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock to Watch"
+          }
+        }
+      }
+    },
+    "解锁完整版，练习覆盖全部章节": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Full Version to Practice Every Chapter"
+          }
+        }
+      }
+    },
+    "解锁成就：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Achievement unlocked: %@"
+          }
+        }
+      }
+    },
+    "触感反馈": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haptics"
+          }
+        }
+      }
+    },
+    "认真 30": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serious 30"
+          }
+        }
+      }
+    },
+    "记录完成，获得 %lld XP 并返回": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as done, earn %lld XP, and go back"
+          }
+        }
+      }
+    },
+    "讲得很透": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nailed it"
+          }
+        }
+      }
+    },
+    "讲得怎么样？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How did you do?"
+          }
+        }
+      }
+    },
+    "设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        }
+      }
+    },
+    "该练系统设计了": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time for System Design!"
+          }
+        }
+      }
+    },
+    "请在系统设置里允许「系统设计闯关」发送通知。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow notifications for “System Design Quest” in the Settings app."
+          }
+        }
+      }
+    },
+    "课程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Course"
+          }
+        }
+      }
+    },
+    "课程内容加载失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Load Course Content"
+          }
+        }
+      }
+    },
+    "购买正在等待批准，批准后会自动解锁。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your purchase is awaiting approval. It will unlock automatically once approved."
+          }
+        }
+      }
+    },
+    "购买没有完成，请稍后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The purchase didn’t go through. Please try again later."
+          }
+        }
+      }
+    },
+    "购买没有完成：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The purchase didn’t go through: %@"
+          }
+        }
+      }
+    },
+    "赚回 %lld 颗红心": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Earned back %lld heart"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Earned back %lld hearts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "轻松 10": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Casual 10"
+          }
+        }
+      }
+    },
+    "还有 %lld 颗红心": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld heart left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hearts left"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "这一轮没能完成。红心每 30 分钟恢复一颗；做一轮随机练习不扣红心，完成后还能赚回一颗。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You couldn’t finish this round. Hearts refill one every 30 minutes. A round of Random Practice costs no hearts and earns one back when you finish."
+          }
+        }
+      }
+    },
+    "这句话对吗？": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Is this statement true?"
+          }
+        }
+      }
+    },
+    "进度 %lld/%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Progress %1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "连对 %lld 题！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld in a row!"
+          }
+        }
+      }
+    },
+    "连续学习 3 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Study 3 days in a row"
+          }
+        }
+      }
+    },
+    "连续学习 30 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Study 30 days in a row"
+          }
+        }
+      }
+    },
+    "连续学习 7 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Study 7 days in a row"
+          }
+        }
+      }
+    },
+    "连胜 %lld 天": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Streak: %lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Streak: %lld days"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "连胜 %lld 天！": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld-day streak!"
+          }
+        }
+      }
+    },
+    "连胜保护": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streak Freeze"
+          }
+        }
+      }
+    },
+    "连胜天数": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day Streak"
+          }
+        }
+      }
+    },
+    "连胜开始！明天再来就是 2 天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streak started! Come back tomorrow to make it 2 days."
+          }
+        }
+      }
+    },
+    "退出": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit"
+          }
+        }
+      }
+    },
+    "选出所有正确的选项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all correct options"
+          }
+        }
+      }
+    },
+    "选出正确答案": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select the correct answer"
+          }
+        }
+      }
+    },
+    "通关单元 %lld/%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Units passed %1$lld/%2$lld"
+          }
+        }
+      }
+    },
+    "通关第一单元": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unit Cleared"
+          }
+        }
+      }
+    },
+    "通用复盘": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General Review"
+          }
+        }
+      }
+    },
+    "通过 7 个单元测验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pass 7 unit quizzes"
+          }
+        }
+      }
+    },
+    "通过一次单元测验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pass a unit quiz"
+          }
+        }
+      }
+    },
+    "通过全部 28 个单元测验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pass all 28 unit quizzes"
+          }
+        }
+      }
+    },
+    "配完了，错了 %lld 次": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matched, with %lld mistakes"
+          }
+        }
+      }
+    },
+    "配完所有格子自动进入下一步": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete every match to move on automatically"
+          }
+        }
+      }
+    },
+    "配对": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matching"
+          }
+        }
+      }
+    },
+    "重新加载价格": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload Price"
+          }
+        }
+      }
+    },
+    "重置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        }
+      }
+    },
+    "重置学习进度": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Progress"
+          }
+        }
+      }
+    },
+    "重试": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        }
+      }
+    },
+    "错误": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "False"
+          }
+        }
+      }
+    },
+    "错题复习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review Mistakes"
+          }
+        }
+      }
+    },
+    "错题已掌握 %lld": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld mistake mastered"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld mistakes mastered"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "错题本": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistakes"
+          }
+        }
+      }
+    },
+    "错题本是空的": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Mistakes Yet"
+          }
+        }
+      }
+    },
+    "错题本里有题到期了，趁现在复习最省力。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some mistakes are due for review. Now is the easiest time to lock them in."
+          }
+        }
+      }
+    },
+    "错题清道夫": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistake Buster"
+          }
+        }
+      }
+    },
+    "闯关": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Levels"
+          }
+        }
+      }
+    },
+    "闯关和练习中答错的题会出现在这里。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions you miss in levels and practice appear here."
+          }
+        }
+      }
+    },
+    "闯关答错扣一颗，每 30 分钟恢复一颗。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A wrong answer in a level costs one heart. One refills every 30 minutes."
+          }
+        }
+      }
+    },
+    "阅读本章全文（在线）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read This Chapter Online"
+          }
+        }
+      }
+    },
+    "随机练习": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Random Practice"
+          }
+        }
+      }
+    },
+    "随机练习与错题复习覆盖全部章节": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Random Practice and Mistakes review across every chapter"
+          }
+        }
+      }
+    },
+    "隐私政策": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
+          }
+        }
+      }
+    },
+    "零失误": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flawless"
+          }
+        }
+      }
+    },
+    "题目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions"
+          }
+        }
+      }
+    },
+    "题目依据《系统设计面试笔记：中文学习版》编写": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions based on the “System Design Interview Notes” study edition"
+          }
+        }
+      }
+    },
+    "题目依据《系统设计面试笔记：中文学习版》编写，该学习版整理自 liquidslr/system-design-notes 与 Alex Xu《System Design Interview》卷 1、卷 2。学习记录只保存在本机。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Questions are based on the “System Design Interview Notes” study edition, compiled from liquidslr/system-design-notes and Alex Xu’s System Design Interview, Volumes 1 and 2. Your progress is stored only on this device."
+          }
+        }
+      }
+    },
+    "没有找到完整版的购买凭证。请在解锁页点「恢复购买」后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No purchase record for the full version was found. Tap “Restore Purchases” on the unlock screen and try again."
+          }
+        }
+      }
+    },
+    "连不上视频服务器，请检查网络后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t reach the video server. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "视频服务器没有通过购买验证。请点「恢复购买」，或稍后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video server couldn’t verify your purchase. Tap “Restore Purchases”, or try again later."
+          }
+        }
+      }
+    },
+    "视频服务暂时不可用，请稍后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video service is temporarily unavailable. Please try again later."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

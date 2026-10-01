@@ -32,6 +32,9 @@ struct RootView: View {
             OutOfHeartsSheet()
                 .presentationDetents([.medium])
         }
+        .sheet(item: $router.paywall) { reason in
+            PaywallSheet(reason: reason)
+        }
         .overlay(alignment: .top) {
             if let toast = router.toast {
                 ToastBanner(text: toast)
@@ -48,7 +51,15 @@ struct RootView: View {
         } message: {
             Text(store.loadWarning ?? "")
         }
-        .onAppear(perform: applyLaunchArguments)
+        .onAppear {
+            router.store = store
+            // 视频的观看权限跟随内购；点了锁定的视频就弹付费墙（仅 DEBUG 构建的 -videoUnlockAll 可全部放行）
+            if !VideoService.debugUnlockAll {
+                VideoService.shared.access = EntitlementVideoAccess(store.entitlements)
+            }
+            VideoService.shared.onNeedsPaywall = { [router] chapter in router.paywall = .video(chapter: chapter) }
+            applyLaunchArguments()
+        }
     }
 
     @State private var dismissedWarning = false
@@ -68,7 +79,7 @@ struct RootView: View {
         }
         if let ids = value("-openExercises") {
             let exercises = ids.split(separator: ",").compactMap { store.library.exercise(String($0)) }
-            router.screen = .session(LessonSession(kind: .practice, exercises: exercises, seed: 1), title: "调试")
+            router.screen = .session(LessonSession(kind: .practice, exercises: exercises, seed: 1), title: "Debug")
         }
         if let id = value("-openLab"), let lab = store.library.course.chapters.flatMap(\.labs).first(where: { $0.id == id }) {
             router.openLab(lab)

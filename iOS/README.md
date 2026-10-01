@@ -69,6 +69,7 @@ python3 工具/build_app_content.py            # 校验并重新生成内容包�
 | `-openLesson c04-02` | 直接打开某一课 |
 | `-openExercises c04-01-01,c04-04-03` | 把指定题目组成一轮练习打开，检查题型渲染用 |
 | `-openLab rate-limiter-race` | 直接打开某个交互实验 |
+| `-unlockAll` | 仅 DEBUG 构建：视为已购买完整版（Release 里无效） |
 
 ## 代码结构
 
