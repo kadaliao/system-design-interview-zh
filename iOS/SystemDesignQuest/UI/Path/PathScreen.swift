@@ -8,6 +8,8 @@ struct PathScreen: View {
     @State private var guideChapter: Chapter?
     @State private var labChapter: Chapter?
     @State private var didInitialScroll = false
+    /// 首次定位完成前先隐藏路径，避免看到从顶部跳到当前关卡。
+    @State private var located = false
     /// 当前关卡是否在屏幕上；nil 表示还没渲染过。
     @State private var currentVisible: Bool?
 
@@ -37,6 +39,8 @@ struct PathScreen: View {
                     .background { Color.clear.contentShape(Rectangle()).onTapGesture { selectedNode = nil } }
                 }
                 .scrollIndicators(.hidden)
+                .opacity(located || current == nil ? 1 : 0)
+                .animation(.easeOut(duration: 0.2), value: located)
                 // 不用 scrollPosition(id:) 绑定：它会在每次重绘时把视图拉回记录的单元，点关卡时整条路径跳动
                 .onScrollPhaseChange { _, phase in
                     if phase == .interacting { selectedNode = nil }
@@ -51,13 +55,13 @@ struct PathScreen: View {
                 .onAppear {
                     guard !didInitialScroll, let current else { return }
                     didInitialScroll = true
-                    locate(current, proxy: proxy, attempt: 0)
+                    locate(current, proxy: proxy)
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if let current, currentVisible == false {
                         Button {
                             selectedNode = nil
-                            locate(current, proxy: proxy, attempt: 0)
+                            locate(current, proxy: proxy)
                         } label: {
                             Image(systemName: "scope")
                                 .font(.system(size: 18, weight: .bold))
@@ -140,16 +144,16 @@ struct PathScreen: View {
         .transition(.scale(scale: 0.9, anchor: below ? .top : .bottom).combined(with: .opacity))
     }
 
-    /// 定位到当前关卡。懒加载列表只认得直接子项：先滚到所在单元，等关卡加载出来再对准；
-    /// 首屏布局完成的时机因设备而异，所以重试到当前关卡真正出现在屏幕上为止。
-    private func locate(_ node: PathNode, proxy: ScrollViewProxy, attempt: Int) {
-        guard attempt < 10, currentVisible != true else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+    /// 定位到当前关卡。懒加载列表只认得直接子项：先滚到所在单元让关卡加载出来，
+    /// 之后只对准关卡本身（不再回到单元顶部，否则两步来回会让画面上下跳）。
+    private func locate(_ node: PathNode, proxy: ScrollViewProxy) {
+        Task { @MainActor in
             proxy.scrollTo(node.chapter, anchor: .top)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            for _ in 0..<6 {
+                try? await Task.sleep(for: .milliseconds(120))
                 proxy.scrollTo(node.id, anchor: .center)
-                locate(node, proxy: proxy, attempt: attempt + 1)
             }
+            located = true
         }
     }
 
