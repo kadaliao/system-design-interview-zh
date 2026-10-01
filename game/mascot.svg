@@ -1,0 +1,210 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -8 224 224" width="224" height="224">
+<title>节点君 Nodey</title>
+<style>
+.nd{--nd-ink:#14123a;--nd-main:#4cc9f0;--nd-light:#a5ecff;--nd-shade:#2aa3cc;--nd-screen:#f4fbff}
+.nd .f-main{fill:var(--nd-main)}.nd .f-shade{fill:var(--nd-shade)}.nd .f-screen{fill:var(--nd-screen)}
+.nd .foot{fill:var(--nd-shade)}
+.nd .s-main{stroke:var(--nd-main)}.nd .s-light{stroke:var(--nd-light)}
+.nd .ln{fill:none;stroke:#14123a;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+.nd .brow{stroke-width:4.6}
+.nd .lamp{fill:#14123a;opacity:.34}.nd .lamp.on{fill:var(--c);opacity:1}
+.nd .dc,.nd .eh,.nd .ec,.nd .mG,.nd .mO,.nd .mW,.nd .mY,.nd .mT,.nd .mZ,.nd .brow,.nd .sweat,.nd .zz,.nd .orbit,.nd .rays,.nd .wowl{display:none}
+.nd.has-aura .dc-aura,.nd.has-headphones .dc-hp,.nd.has-shades .dc-shades,.nd.has-cape .dc-cape,.nd.has-crown .dc-crown{display:inline}
+.nd .arm,.nd .gz,.nd .eo,.nd .bn,.nd .fx,.nd .bob,.nd .stars,.nd .cape,.nd .orbit,.nd .bglow,.nd .rays,.nd .zz,.nd .sweat,.nd .wowl,.nd .foot{transform-box:view-box}
+.nd .zz,.nd .sweat,.nd .wowl{transform-box:fill-box;transform-origin:center}
+.nd .bn,.nd .fx{transform-origin:100px 202px}
+.nd .bob{transform-origin:100px 190px}
+.nd .stars{transform-origin:100px 116px}
+.nd .cape{transform-origin:100px 76px}
+.nd .orbit,.nd .bglow,.nd .rays{transform-origin:100px 18px}
+.nd .eo.L,.nd .gz.L{transform-origin:78px 102px}
+.nd .eo.R,.nd .gz.R{transform-origin:122px 102px}
+.nd .gz{transform:translate(calc(var(--lx,0px) + var(--gx,0px)),calc(var(--ly,0px) + var(--gy,0px))) scale(var(--gs,1))}
+.nd .armL{transform-origin:30px 120px;transform:rotate(16deg)}
+.nd .armR{transform-origin:170px 120px;transform:rotate(-16deg)}
+.nd .cheek{opacity:0}
+.nd.has-blush .cheek{opacity:.72}
+.nd.mood-happy .cheek,.nd.mood-cheer .cheek,.nd.mood-dance .cheek,.nd.mood-oops .cheek,.nd.mood-wow .cheek{opacity:.5}
+.nd .bglow{opacity:.1}
+.nd.has-antenna .bglow{opacity:.5}
+.nd.has-antenna .bulb{stroke-width:5.6}
+
+/* 表情：纯显示切换 */
+.nd.mood-happy .eo,.nd.mood-cheer .eo,.nd.mood-dance .eo,.nd.mood-sleep .eo{display:none}
+.nd.mood-happy .eh,.nd.mood-cheer .eh,.nd.mood-dance .eh{display:inline}
+.nd.mood-sleep .ec{display:inline}
+.nd:not(.mood-idle) .mS{display:none}
+.nd.mood-happy .mG,.nd.mood-dance .mG,.nd.mood-cheer .mO,.nd.mood-wow .mW,.nd.mood-oops .mY,.nd.mood-think .mT,.nd.mood-sleep .mZ{display:inline}
+.nd.mood-oops .brow,.nd.mood-oops .sweat,.nd.mood-think .orbit,.nd.mood-cheer .rays,.nd.mood-wow .wowl,.nd.mood-sleep .zz{display:inline}
+.nd.has-shades .brow{display:none}
+.nd.mood-wow{--gs:1.22}
+.nd.mood-oops{--gs:.9;--gx:-1.5px;--gy:2px}
+.nd.mood-think{--gx:2.5px;--gy:-5px}
+.nd.mood-think .fx{transform:rotate(2deg)}
+.nd.mood-happy .armL{transform:rotate(38deg)}.nd.mood-happy .armR{transform:rotate(-38deg)}
+.nd.mood-cheer .armL{transform:rotate(160deg)}.nd.mood-cheer .armR{transform:rotate(-160deg)}
+.nd.mood-wow .armL{transform:rotate(62deg)}.nd.mood-wow .armR{transform:rotate(-62deg)}
+.nd.mood-oops .armL{transform:rotate(138deg)}
+.nd.mood-think .armR{transform:rotate(36deg)}
+.nd.mood-sleep .armL{transform:rotate(8deg)}.nd.mood-sleep .armR{transform:rotate(-8deg)}
+.nd.mood-dance .armL{transform:rotate(130deg)}.nd.mood-dance .armR{transform:rotate(-40deg)}
+.nd .zz{opacity:.95}
+.nd .arm.pt{transform:rotate(var(--pt,0deg)) !important;animation:none !important}
+
+/* 弱：眨眼 + 呼吸 */
+.nd.m1 .eo,.nd.m2 .eo{animation:nd-blink 4.6s infinite}
+.nd.m1 .eo.R,.nd.m2 .eo.R{animation-delay:0s}
+.nd.m1 .bob,.nd.m2 .bob{animation:nd-breathe 3.4s ease-in-out infinite}
+.nd.m1.mood-sleep .bob,.nd.m2.mood-sleep .bob{animation-duration:5s}
+@keyframes nd-blink{0%,93%,100%{transform:scaleY(1)}96.5%{transform:scaleY(.1)}}
+@keyframes nd-breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.014,.985)}}
+
+/* 标准：其余动画 */
+.nd.m2 .arm,.nd.m2 .fx{transition:transform .28s cubic-bezier(.3,1.35,.5,1)}
+.nd.m2.has-antenna .bglow{animation:nd-glow 2.2s ease-in-out infinite}
+.nd.m2.has-cape .cape{animation:nd-cape 1.8s ease-in-out infinite alternate}
+.nd.m2.has-aura .stars{animation:nd-spin 14s linear infinite}
+.nd.m2.mood-happy .fx{animation:nd-hop .55s ease-out 2}
+.nd.m2.mood-cheer .fx{animation:nd-hop .5s ease-out 3}
+.nd.m2.mood-cheer .armL{animation:nd-cheerL .32s ease-in-out infinite alternate}
+.nd.m2.mood-cheer .armR{animation:nd-cheerR .32s ease-in-out infinite alternate}
+.nd.m2.mood-cheer .bglow{opacity:.85;animation:nd-flash .24s ease-in-out infinite alternate}
+.nd.m2.mood-cheer .bulb{animation:nd-bulb 1s steps(1) infinite}
+.nd.m2.mood-cheer .rays{animation:nd-rays .24s ease-in-out infinite alternate}
+.nd.m2.mood-wow .fx{animation:nd-pop .8s cubic-bezier(.2,1.5,.4,1) 1}
+.nd.m2.mood-wow .wowl{animation:nd-burst .5s ease-out 1}
+.nd.m2.mood-oops .fx{animation:nd-wobble .7s ease-in-out 1}
+.nd.m2.mood-oops .sweat{animation:nd-drip 1.3s ease-in 1 both}
+.nd.m2.mood-oops .armL{animation:nd-scratch .3s ease-in-out 5 alternate}
+.nd.m2.mood-think .orbit{animation:nd-spin 1.1s linear infinite}
+.nd.m2.mood-sleep .zz{animation:nd-z 2.7s ease-in-out infinite;animation-delay:calc(var(--i) * .9s)}
+.nd.m2.mood-dance .fx{animation:nd-sway .72s ease-in-out infinite alternate}
+.nd.m2.mood-dance .armL{animation:nd-danceL .72s ease-in-out infinite alternate}
+.nd.m2.mood-dance .armR{animation:nd-danceR .72s ease-in-out infinite alternate}
+.nd.m2.mood-dance .foot.L{animation:nd-step .36s ease-in-out infinite alternate}
+.nd.m2.mood-dance .foot.R{animation:nd-step .36s ease-in-out infinite alternate-reverse}
+.nd.m2.mood-dance .lamp{animation:nd-lamp .36s steps(1) infinite;animation-delay:calc(var(--i) * -.07s)}
+.nd.m2.mood-cheer .lamp{animation:nd-lamp .3s steps(1) infinite;animation-delay:calc(var(--i) * -.06s)}
+@keyframes nd-hop{0%{transform:translateY(0) scale(1,1)}22%{transform:translateY(-13px) scale(.97,1.04)}48%{transform:translateY(0) scale(1.05,.94)}68%{transform:translateY(-4px) scale(1,1)}100%{transform:translateY(0) scale(1,1)}}
+@keyframes nd-pop{0%{transform:scale(1)}35%{transform:scale(1.2,1.16)}60%{transform:scale(.95,.97)}80%{transform:scale(1.03)}100%{transform:scale(1)}}
+@keyframes nd-wobble{0%,100%{transform:rotate(0)}18%{transform:rotate(-5deg)}40%{transform:rotate(4deg)}60%{transform:rotate(-2.5deg)}80%{transform:rotate(1.2deg)}}
+@keyframes nd-sway{0%{transform:translateX(-4px) rotate(-6deg)}100%{transform:translateX(4px) rotate(6deg)}}
+@keyframes nd-step{0%{transform:translateY(0)}100%{transform:translateY(-5px)}}
+@keyframes nd-cheerL{0%{transform:rotate(148deg)}100%{transform:rotate(174deg)}}
+@keyframes nd-cheerR{0%{transform:rotate(-148deg)}100%{transform:rotate(-174deg)}}
+@keyframes nd-danceL{0%{transform:rotate(30deg)}100%{transform:rotate(150deg)}}
+@keyframes nd-danceR{0%{transform:rotate(-150deg)}100%{transform:rotate(-30deg)}}
+@keyframes nd-scratch{0%{transform:rotate(126deg)}100%{transform:rotate(148deg)}}
+@keyframes nd-spin{to{transform:rotate(360deg)}}
+@keyframes nd-glow{0%,100%{opacity:.34;transform:scale(1)}50%{opacity:.7;transform:scale(1.25)}}
+@keyframes nd-flash{0%{opacity:.3;transform:scale(1)}100%{opacity:.95;transform:scale(1.6)}}
+@keyframes nd-rays{0%{opacity:.35;transform:scale(.9)}100%{opacity:1;transform:scale(1.18)}}
+@keyframes nd-bulb{0%{fill:#ff5d8f}25%{fill:#ffb02e}50%{fill:#3ddc97}75%{fill:#a78bfa}}
+@keyframes nd-lamp{0%{fill:var(--c);opacity:1}50%{fill:#14123a;opacity:.34}}
+@keyframes nd-cape{0%{transform:skewX(-3deg) scaleY(1)}100%{transform:skewX(3deg) scaleY(1.03)}}
+@keyframes nd-burst{0%{opacity:0;transform:scale(.4)}40%{opacity:1}100%{opacity:1;transform:scale(1)}}
+@keyframes nd-drip{0%{opacity:0;transform:translateY(-4px) scale(.6)}20%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:1;transform:translateY(9px) scale(1)}}
+@keyframes nd-z{0%{opacity:0;transform:translate(-3px,6px) scale(.6)}25%{opacity:1}100%{opacity:0;transform:translate(8px,-12px) scale(1.15)}}
+</style>
+<g class="nd m0 mood-happy st-2 has-antenna has-lights" style="--nd-main:#4cc9f0;--nd-light:#a5ecff;--nd-shade:#2aa3cc;--nd-screen:#f4fbff;--nd-ink:#14123a">
+<g class="dc dc-aura">
+  <circle cx="100" cy="116" r="106" fill="#ffd43b" opacity=".16"/>
+  <circle cx="100" cy="116" r="94" fill="#ffd43b" opacity=".22"/>
+  <circle cx="100" cy="116" r="82" fill="#ffd43b" opacity=".32"/>
+</g>
+<ellipse class="shadow" cx="100" cy="208" rx="52" ry="6" fill="#14123a" opacity=".16"/>
+<g class="bn"><g class="fx"><g class="bob">
+  <path class="dc dc-cape cape" d="M40 76 Q4 150 18 196 Q40 186 62 201 Q82 189 100 201 Q120 189 140 201 Q160 186 182 196 Q196 150 160 76 Z" fill="#ff5d8f" stroke="#14123a" stroke-width="5" stroke-linejoin="round"/>
+  <path class="dc dc-hp" d="M25 94 C21 18 179 18 175 94" fill="none" stroke="#14123a" stroke-width="10" stroke-linecap="round"/>
+  <path class="dc dc-hp" d="M25 94 C21 18 179 18 175 94" fill="none" stroke="#a78bfa" stroke-width="4.4" stroke-linecap="round"/>
+
+  <g class="antenna">
+    <circle class="bglow" cx="100" cy="18" r="20" fill="#ff5d8f"/>
+    <line x1="100" y1="52" x2="100" y2="26" stroke="#14123a" stroke-width="9" stroke-linecap="round"/>
+    <line x1="100" y1="52" x2="100" y2="26" class="s-light" stroke-width="3.4" stroke-linecap="round"/>
+    <g class="rays" stroke="#ffb02e" stroke-width="3.4" stroke-linecap="round"></g>
+    <circle class="bulb" cx="100" cy="18" r="11" fill="#ff5d8f" stroke="#14123a" stroke-width="5"/>
+    <circle cx="96.5" cy="14.5" r="3" fill="#fff" opacity=".85"/>
+    
+  </g>
+
+  <rect class="foot L" x="60" y="176" width="30" height="26" rx="12" stroke="#14123a" stroke-width="6"/>
+  <rect class="foot R" x="110" y="176" width="30" height="26" rx="12" stroke="#14123a" stroke-width="6"/>
+
+  <rect class="f-main" x="30" y="50" width="140" height="132" rx="36"/>
+  <path class="f-shade" d="M30 146 H170 A36 36 0 0 1 134 182 H66 A36 36 0 0 1 30 146Z"/>
+  <path d="M40 90 A26 26 0 0 1 66 62" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+  <rect x="30" y="50" width="140" height="132" rx="36" fill="none" stroke="#14123a" stroke-width="6"/>
+
+  <rect class="f-screen" x="50" y="64" width="100" height="84" rx="24" stroke="#14123a" stroke-width="4.6"/>
+  <rect x="52" y="155" width="96" height="18" rx="9" fill="#14123a" opacity=".26"/>
+  <circle class="lamp on" style="--c:#ff5d8f;--i:0" cx="64" cy="164" r="4.4"/><circle class="lamp on" style="--c:#ffb02e;--i:1" cx="82" cy="164" r="4.4"/><circle class="lamp on" style="--c:#3ddc97;--i:2" cx="100" cy="164" r="4.4"/><circle class="lamp on" style="--c:#a78bfa;--i:3" cx="118" cy="164" r="4.4"/><circle class="lamp" style="--c:#ff5d8f;--i:4" cx="136" cy="164" r="4.4"/>
+
+  <g class="brow ln"><path d="M67 88 L89 82"/><path d="M133 88 L111 82"/></g>
+  <g class="eye L">
+  <g class="gz L"><g class="eo L">
+    <ellipse cx="78" cy="102" rx="9.5" ry="12" fill="#14123a"/>
+    <circle cx="81" cy="97.4" r="3.9" fill="#fff"/>
+    <circle cx="74.7" cy="106.6" r="1.8" fill="#fff"/>
+  </g></g>
+  <path class="eh ln" d="M68 106 Q78 90 88 106"/>
+  <path class="ec ln" d="M68 101 Q78 111 88 101"/>
+</g>
+  <g class="eye R">
+  <g class="gz R"><g class="eo R">
+    <ellipse cx="122" cy="102" rx="9.5" ry="12" fill="#14123a"/>
+    <circle cx="125" cy="97.4" r="3.9" fill="#fff"/>
+    <circle cx="118.7" cy="106.6" r="1.8" fill="#fff"/>
+  </g></g>
+  <path class="eh ln" d="M112 106 Q122 90 132 106"/>
+  <path class="ec ln" d="M112 101 Q122 111 132 101"/>
+</g>
+  <ellipse class="cheek" cx="62" cy="124" rx="8.5" ry="5.2" fill="#ff5d8f"/>
+  <ellipse class="cheek" cx="138" cy="124" rx="8.5" ry="5.2" fill="#ff5d8f"/>
+
+  <path class="mS ln" d="M91 123 Q100 134 109 123"/>
+  <g class="mG"><path d="M87 119 Q100 143 113 119 Z" fill="#14123a" stroke="#14123a" stroke-width="4" stroke-linejoin="round"/><ellipse cx="100" cy="128.4" rx="6.4" ry="3.2" fill="#ff5d8f"/></g>
+  <g class="mO"><path d="M84 117 Q100 152 116 117 Z" fill="#14123a" stroke="#14123a" stroke-width="4" stroke-linejoin="round"/><ellipse cx="100" cy="132" rx="8.6" ry="4.2" fill="#ff5d8f"/></g>
+  <g class="mW"><ellipse cx="100" cy="129" rx="8.4" ry="10.4" fill="#14123a"/><ellipse cx="100" cy="134" rx="4.6" ry="3.4" fill="#ff5d8f"/></g>
+  <path class="mY ln" d="M89 128 Q94.5 120 100 127 T111 126"/>
+  <path class="mT ln" d="M94 127 Q101 124 109 126.5"/>
+  <ellipse class="mZ" cx="100" cy="128" rx="4.6" ry="3.6" fill="#14123a"/>
+
+  <g class="dc dc-shades">
+    <rect x="56" y="69" width="38" height="16" rx="7" fill="#14123a"/>
+    <rect x="106" y="69" width="38" height="16" rx="7" fill="#14123a"/>
+    <path d="M94 75 H106" stroke="#14123a" stroke-width="4.4"/>
+    <path d="M62 74 h9 M112 74 h9" stroke="#8be3fb" stroke-width="2.8" stroke-linecap="round"/>
+  </g>
+
+  <g class="dc dc-hp">
+    <rect x="12" y="78" width="24" height="38" rx="11" fill="#a78bfa" stroke="#14123a" stroke-width="5"/>
+    <rect x="164" y="78" width="24" height="38" rx="11" fill="#a78bfa" stroke="#14123a" stroke-width="5"/>
+    <path d="M19 90 v14 M181 90 v14" stroke="#fff" stroke-opacity=".7" stroke-width="3.4" stroke-linecap="round"/>
+  </g>
+  <g class="dc dc-cape">
+    <circle cx="45" cy="73" r="5.2" fill="#ffd43b" stroke="#14123a" stroke-width="3"/>
+    <circle cx="155" cy="73" r="5.2" fill="#ffd43b" stroke="#14123a" stroke-width="3"/>
+  </g>
+  <g class="dc dc-crown"><g transform="translate(64 53) rotate(-14) scale(1.4)">
+    <path d="M-18 0 L-19 -17 L-9 -9 L0 -23 L9 -9 L19 -17 L18 0 Z" fill="#ffd43b" stroke="#14123a" stroke-width="4.4" stroke-linejoin="round"/>
+    <circle cx="0" cy="-7" r="3" fill="#ff5d8f" stroke="#14123a" stroke-width="1.8"/>
+  </g></g>
+
+  <g class="arm armL">
+  <line x1="30" y1="120" x2="30" y2="156" stroke="#14123a" stroke-width="16" stroke-linecap="round"/>
+  <line x1="30" y1="120" x2="30" y2="156" class="s-main" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="30" cy="158" r="10" fill="#fff" stroke="#14123a" stroke-width="4.6"/>
+</g>
+  <g class="arm armR">
+  <line x1="170" y1="120" x2="170" y2="156" stroke="#14123a" stroke-width="16" stroke-linecap="round"/>
+  <line x1="170" y1="120" x2="170" y2="156" class="s-main" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="170" cy="158" r="10" fill="#fff" stroke="#14123a" stroke-width="4.6"/>
+</g>
+
+  <g class="sweat"><path transform="translate(162 80)" d="M0 -10 C5 -3 8 1 8 5 A8 8 0 0 1 -8 5 C-8 1 -5 -3 0 -10Z" fill="#bfefff" stroke="#14123a" stroke-width="3" stroke-linejoin="round"/></g>
+  <g class="wowl ln" style="stroke:#ffb02e"><path d="M30 40 L22 29 M20 52 L8 47 M42 33 L40 20 M170 40 L178 29 M180 52 L192 47 M158 33 L160 20"/></g>
+  
+</g></g></g>
+<g class="dc dc-aura stars"><path transform="translate(192.4 159.1) scale(1.7)" d="M0 -10 Q1.6 -1.6 10 0 Q1.6 1.6 0 10 Q-1.6 1.6 -10 0 Q-1.6 -1.6 0 -10Z" fill="#ffd43b" stroke="#14123a" stroke-width="2.4" stroke-linejoin="round"/><path transform="translate(56.9 208.4) scale(1.2)" d="M0 -10 Q1.6 -1.6 10 0 Q1.6 1.6 0 10 Q-1.6 1.6 -10 0 Q-1.6 -1.6 0 -10Z" fill="#ffd43b" stroke="#14123a" stroke-width="2.4" stroke-linejoin="round"/><path transform="translate(7.6 72.9) scale(1.7)" d="M0 -10 Q1.6 -1.6 10 0 Q1.6 1.6 0 10 Q-1.6 1.6 -10 0 Q-1.6 -1.6 0 -10Z" fill="#ffd43b" stroke="#14123a" stroke-width="2.4" stroke-linejoin="round"/><path transform="translate(143.1 23.6) scale(1.2)" d="M0 -10 Q1.6 -1.6 10 0 Q1.6 1.6 0 10 Q-1.6 1.6 -10 0 Q-1.6 -1.6 0 -10Z" fill="#ffd43b" stroke="#14123a" stroke-width="2.4" stroke-linejoin="round"/></g></g>
+</svg>

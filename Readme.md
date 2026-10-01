@@ -6,7 +6,7 @@
 
 ![从 CRUD 到系统设计的学习路线](./images/learning-roadmap.svg)
 
-[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [交互实验总览](./交互实验/README.md) · [iOS 闯关 App](./iOS/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
+[在线阅读](https://kadaliao.github.io/system-design-interview-zh/) · [打开离线阅读版](./index.html) · [交互实验总览](./交互实验/README.md) · [网页闯关游戏](./game/README.md) · [iOS 闯关 App](./iOS/README.md) · [自测题详解](./29.%20自测题详解/README.md) · [术语速查](./术语速查.md) · [原版延伸阅读](./延伸阅读.md) · [校验记录](./校验/验收说明.md)
 
 ## 动手实验与自测练习
 
