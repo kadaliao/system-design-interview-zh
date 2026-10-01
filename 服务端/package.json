@@ -1,0 +1,23 @@
+{
+  "name": "sdq-video-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "系统设计闯关：视频鉴权服务端（海外 Cloudflare Worker + 中国大陆云函数）",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --import tsx --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.cn.json --noEmit",
+    "build:cn": "esbuild src/cn/server.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/cn/index.cjs",
+    "dev:worker": "wrangler dev",
+    "deploy:worker": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260930.2",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

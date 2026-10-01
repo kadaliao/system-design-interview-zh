@@ -1,0 +1,36 @@
+# 海外视频服务（Cloudflare Worker）。不含任何真实密钥。
+name = "sdq-video-auth"
+main = "src/worker/index.ts"
+compatibility_date = "2026-09-01"
+
+# 用自定义域名（video.liaoxingyi.com），不要用 workers.dev：
+# Cache API 官方文档只明确说明在自定义域名上生效。路由在 Cloudflare 控制台或下面配置。
+routes = [{ pattern = "video.liaoxingyi.com", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "VIDEOS"
+bucket_name = "sdq-videos"   # 换成你的桶名；桶保持私有，不要开 r2.dev 公开访问或公开自定义域名
+
+[vars]
+APPLE_BUNDLE_ID = "com.kadaliao.SystemDesignQuest"
+APPLE_PRODUCT_IDS = "com.kadaliao.SystemDesignQuest.full"
+# TestFlight 与 App 审核走 Sandbox；上线稳定后可改为只留 "Production"
+ALLOWED_ENVIRONMENTS = "Production,Sandbox"
+MAX_SIGNED_AGE_SECONDS = "604800"
+ALLOWED_LANGS = "zh,en"
+MAX_CHAPTER = "28"
+FREE_CHAPTERS = "1"
+TOKEN_TTL_SECONDS = "900"
+# CORS_ORIGINS = "https://example.com"   # 仅当有网页端需要跨域取视频时设置
+
+# 速率限制（可选）。period 只能是 10 或 60。namespace_id 是账号内唯一的正整数字符串。
+[[ratelimits]]
+name = "AUTH_LIMITER"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+# 密钥（不写在此文件）：
+#   npx wrangler secret put TOKEN_SECRET     # 至少 32 字符随机串，如 openssl rand -base64 48
+#   npx wrangler secret put TOKEN_SECRET_PREVIOUS   # 仅轮换期使用
