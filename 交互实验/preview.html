@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>交互实验预览</title>
-<script>/* ?theme=dark 预览夜间模式 */(function(){var t=new URLSearchParams(location.search).get('theme');if(t)document.documentElement.dataset.theme=t})()</script>
+<script>/* ?theme=dark 预览夜间模式；?lang=en（或 file 以 en/ 开头）预览英文版：runtime 界面文字与 locale 随之切换 */(function(){var q=new URLSearchParams(location.search),t=q.get('theme');if(t)document.documentElement.dataset.theme=t;if(q.get('lang')==='en'||/(^|,)en\//.test(q.get('file')||'')){window.LAB_LANG='en';document.documentElement.lang='en'}})()</script>
 <link rel="stylesheet" href="runtime.css">
 <style>
 /* 与阅读页正文相同的基础排版，便于单独开发和截图检查实验。 */
@@ -25,7 +25,7 @@ code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef2
 <body>
 <article id="app">
 <h1>交互实验预览</h1>
-<p class="usage" id="usage">用法：<code>preview.html?file=04-rate-limiter.js</code>（多个文件用逗号分隔，可加 <code>&amp;lab=实验ID</code> 只显示一个）。</p>
+<p class="usage" id="usage">用法：<code>preview.html?file=04-rate-limiter.js</code>（多个文件用逗号分隔，可加 <code>&amp;lab=实验ID</code> 只显示一个）。英文版：<code>preview.html?file=en/04-rate-limiter.js</code>。</p>
 </article>
 <script src="runtime.js"></script>
 <script>

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520">
+  <rect width="920" height="520" fill="#fffdf7"/>
+  <style>.s{stroke:#30475e;stroke-width:4;stroke-linejoin:round}.t{font-family:"Chalkboard SE","Comic Sans MS","Marker Felt",cursive;fill:#1f2937}.h{font-size:26px;font-weight:bold}.p{font-size:20px}.a{fill:none;stroke:#e07a5f;stroke-width:5;stroke-linecap:round;stroke-dasharray:8 8}</style>
+  <text x="36" y="42" class="t h">Estimation funnel: fuzzy question to checkable numbers</text>
+  <path d="M90 105 L830 105 L690 230 L610 230 L530 400 L390 400 L310 230 L230 230 Z" fill="#fff4d6" class="s"/>
+  <g transform="translate(120,125) rotate(-1)"><rect width="680" height="68" rx="16" fill="#f6bd60" class="s"/><text x="24" y="43" class="t p">1. Requirements: users, actions, peak, retention</text></g>
+  <g transform="translate(210,245) rotate(1)"><rect width="500" height="68" rx="16" fill="#f7ede2" class="s"/><text x="24" y="43" class="t p">2. Assumptions: round, write units</text></g>
+  <g transform="translate(260,365) rotate(-2)"><rect width="400" height="68" rx="16" fill="#cdeac0" class="s"/><text x="26" y="43" class="t p">3. Results: QPS / TB / servers</text></g>
+  <path d="M805 145 q38 35 0 70" class="a"/><text x="210" y="490" class="t p">Chase the order of magnitude and explainability, not decimals</text>
+</svg>

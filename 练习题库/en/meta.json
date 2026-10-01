@@ -1,0 +1,16 @@
+{
+  "sections": [
+    {"title": "Getting Started", "subtitle": "Scaling, estimation, and the interview framework"},
+    {"title": "Building Blocks", "subtitle": "Rate limiting, sharding, storage, and ID generation"},
+    {"title": "Classic Systems", "subtitle": "URL shortener, web crawler, notifications, news feed, chat, search, video, and cloud drive"},
+    {"title": "Location and Maps", "subtitle": "Nearby places, nearby friends, and map navigation"},
+    {"title": "Data and Messaging", "subtitle": "Message queues, monitoring and alerting, and stream aggregation"},
+    {"title": "Bookings and Storage", "subtitle": "Hotel reservations, email, object storage, and leaderboards"},
+    {"title": "Payments and Trading", "subtitle": "Payments, digital wallets, and stock exchanges"}
+  ],
+  "categories": {
+    "章末自测": "Chapter Self-Check",
+    "通用复盘": "General Review",
+    "正文追问": "Follow-Up Question"
+  }
+}

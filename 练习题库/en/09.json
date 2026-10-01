@@ -1,0 +1,565 @@
+{
+  "chapter": 9,
+  "title": "Web Crawler",
+  "fullTitle": "Chapter 9: Design a Web Crawler",
+  "intro": [
+    "**Learning goal**: Understand a collection pipeline that runs in a loop, and learn to separate scheduling, network downloading, parsing, and deduplication.",
+    "**Remember first**: seed URLs enter the queue → download → parse → deduplicate → extract new links → enqueue again. Priority decides “who goes first”; politeness decides “when it may be fetched”.",
+    "**Common mistakes**: using a single FIFO queue; deduplicating only by URL; assuming more threads always means more useful throughput."
+  ],
+  "keyPoints": [
+    "A crawler is a loop: the Frontier hands out a URL, then download and parse, content dedup, extract links, filter and URL dedup, and back to the Frontier.",
+    "URL dedup saves repeat downloads; content dedup saves repeat storage. If recrawling is allowed, the “seen” record must carry the last fetch time.",
+    "Front queues handle priority; back queues handle politeness per host. Even top priority can’t skip a site’s rate limit.",
+    "Use BFS rather than DFS to avoid sinking into very deep branches, but BFS ignores importance, so layer priority and freshness on top.",
+    "Crawler traps need a combination of crawl budgets, depth limits, parameter normalization, and per-site quotas, not just a URL length cap.",
+    "Judge a crawler by useful new-content throughput, error rate, and load on sites; more threads don’t mean more pages fetched."
+  ],
+  "refs": {
+    "Requirements": "需求（Requirements）",
+    "Estimates Need an Average Page Size": "批注：估算必须说明平均页面大小",
+    "Design Challenges": "设计挑战（Design Challenges）",
+    "Applications": "应用（Applications）",
+    "Extensibility": "扩展能力（Extensibility）",
+    "Workflow": "工作流程（Workflow）",
+    "Components": "组件（Components）",
+    "Why Two Kinds of Dedup": "批注：为什么需要两道去重",
+    "DFS / BFS": "DFS / BFS",
+    "The Scheduler as a Hospital Front Desk": "批注：调度器像医院挂号处",
+    "URL Frontier": "URL Frontier",
+    "Priority": "优先级（Priority）",
+    "Politeness": "礼貌（Politeness）",
+    "Freshness": "新鲜度（Freshness）",
+    "HTML Downloader": "HTML Downloader",
+    "Robustness": "健壮性（Robustness）",
+    "A Length Limit Alone Is Not Enough": "批注：规则不能只靠一条长度限制",
+    "Additional Considerations": "其他考虑（Additional Considerations）",
+    "Interview Answer Template": "批注：面试回答模板"
+  },
+  "lessons": [
+    {
+      "id": "c09-01",
+      "title": "Requirements",
+      "summary": "Crawler uses, design challenges, and scale",
+      "exercises": [
+        {
+          "id": "c09-01-01",
+          "type": "single",
+          "prompt": "The requirement is to crawl 1 billion web pages per month. Assuming a 30-day month, roughly what is the average download rate?",
+          "options": [
+            "About 4,000 pages/s",
+            "About 40 pages/s",
+            "About 400 pages/s",
+            "About 800 pages/s"
+          ],
+          "answer": 2,
+          "explanation": "A month is about 30×24×3600 ≈ 2.6 million seconds, and 1 billion ÷ 2.6 million ≈ 385, which rounds to about 400 pages/s. The 800 QPS in the requirements is the peak, not the average.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c09-01-02",
+          "type": "judge",
+          "prompt": "The average is about 400 pages/s, so a download cluster sized for 400 pages/s is enough.",
+          "answer": false,
+          "explanation": "An average hides the peaks. The stated peak is about 800 QPS, 2 times the average. Sizing for the average means crawling can’t keep up at peak, the Frontier backs up, recrawls slip, and there is no headroom for failure retries.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c09-01-03",
+          "type": "fill",
+          "prompt": "Complete the two assumptions in the storage estimate",
+          "text": "If each page is about [[500 KB]], then 1 billion pages × 12 months × [[5 years]] ≈ 30 PB.",
+          "distractors": [
+            "50 KB",
+            "5 MB",
+            "1 year"
+          ],
+          "explanation": "1 billion × 500 KB = 500 TB per month, and × 12 × 5 gives about 30 PB. Without stating the average page size, this number means nothing.",
+          "ref": "Estimates Need an Average Page Size"
+        },
+        {
+          "id": "c09-01-04",
+          "type": "single",
+          "prompt": "Keep the 30 PB estimate. If pages average only 100 KB after compression and all other assumptions stay the same, about how much raw storage is needed over 5 years?",
+          "options": [
+            "About 6 PB",
+            "About 600 TB",
+            "About 30 PB",
+            "About 150 PB"
+          ],
+          "answer": 0,
+          "explanation": "Storage scales with average page size: 100 KB is 1/5 of 500 KB, so 30 PB ÷ 5 = 6 PB. This is still only the raw page volume; replicas and indexes are counted separately.",
+          "ref": "Estimates Need an Average Page Size"
+        },
+        {
+          "id": "c09-01-05",
+          "type": "judge",
+          "prompt": "30 PB is only the size of the raw pages; replication and indexing must be counted separately.",
+          "answer": true,
+          "explanation": "The 30 PB figure excludes replication and indexing. With 3 replicas, for example, the disk need approaches 90 PB, so state what the number covers whenever you quote it.",
+          "ref": "Estimates Need an Average Page Size"
+        },
+        {
+          "id": "c09-01-06",
+          "type": "multi",
+          "prompt": "Which factors would noticeably change the “about 30 PB over 5 years” storage estimate?",
+          "options": [
+            "The share of duplicate content",
+            "The number of download worker threads",
+            "Whether pages are stored compressed",
+            "The recrawl policy (how many versions of a page are kept)",
+            "The DNS cache hit rate"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Compression, actual page size, duplication rate, and recrawl policy all change the result, because they decide how many bytes you store. Thread count and DNS cache only affect how fast you crawl, not how much data must be kept.",
+          "ref": "Estimates Need an Average Page Size"
+        },
+        {
+          "id": "c09-01-07",
+          "type": "match",
+          "prompt": "Match each design challenge to the problem it addresses",
+          "pairs": [
+            [
+              "Scalability",
+              "Processing billions of pages in parallel"
+            ],
+            [
+              "Robustness",
+              "Surviving bad HTML, crashes, and malicious links"
+            ],
+            [
+              "Politeness",
+              "Not overwhelming target sites with requests"
+            ],
+            [
+              "Extensibility",
+              "Supporting new content types with few changes"
+            ]
+          ],
+          "explanation": "Scalability is a problem of size, while extensibility is about adding features, so they are easy to mix up. Robustness is about bad input and failures; politeness is about the impact on other people’s websites.",
+          "ref": "Design Challenges"
+        },
+        {
+          "id": "c09-01-08",
+          "type": "single",
+          "prompt": "An organization wants to periodically save government web pages so they can still see how the pages looked ten years later. What kind of crawler application is this?",
+          "options": [
+            "Search engine indexing",
+            "Web archiving",
+            "Web mining",
+            "Web monitoring"
+          ],
+          "answer": 1,
+          "explanation": "Web archiving preserves pages for future viewing, as in the US Library of Congress’s archiving work. Search indexing serves retrieval of current content, mining extracts knowledge from pages, and monitoring detects problems such as copyright infringement.",
+          "ref": "Applications"
+        },
+        {
+          "id": "c09-01-09",
+          "type": "judge",
+          "prompt": "To crawl images later, you can add a separate download module without changing the main collection flow.",
+          "answer": true,
+          "explanation": "Extensibility means new content types plug in as independent modules, such as a PNG downloader or a web monitor, while the main crawl loop stays unchanged. “HTML only” is a scope constraint, not an architectural limit.",
+          "ref": "Extensibility"
+        }
+      ]
+    },
+    {
+      "id": "c09-02",
+      "title": "The Crawl Loop",
+      "summary": "How components form a loop, and why two dedups",
+      "exercises": [
+        {
+          "id": "c09-02-01",
+          "type": "order",
+          "prompt": "Put in order how a URL is processed, from entering the system to producing new URLs",
+          "items": [
+            "Seed URLs are put into the Frontier",
+            "The downloader takes a URL, resolves DNS, and downloads",
+            "The parser validates and parses the page",
+            "Content dedup: check whether the page has been seen",
+            "Extract links from new content and filter them",
+            "URLs not seen before go back into the Frontier"
+          ],
+          "explanation": "Download first, then parse, then check whether the content is a duplicate; only new content is worth extracting links from. Links go back to the Frontier only after filtering and URL dedup, which closes the loop.",
+          "ref": "Workflow"
+        },
+        {
+          "id": "c09-02-02",
+          "type": "match",
+          "prompt": "Match each component to its responsibility",
+          "pairs": [
+            [
+              "DNS resolver",
+              "Resolves host names to IP addresses"
+            ],
+            [
+              "Content parser",
+              "Validates pages, drops malformed ones"
+            ],
+            [
+              "URL filter",
+              "Excludes blacklisted and bad URLs"
+            ],
+            [
+              "URL-seen check",
+              "Records visited URLs to avoid recrawling"
+            ],
+            [
+              "Content-seen check",
+              "Compares page hashes to spot duplicate content"
+            ]
+          ],
+          "explanation": "The two “seen” checks are the easiest to mix up: URL-seen looks at the address and blocks before download; content-seen looks at the page hash and blocks after download. The filter excludes blacklisted and bad URLs by rule, whether or not they were seen.",
+          "ref": "Components"
+        },
+        {
+          "id": "c09-02-03",
+          "type": "multi",
+          "prompt": "In which cases do two different URLs return the same page?",
+          "options": [
+            "The URLs carry different tracking parameters",
+            "The same URL is updated with new content the next day",
+            "The same URL appears in links on two different pages",
+            "A mirror site copies the same content",
+            "A long article is split into page 1 and page 2 with two URLs"
+          ],
+          "answers": [
+            0,
+            3
+          ],
+          "explanation": "Tracking parameters and mirror sites give different addresses with identical content; URL dedup can’t see that, but page hashes can. One URL linked from many places is a single address that URL dedup blocks. Pagination is different content, and an updated URL is a recrawl question.",
+          "ref": "Why Two Kinds of Dedup"
+        },
+        {
+          "id": "c09-02-04",
+          "type": "single",
+          "prompt": "A news homepage keeps the same URL, but its content changes every hour. What happens if the URL-seen record marks it as “crawled” forever?",
+          "options": [
+            "Nothing, because BFS will visit it again",
+            "Content dedup will automatically fetch the updates",
+            "Later updates will never be fetched",
+            "The URL filter will let it through again"
+          ],
+          "answer": 2,
+          "explanation": "URL dedup looks only at the address. Once it is sealed off permanently, the URL is never downloaded again and every update is missed. When recrawling is allowed, the seen record must store the last fetch time and release the URL again when its freshness interval expires.",
+          "ref": "Why Two Kinds of Dedup"
+        },
+        {
+          "id": "c09-02-05",
+          "type": "judge",
+          "prompt": "Content dedup happens after download, so it can’t save this download’s traffic; what it saves is repeated storage and later processing.",
+          "answer": true,
+          "explanation": "Computing the page hash requires downloading the page first. So saving downloads is the job of URL dedup (blocking before enqueue), while content dedup stops repeated storage, repeated link extraction, and other follow-up work.",
+          "ref": "Why Two Kinds of Dedup"
+        },
+        {
+          "id": "c09-02-06",
+          "type": "fill",
+          "prompt": "Complete what each of the two dedups depends on",
+          "text": "Content dedup compares the page’s [[hash]]; if recrawling is allowed, the URL-seen record must also store the [[last fetch time]].",
+          "distractors": [
+            "URL length",
+            "PageRank",
+            "IP address"
+          ],
+          "explanation": "Identical content has an identical hash, so duplicates can be spotted across URLs. If URL-seen only records whether a URL was seen, it seals the URL off forever; storing the last fetch time lets you tell when a recrawl is due.",
+          "ref": "Why Two Kinds of Dedup"
+        },
+        {
+          "id": "c09-02-07",
+          "type": "single",
+          "prompt": "When choosing seed URLs, which approach is most sensible?",
+          "options": [
+            "Use only the single biggest portal as the sole seed",
+            "Pick only the most frequently updated news pages, for freshness",
+            "Pick link-rich entry sites by region or topic",
+            "Pick any batch of pages, as long as there are enough"
+          ],
+          "answer": 2,
+          "explanation": "Seeds are the starting points of the traversal and should reach as many sites as possible through links. Organizing them by region or topic (such as popular local sites, sports, or health) gives more balanced coverage. A single portal or random picks leave large blind spots.",
+          "ref": "Components"
+        },
+        {
+          "id": "c09-02-08",
+          "type": "judge",
+          "prompt": "When content dedup finds a duplicate page, it should still extract the page’s links so no new URLs are missed.",
+          "answer": false,
+          "explanation": "Same content means same links, and they were already extracted the first time this content was processed. The branch for duplicate content can simply end, which is exactly the follow-up work content dedup saves.",
+          "ref": "Workflow"
+        },
+        {
+          "id": "c09-02-09",
+          "type": "single",
+          "prompt": "At which step is the “has this URL been seen” check cheapest?",
+          "options": [
+            "When a URL is taken from the Frontier and given to the downloader",
+            "After the page is downloaded and its hash is computed",
+            "Before a new URL enters the Frontier",
+            "After DNS resolution, before the download starts"
+          ],
+          "answer": 2,
+          "explanation": "If an already-crawled address is blocked before enqueue, it never occupies the Frontier, DNS resolution, download, or parsing. The later you block it, the more cost you waste.",
+          "ref": "Workflow"
+        }
+      ]
+    },
+    {
+      "id": "c09-03",
+      "title": "Scheduling",
+      "summary": "BFS, politeness, priority, and freshness together",
+      "exercises": [
+        {
+          "id": "c09-03-01",
+          "type": "single",
+          "prompt": "Viewing the web as a directed graph, why does a crawler usually use BFS rather than DFS?",
+          "options": [
+            "Link chains can be extremely deep, so DFS can get stuck in one branch",
+            "BFS goes level by level, so it automatically crawls important pages first",
+            "BFS never revisits a page, so no dedup is needed",
+            "DFS can’t traverse a link graph that contains cycles"
+          ],
+          "answer": 0,
+          "explanation": "Page links can keep going down forever, and DFS sinks deeper and deeper into one branch. BFS advances level by level and is more balanced, but it ignores importance and won’t deduplicate for you; DFS with a visited record can also handle cyclic graphs.",
+          "ref": "DFS / BFS"
+        },
+        {
+          "id": "c09-03-02",
+          "type": "judge",
+          "prompt": "Standard BFS traverses level by level, which already lets important pages be crawled first.",
+          "answer": false,
+          "explanation": "Standard BFS queues URLs only in discovery order and doesn’t distinguish quality or importance. That is why the Frontier also ranks URLs by signals such as PageRank, page importance, and update frequency.",
+          "ref": "DFS / BFS"
+        },
+        {
+          "id": "c09-03-03",
+          "type": "judge",
+          "prompt": "Even if all 1,000 URLs of a site have top priority, they must still be downloaded one at a time under that host’s rate limit.",
+          "answer": true,
+          "explanation": "Priority decides “who goes first”; politeness decides “when it may be fetched”. A host normally gets only one request at a time, with a gap between downloads, and top priority can’t skip the target site’s rate limit.",
+          "ref": "The Scheduler as a Hospital Front Desk"
+        },
+        {
+          "id": "c09-03-04",
+          "type": "match",
+          "prompt": "Match each Frontier part to its role",
+          "pairs": [
+            [
+              "Prioritizer",
+              "Receives URLs and computes priority"
+            ],
+            [
+              "Front queues",
+              "One per priority; high ones picked more often"
+            ],
+            [
+              "Back queues",
+              "Each holds URLs from one host only"
+            ],
+            [
+              "Mapping table",
+              "Records which back queue each host uses"
+            ],
+            [
+              "Worker",
+              "Downloads one host’s pages in order, with a gap"
+            ]
+          ],
+          "explanation": "Front queues handle priority and back queues handle politeness: URLs are first picked by importance, then queued by host in their own back queues for download. The mapping table makes sure URLs from one host always go to the same queue.",
+          "ref": "URL Frontier"
+        },
+        {
+          "id": "c09-03-05",
+          "type": "single",
+          "prompt": "Why does the front-queue selector use weighted random choice instead of always taking the highest-priority queue?",
+          "options": [
+            "To favor important pages without starving low-priority queues",
+            "To cut the cost of the Prioritizer re-sorting repeatedly",
+            "To spread out requests to one host and enforce rate limits",
+            "To give every queue the same chance of being picked, for fairness"
+          ],
+          "answer": 0,
+          "explanation": "Weights make high-priority queues more likely to be picked without starving low-priority ones; if it always took the top queue, other pages would never get a turn while important URLs keep arriving. Politeness is handled per host by the back queues, not by random selection in the front queues.",
+          "ref": "Priority"
+        },
+        {
+          "id": "c09-03-06",
+          "type": "fill",
+          "prompt": "Complete the two politeness scheduling rules",
+          "text": "A host normally gets only [[one]] request at a time, with a [[delay]] between downloads.",
+          "distractors": [
+            "two",
+            "timeout",
+            "retry"
+          ],
+          "explanation": "Politeness means not overwhelming the target site: only one request to a host is in flight at a time, and a gap is left between downloads. A timeout limits how long a single request waits, not the gap between downloads.",
+          "ref": "Politeness"
+        },
+        {
+          "id": "c09-03-07",
+          "type": "judge",
+          "prompt": "A freshness policy should recrawl all pages on the same schedule, which is the fairest and most economical.",
+          "answer": false,
+          "explanation": "Freshness sets recrawl timing from a page’s update history and importance: a news homepage updated hourly needs frequent visits, while a page unchanged for years is revisited rarely. A uniform schedule wastes crawl capacity and still misses updates.",
+          "ref": "Freshness"
+        },
+        {
+          "id": "c09-03-08",
+          "type": "multi",
+          "prompt": "A host has been timing out frequently. Which responses are sensible?",
+          "options": [
+            "Add more concurrent connections to the host to finish sooner",
+            "Back off for a while, then retry",
+            "Immediately put the failed URL back at the head of the queue",
+            "Record the next time the host may be crawled",
+            "Use a shorter timeout so a slow site doesn’t hold a worker for long"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "Retrying immediately or adding concurrency adds pressure while the site is struggling and causes a retry storm. Backing off, recording the next allowed time, and a shorter timeout protect the site and keep workers from being held up by a slow one.",
+          "ref": "The Scheduler as a Hospital Front Desk"
+        }
+      ]
+    },
+    {
+      "id": "c09-04",
+      "title": "Robust Downloading",
+      "summary": "Download tuning, fault tolerance, traps, scale-out",
+      "exercises": [
+        {
+          "id": "c09-04-01",
+          "type": "multi",
+          "prompt": "Which practices directly reduce the HTML downloader’s waiting on the network?",
+          "options": [
+            "Obeying robots.txt",
+            "A DNS cache",
+            "Placing download servers close to target sites",
+            "Content dedup",
+            "Setting a shorter timeout"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "A DNS cache skips repeated resolution, geographic proximity shortens network round trips, and a short timeout keeps slow sites from holding resources. Content dedup happens after the download, and robots.txt is a crawling rule, not a speedup.",
+          "ref": "HTML Downloader"
+        },
+        {
+          "id": "c09-04-02",
+          "type": "single",
+          "prompt": "You grow the download servers from 10 to 11 and use consistent hashing to assign hosts to servers. What is the benefit?",
+          "options": [
+            "Every server ends up with exactly the same load",
+            "One host can be spread across several servers and crawled in parallel",
+            "Hotspots caused by popular sites are removed automatically",
+            "Only a small fraction of hosts have to move to the new server"
+          ],
+          "answer": 3,
+          "explanation": "The value of consistent hashing is that adding or removing a node moves only a few mappings, while the other hosts stay with their original servers. It doesn’t guarantee perfect balance or remove hotspots, and spreading one host across servers would break politeness.",
+          "ref": "Robustness"
+        },
+        {
+          "id": "c09-04-03",
+          "type": "judge",
+          "prompt": "Capping the maximum URL length is enough to stop crawler traps.",
+          "answer": false,
+          "explanation": "A trap such as an infinite calendar can have short URLs and still never end. A length limit is only one rule; you also need a crawl budget, a depth limit, parameter normalization, and per-site quotas.",
+          "ref": "A Length Limit Alone Is Not Enough"
+        },
+        {
+          "id": "c09-04-04",
+          "type": "multi",
+          "prompt": "Which measures are sensible against crawler traps such as an “infinite calendar”?",
+          "options": [
+            "Set a crawl budget or quota for each site",
+            "Strip all URL parameters before dedup, no exceptions",
+            "Add more download workers",
+            "Limit the crawl depth"
+          ],
+          "answers": [
+            0,
+            3
+          ],
+          "explanation": "Depth limits and per-site budgets put a cap on endless paths. Parameter normalization needs care: some parameters really do change the page, so stripping them all would hurt normal pages. More workers just fall into the trap faster.",
+          "ref": "A Length Limit Alone Is Not Enough"
+        },
+        {
+          "id": "c09-04-05",
+          "type": "single",
+          "prompt": "Two different URLs have the same page body except for one line of advertising. What happens with content dedup based on an exact hash?",
+          "options": [
+            "URL dedup blocks the second copy first",
+            "The hashes match, so the second copy is dropped",
+            "The parser drops it as a malformed page",
+            "The hashes differ, so both are stored as new content"
+          ],
+          "answer": 3,
+          "explanation": "An exact hash only recognizes identical content; a one-byte difference gives a different hash. The URLs differ, so URL dedup can’t block it either. Catching near-duplicates like this needs other techniques, which is a known limit of exact hashing.",
+          "ref": "A Length Limit Alone Is Not Enough"
+        },
+        {
+          "id": "c09-04-06",
+          "type": "judge",
+          "prompt": "When scaling out horizontally, crawl workers can be stateless, but the Frontier and the dedup state still need to be shared or persisted.",
+          "answer": true,
+          "explanation": "Workers must be stateless so you can add or remove them freely. But which URLs are pending and which have been seen is global state; if it lives only in one machine’s memory, scaling out or a crash causes repeated or missed crawling.",
+          "ref": "Additional Considerations"
+        },
+        {
+          "id": "c09-04-07",
+          "type": "single",
+          "prompt": "A site’s main content only appears after JavaScript loads it. What happens if you download only the raw HTML?",
+          "options": [
+            "The HTML lacks the content, so you need browser rendering or a similar approach",
+            "The server waits for the script to finish and returns the complete HTML",
+            "robots.txt usually forbids crawling such pages",
+            "A longer timeout is enough to wait for the content to load"
+          ],
+          "answer": 0,
+          "explanation": "The content is generated only after a browser runs the script, so the raw HTML the server returns is an empty shell, and no amount of waiting will produce it. The chapter lists this item as server-side rendering; what actually needs solving is crawling with browser rendering or another approach that suits the site.",
+          "ref": "Additional Considerations"
+        },
+        {
+          "id": "c09-04-08",
+          "type": "judge",
+          "prompt": "Doubling the number of download threads also doubles the useful crawl throughput.",
+          "answer": false,
+          "explanation": "A single host is limited by politeness, so extra threads just queue up, and duplicate pages, errors, and traps aren’t useful output either. Judge a crawler by useful new-content throughput, error rate, and load on sites, not by thread count alone.",
+          "ref": "Interview Answer Template"
+        },
+        {
+          "id": "c09-04-09",
+          "type": "match",
+          "prompt": "Match each measure to its purpose",
+          "pairs": [
+            [
+              "Error handling",
+              "Isolates faults so the system doesn’t crash"
+            ],
+            [
+              "Data validation",
+              "Ensures the crawled content is complete"
+            ],
+            [
+              "PNG downloader module",
+              "Adds a content type without changing the loop"
+            ],
+            [
+              "robots.txt",
+              "Follows the crawling rules a site publishes"
+            ]
+          ],
+          "explanation": "Error handling and data validation belong to robustness: bad pages and crashes must not drag down the whole system. An independent new module shows extensibility, and obeying robots.txt is the downloader’s basic courtesy to a site.",
+          "ref": "Robustness"
+        }
+      ]
+    }
+  ]
+}

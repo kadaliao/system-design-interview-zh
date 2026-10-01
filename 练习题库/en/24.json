@@ -1,0 +1,625 @@
+{
+  "chapter": 24,
+  "title": "S3-like Object Storage",
+  "fullTitle": "Chapter 24: S3-like Object Storage",
+  "intro": [
+    "Think of object storage as a warehouse: `bucket + key` is the address on the waybill, metadata records where the goods are, and data nodes hold the actual bytes. **Finding the address, reading the bytes, and recovering after a disk dies are three different things.**"
+  ],
+  "keyPoints": [
+    "Metadata and data are separate: the name finds metadata and an object ID, the ID finds a data node, and the node’s index finds the file offset.",
+    "Persist the bytes first, then publish metadata: a failure leaves at most a reclaimable orphan; the reverse exposes unreadable broken references.",
+    "Synchronous replication keeps acknowledged writes safe but isn’t linearizability: write order, read path, election, and caches need their own rules.",
+    "8+4 erasure coding uses 1.5 times the space (50% extra), half of three replicas, at the cost of encoding, decoding, and cross-node reads.",
+    "Durability comes from failure-domain placement, checksums, and scrubbing; a checksum only detects damage, so repair needs healthy copies or enough shards.",
+    "Sharding by hash(bucket name, object name) favors point lookups; prefix listing fans out and merges. Deletes write a marker first; GC reclaims later."
+  ],
+  "refs": {
+    "Introduction": "简介（Introduction）",
+    "Step 1: Understand the Problem and Establish Scope": "第 1 步：理解问题并确定范围",
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Step 2: High-Level Design": "第 2 步：高层设计",
+    "High-Level Design": "高层设计（High-level design）",
+    "Uploading an Object": "上传对象（Uploading an object）",
+    "Downloading an Object": "下载对象（Downloading an object）",
+    "Data Store": "数据存储（Data store）",
+    "Data Persistence Flow": "数据持久化流程（Data persistence flow）",
+    "How Data Is Organized": "数据如何组织（How data is organized）",
+    "Object Lookup": "对象查找（Object lookup）",
+    "Updated Data Persistence Flow": "更新后的持久化流程（Updated data persistence flow）",
+    "Durability": "持久性（Durability）",
+    "Correctness Verification": "正确性校验（Correctness verification）",
+    "Metadata Data Model": "元数据模型（Metadata data model）",
+    "Listing Objects in a Bucket": "列出桶内对象（Listing objects in a bucket）",
+    "Object Versioning": "对象版本（Object versioning）",
+    "Optimizing Uploads of Large Files": "大文件上传优化（Optimizing uploads of large files）",
+    "Garbage Collection": "垃圾回收（Garbage collection）"
+  },
+  "lessons": [
+    {
+      "id": "c24-01",
+      "title": "Storage Types",
+      "summary": "Tell storage types apart and estimate object counts",
+      "exercises": [
+        {
+          "id": "c24-01-01",
+          "type": "single",
+          "prompt": "An application often modifies a few KB in the middle of a 5 GB file. If the file lives in this chapter’s object storage, what is the only way to update it each time?",
+          "options": [
+            "Send a PUT with an offset and rewrite only those few KB",
+            "Rewrite the matching disk blocks on the data node directly",
+            "Upload a complete new object over the same key, or create a new version",
+            "Mount the bucket as a directory and edit through the file interface"
+          ],
+          "answer": 2,
+          "explanation": "This object storage supports only whole-object writes, replacement, and versioning, not in-place partial edits. Workloads that often change bytes in the middle suit block or file storage better; object storage is strongest at write once, read many times.",
+          "ref": "Step 2: High-Level Design"
+        },
+        {
+          "id": "c24-01-02",
+          "type": "single",
+          "prompt": "Which kind of data fits object storage best?",
+          "options": [
+            "Huge volumes of user photos and backups, stored and read whole by key",
+            "A shared directory mounted by many servers and rewritten often",
+            "Database data files that need in-place updates of data pages",
+            "A virtual machine’s system disk with low-latency random reads and writes"
+          ],
+          "answer": 0,
+          "explanation": "Object storage is built for massive scale, high durability, and low cost, storing and fetching unstructured data whole by key through a RESTful API. VM disks and database files need in-place random rewrites, which suits block storage; a directory mounted by many machines is the classic use of file storage.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c24-01-03",
+          "type": "match",
+          "prompt": "Match each term with its meaning",
+          "pairs": [
+            [
+              "Bucket",
+              "Logical container; name assumed globally unique"
+            ],
+            [
+              "Object",
+              "The data itself plus its metadata"
+            ],
+            [
+              "Versioning",
+              "Keeps several versions of an object in a bucket"
+            ],
+            [
+              "URI",
+              "Uniquely identifies a resource"
+            ],
+            [
+              "SLA",
+              "The provider’s service commitment to customers"
+            ]
+          ],
+          "explanation": "A bucket is the logical container for objects, and an object is data plus metadata; versioning lets one key keep several versions in a bucket. An SLA is a contractual commitment, which is not the same thing as design goals such as durability and availability.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c24-01-04",
+          "type": "judge",
+          "prompt": "An object key like `photos/2021/a.jpg` means the bucket contains a real directory named photos.",
+          "answer": false,
+          "explanation": "A bucket has no directory hierarchy in the filesystem sense. The `/` is usually just a prefix convention used to simulate paths and list by prefix. Treating it as a POSIX directory leads you to expect whole-directory renames or locks that don’t exist.",
+          "ref": "Downloading an Object"
+        },
+        {
+          "id": "c24-01-05",
+          "type": "judge",
+          "prompt": "Six nines of durability and four nines of availability are different goals: data can be intact yet temporarily unreadable.",
+          "answer": true,
+          "explanation": "Durability asks whether data is lost over the long run; availability asks whether it can be accessed right now. When a node is down, the data may be intact but unreadable for a while, and a service being online does not mean data was never corrupted. Design and measure the two separately.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c24-01-06",
+          "type": "single",
+          "prompt": "By count, 20% of objects are under 1 MB, 60% are 1–64 MB, and 20% are over 64 MB, with representative sizes of 0.5, 32, and 200 MB. What is the average object size, roughly?",
+          "options": [
+            "77.5 MB",
+            "59.3 MB",
+            "32 MB",
+            "40 MB"
+          ],
+          "answer": 1,
+          "explanation": "Weight by share: `0.2×0.5 + 0.6×32 + 0.2×200 = 59.3 MB`. 77.5 MB is the plain average of the three representative values, which ignores that 60% of the objects fall in the 32 MB band.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c24-01-07",
+          "type": "single",
+          "prompt": "An estimate assumes 100 PB of capacity with 40% used, which gives about 680 million objects. If the 100 PB is entirely actual data instead, about how many objects are there?",
+          "options": [
+            "About 270 million",
+            "About 4.2 billion",
+            "About 680 million",
+            "About 1.7 billion"
+          ],
+          "answer": 3,
+          "explanation": "`10^11 MB / 59.3 MB ≈ 1.69×10^9`, about 1.7 billion. The 40% is an assumption about used capacity; if the 100 PB is already actual data, you should not multiply by 0.4 again. The 270 million figure applies 40% a second time to 680 million.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c24-01-08",
+          "type": "fill",
+          "prompt": "Complete the metadata size estimate",
+          "text": "At 40% used capacity there are about [[680 million]] objects; at 1 KB of metadata each, the total metadata is about [[0.68 TB]].",
+          "distractors": [
+            "68 TB",
+            "6.8 TB",
+            "6.8 billion"
+          ],
+          "explanation": "`680 million × 1 KB ≈ 680 billion bytes ≈ 0.68 TB`. Next to 100 PB of data, the metadata is tiny, but it has a huge number of entries and is queried often, so the object table still needs sharding and the bucket table needs more read throughput.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c24-01-09",
+          "type": "single",
+          "prompt": "A 7200 rpm SATA disk can do roughly 100–150 random seeks per second. What is this number best used to estimate?",
+          "options": [
+            "A disk’s annual failure rate",
+            "The throughput ceiling for large sequential reads and writes",
+            "The IOPS ceiling for small-object random reads and writes",
+            "The total disk capacity the whole cluster needs"
+          ],
+          "answer": 2,
+          "explanation": "Object storage can be limited by capacity or by IOPS. The number of random seeks decides how many small random I/Os a disk completes per second, and with huge numbers of small objects it often becomes the bottleneck before capacity does. Sequential I/O doesn’t seek repeatedly, so you can’t derive throughput from this number.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c24-01-10",
+          "type": "multi",
+          "prompt": "Which of these features does this problem’s object storage need to support?",
+          "options": [
+            "Mount a bucket as a POSIX file system",
+            "Modify part of an object’s bytes in place",
+            "List the objects in a bucket",
+            "Create a bucket",
+            "Object versioning"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "The features from requirements clarification are: create buckets, upload/download, versioning, and listing the objects in a bucket. Partial in-place modification is out of scope, since an object can only be replaced whole; POSIX mounting is a file storage capability.",
+          "ref": "Step 1: Understand the Problem and Establish Scope"
+        }
+      ]
+    },
+    {
+      "id": "c24-02",
+      "title": "Read/Write Path",
+      "summary": "How a PUT/GET flows and how bytes get replicated",
+      "exercises": [
+        {
+          "id": "c24-02-01",
+          "type": "single",
+          "prompt": "Object storage keeps metadata and object content in two separate stores. What is the main benefit?",
+          "options": [
+            "Reading an object touches only one system, saving a network round trip",
+            "Metadata and bytes fit in one transaction, so they are consistent by nature",
+            "Objects can therefore be modified partially in place",
+            "The two have different access patterns, so each scales and is tuned independently"
+          ],
+          "answer": 3,
+          "explanation": "Metadata is small and queried often; content is large and mostly read or written whole. Separating them lets each side scale against its own bottleneck. The cost: a read needs an extra hop to metadata, and a write spans two systems with no shared transaction, hence orphan objects.",
+          "ref": "Step 2: High-Level Design"
+        },
+        {
+          "id": "c24-02-02",
+          "type": "match",
+          "prompt": "Match each high-level component with its responsibility",
+          "pairs": [
+            [
+              "Load balancer",
+              "Spreads API requests across service replicas"
+            ],
+            [
+              "API service",
+              "Stateless; orchestrates auth, metadata, data"
+            ],
+            [
+              "IAM",
+              "Authentication, authorization, access control"
+            ],
+            [
+              "Data store",
+              "Stores and fetches real bytes by object UUID"
+            ],
+            [
+              "Metadata store",
+              "Records buckets, object names, and object IDs"
+            ]
+          ],
+          "explanation": "The API service holds no state: it calls IAM for auth first, then talks to the metadata store and the data store. The data store knows only UUIDs, not bucket or object names; the mapping from name to ID lives in the metadata store.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c24-02-03",
+          "type": "order",
+          "prompt": "Put the steps of uploading the object `script.txt` in order (the bucket already exists)",
+          "items": [
+            "The client sends a PUT request to the API service",
+            "IAM verifies the identity and write permission",
+            "The data store persists the body and returns a UUID",
+            "The metadata store records object ID, bucket ID, and name",
+            "Success is returned to the client"
+          ],
+          "explanation": "Authenticate first, then write the bytes. Once the bytes are durable and a UUID comes back, publish the metadata, and only then reply with success. Writing bytes before publishing metadata means a failure leaves at most a reclaimable orphan, never an object users can see but cannot read.",
+          "ref": "Uploading an Object"
+        },
+        {
+          "id": "c24-02-04",
+          "type": "single",
+          "prompt": "When handling `GET /bucket-to-share/script.txt`, what key piece of information does the API service get back from the metadata store?",
+          "options": [
+            "The object’s UUID, used to fetch the bytes from the data store",
+            "The full byte content of the object",
+            "The object’s file name and offset on the data node",
+            "Whether the caller has read permission"
+          ],
+          "answer": 0,
+          "explanation": "The path is bucket/key, then the metadata store returns the object UUID, then the data store fetches the bytes by UUID. File names and offsets belong to the data node’s internal local index, which global metadata doesn’t track; read permission is checked by IAM.",
+          "ref": "Downloading an Object"
+        },
+        {
+          "id": "c24-02-05",
+          "type": "judge",
+          "prompt": "In an upload, making the metadata visible first and persisting the bytes afterward is more dangerous than writing the bytes first and committing the metadata afterward.",
+          "answer": true,
+          "explanation": "If the bytes are written but the metadata commit fails, you are left with an unreferenced orphan that can be reclaimed later. If the metadata is published before the bytes are durable, users see a broken reference that can’t be read. Better an extra box with no waybill than a waybill with no box.",
+          "ref": "Uploading an Object"
+        },
+        {
+          "id": "c24-02-06",
+          "type": "single",
+          "prompt": "The three replicas of object O9 are written. While committing the metadata `photo.jpg → O9`, the connection drops and the client gets a timeout. What is the safest next step?",
+          "options": [
+            "Assume the commit succeeded and return success to the client",
+            "Generate a new object ID and write the data again",
+            "Check the commit status first, then retry idempotently if it did not commit",
+            "Delete O9 immediately and make the client upload from scratch"
+          ],
+          "answer": 2,
+          "explanation": "A timeout doesn’t mean the commit failed: it may have succeeded with only the response lost. Check with a stable upload/request ID, then retry idempotently. Deleting O9 might destroy a legitimate object; a new ID leaves an extra copy; reporting success outright may be false and the object unreadable.",
+          "ref": "Q24-02"
+        },
+        {
+          "id": "c24-02-07",
+          "type": "single",
+          "prompt": "The placement service is replicated with Raft, with 5 or 7 replicas recommended. If you deploy 5 replicas, how many node failures can it tolerate at most while a majority can still communicate?",
+          "options": [
+            "3 nodes",
+            "2 nodes",
+            "1 node",
+            "4 nodes"
+          ],
+          "answer": 1,
+          "explanation": "Consensus requires a surviving majority: with 5 nodes at least 3 must be healthy, so at most 2 can fail; with 7 nodes at least 4 must be healthy, so at most 3 can fail. The placement service holds the virtual cluster map and is a critical component, so it is replicated with consensus.",
+          "ref": "Data Store"
+        },
+        {
+          "id": "c24-02-08",
+          "type": "order",
+          "prompt": "Put the flow of writing object bytes into the data store in order",
+          "items": [
+            "The API service passes the object to the routing service",
+            "The routing service sends it to the group’s primary",
+            "The primary copies it to two replicas and waits",
+            "The data store returns the object UUID to the API service"
+          ],
+          "explanation": "The routing service first picks the replica group, then hands the data to the primary. The primary replies only after both replicas have copied the data, so getting a UUID back means several copies are on disk. Waiting for replication adds write latency: you trade latency for durability.",
+          "ref": "Data Persistence Flow"
+        },
+        {
+          "id": "c24-02-09",
+          "type": "multi",
+          "prompt": "For “a read after a successful write always sees the new value” to hold, what must be specified besides writing synchronously to three replicas?",
+          "options": [
+            "Switch to 8+4 erasure coding",
+            "A single order and commit point for concurrent writes to the same key",
+            "A read path that returns only a committed, sufficiently recent version",
+            "Fencing off the old primary with a term during failover",
+            "Raise the replica count from 3 to 5"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "The replica count only answers how many copies of the data exist. Which version of history a read sees depends on write ordering, the read path, and election rules, and a cache must not bypass them. Adding replicas or switching to erasure coding changes only durability and space; it can’t fix reading a stale version.",
+          "ref": "Q24-03"
+        },
+        {
+          "id": "c24-02-11",
+          "type": "judge",
+          "prompt": "When the placement service sees a data node’s heartbeat time out, that proves the data on the node is permanently lost.",
+          "answer": false,
+          "explanation": "A heartbeat timeout means only a suspected failure: it may be network flapping, a stalled process, or a partition, and the data on disk may be intact. Handle it using the timeout, the node’s identity or term, and a rejoin procedure, so you don’t re-create replicas while the old primary keeps accepting writes.",
+          "ref": "Data Store"
+        }
+      ]
+    },
+    {
+      "id": "c24-03",
+      "title": "Node Durability",
+      "summary": "Storing small objects; replication vs erasure coding",
+      "exercises": [
+        {
+          "id": "c24-03-01",
+          "type": "single",
+          "prompt": "Why don’t data nodes store one file per object, and instead append small objects into files of several GB?",
+          "options": [
+            "Large files naturally support listing by key prefix",
+            "It reduces wasted block space and inode overhead",
+            "Deleting an object frees its disk space immediately",
+            "Large files allow partial in-place modification of objects"
+          ],
+          "answer": 1,
+          "explanation": "Filesystems allocate in blocks, so a 1 KB object still takes a typical 4 KB block, and hundreds of millions of small files also mean hundreds of millions of inodes. Appending to large files cuts both space and management overhead, at the cost that deletion doesn’t free space at once and compaction is needed to reclaim it.",
+          "ref": "How Data Is Organized"
+        },
+        {
+          "id": "c24-03-02",
+          "type": "single",
+          "prompt": "Many CPU cores append objects to the same data file at once, so writes must be serialized and throughput stalls. What improvement does this chapter give?",
+          "options": [
+            "Raise the file rollover threshold above a few GB",
+            "Go back to one file per object",
+            "Take a global lock before every append",
+            "Let different cores append to different files"
+          ],
+          "answer": 3,
+          "explanation": "The bottleneck is that appends to one file must be serial. Giving each core its own file removes the lock contention. Raising the rollover threshold doesn’t change the contention; a global lock is the serialization itself; one file per object returns to the small-file problem.",
+          "ref": "How Data Is Organized"
+        },
+        {
+          "id": "c24-03-03",
+          "type": "fill",
+          "prompt": "Complete the two-level mapping used to locate an object",
+          "text": "Global metadata maps the bucket name and object name to the [[object ID]]; the data node’s local index then maps it to the [[file and offset]], from which the bytes are read.",
+          "distractors": [
+            "replica group number",
+            "bucket ID",
+            "checksum"
+          ],
+          "explanation": "The name finds metadata and an object ID, the ID locates a data node, and the node then looks up the file offset. The local index records `object_id`, `filename`, `file_offset`, and `object_size`; it covers only this node’s objects and is not global metadata.",
+          "ref": "Object Lookup"
+        },
+        {
+          "id": "c24-03-04",
+          "type": "judge",
+          "prompt": "Each data node only looks up the objects it stores, so it can embed SQLite for its local index instead of having every node share one remote mapping database.",
+          "answer": true,
+          "explanation": "A shared remote database would have to serve the whole cluster’s queries, with an extra network round trip on every read. A local index covers only this node’s objects, so an embedded database is enough. Whether to pick SQLite or RocksDB should be settled by measuring concurrency, recovery, and persistence cost.",
+          "ref": "Object Lookup"
+        },
+        {
+          "id": "c24-03-05",
+          "type": "judge",
+          "prompt": "A data node appends an object to `/data/c`, then inserts a record into the mapping table. These two steps naturally form an atomic transaction, so nothing is inconsistent after a crash.",
+          "answer": false,
+          "explanation": "A file append and a database insert live in two different systems and are not a transaction by themselves: the file may be written without the index entry, or the index may commit before the file reaches disk. Recovery after a restart relies on logs, flush ordering, object boundaries, and checksums.",
+          "ref": "Updated Data Persistence Flow"
+        },
+        {
+          "id": "c24-03-06",
+          "type": "single",
+          "prompt": "The chapter takes an HDD annual failure rate of 0.81% and concludes that three replicas reach about six nines, estimating the loss probability as `0.0081³`. Which assumption does this calculation depend on most?",
+          "options": [
+            "Every disk is read and written sequentially",
+            "Metadata and data are stored separately",
+            "Data is written to the primary first and then replicated",
+            "The failures of the three replicas are independent"
+          ],
+          "answer": 3,
+          "explanation": "Multiplying the three probabilities requires failures to be uncorrelated. If all three replicas sit in one rack, one power outage loses them all, which is why you spread them across failure domains such as racks and data centers. Repair windows, silent corruption, and operator error also push real risk above the formula.",
+          "ref": "Durability"
+        },
+        {
+          "id": "c24-03-07",
+          "type": "single",
+          "prompt": "An 800 MB object is stored with 8+4 erasure coding. How much space does it take in total? (Ignore metadata and alignment padding.)",
+          "options": [
+            "1,000 MB",
+            "1,600 MB",
+            "2,400 MB",
+            "1,200 MB"
+          ],
+          "answer": 3,
+          "explanation": "Cut into 8 shards of 100 MB each, then generate 4 parity shards of the same size: 12 shards, 1,200 MB in total, which is 1.5 times the original and 50% extra. 2,400 MB is what three replicas take, so 8+4 uses only half the space of three replicas.",
+          "ref": "Q24-01"
+        },
+        {
+          "id": "c24-03-08",
+          "type": "multi",
+          "prompt": "Compared with three replicas, what does 8+4 erasure coding cost you?",
+          "options": [
+            "Extra computation for encoding, decoding, and checksums",
+            "A larger total storage footprint",
+            "Higher implementation complexity",
+            "Reads and repairs must touch shards on multiple nodes",
+            "Fewer simultaneous node failures tolerated than three replicas"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Erasure coding trades computation and cross-node access for space: reads fetch shards from several nodes and may decode; repairs pull many shards. It uses 1.5 times the space, versus 3 times for three replicas. 8+4 tolerates any 4 missing shards while three replicas can lose only 2 copies, so its fault tolerance is not worse.",
+          "ref": "Durability"
+        },
+        {
+          "id": "c24-03-09",
+          "type": "single",
+          "prompt": "Service A has little data but needs very low read latency; service B is a petabyte-scale archive that is rarely read. According to this chapter, which redundancy scheme does each lean toward?",
+          "options": [
+            "Both use three replicas",
+            "A uses replicas, B uses erasure coding",
+            "A uses erasure coding, B uses replicas",
+            "Both use erasure coding"
+          ],
+          "answer": 1,
+          "explanation": "A replica can serve a whole object from one node, so latency is low but it takes 3 times the space. Erasure coding saves space, but reads and repairs span nodes and need computation. So latency-sensitive workloads lean toward replication, and cost-sensitive large-scale storage leans toward erasure coding.",
+          "ref": "Durability"
+        },
+        {
+          "id": "c24-03-10",
+          "type": "judge",
+          "prompt": "A checksum can detect silent corruption, but repairing it still requires a healthy replica or enough valid shards.",
+          "answer": true,
+          "explanation": "Recomputing and comparing the checksum on read only tells you the data is bad. Repair relies on another intact replica, or on rebuilding from at least 8 valid shards in 8+4. Periodic scrubbing finds problems before a second failure; data that fails verification is quarantined first, never deleted if it is the only copy left.",
+          "ref": "Correctness Verification"
+        }
+      ]
+    },
+    {
+      "id": "c24-04",
+      "title": "Metadata & GC",
+      "summary": "Sharding, listing, versions, multipart upload, and GC",
+      "exercises": [
+        {
+          "id": "c24-04-01",
+          "type": "single",
+          "prompt": "If the object table is sharded by `bucket_id`, what problem is most likely?",
+          "options": [
+            "Objects in one bucket cannot be listed by prefix",
+            "The bucket table grows too large for a single database",
+            "Looking up one object by bucket name and object name queries every shard",
+            "One huge bucket with billions of objects overwhelms its shard"
+          ],
+          "answer": 3,
+          "explanation": "Sharding by bucket puts all objects of a bucket in one shard, so a huge bucket becomes a hotspot. Its upside is exactly that single-bucket point lookups and listings hit just one shard. Buckets are usually limited in number, so the bucket table fits in one database; it is the object table that needs sharding.",
+          "ref": "Metadata Data Model"
+        },
+        {
+          "id": "c24-04-02",
+          "type": "single",
+          "prompt": "The object table is finally sharded by `hash(bucket_name, object_name)`. Which operation becomes slower as a result?",
+          "options": [
+            "Deleting one object by bucket name and object name",
+            "Listing the objects in a bucket whose key prefix is `abc/`",
+            "Finding one object by bucket name and object name",
+            "Uploading a new object and writing its metadata"
+          ],
+          "answer": 1,
+          "explanation": "Point lookups, inserts, and deletes all carry the bucket and object name, so the hash sends them straight to one shard. But objects in the same bucket with the same prefix are scattered over all shards, so listing must query each shard and merge in memory. This is the trade-off between balanced point lookups and range locality.",
+          "ref": "Metadata Data Model"
+        },
+        {
+          "id": "c24-04-03",
+          "type": "multi",
+          "prompt": "After hash sharding, which approaches deal with listing a bucket’s objects becoming slow or hard to paginate?",
+          "options": [
+            "Go back to sharding by bucket_id and ignore hotspots",
+            "Query every shard and merge in memory, accepting slower listing",
+            "Use sorted cursors and per-shard positions instead of large offsets",
+            "Build a separate denormalized listing table partitioned by bucket",
+            "Query only one shard and return the full result"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "Two paths work: accept fan-out and merge, or build a separate listing table partitioned by bucket. In pagination each shard returns a different number of rows, so a sorted cursor that remembers each shard’s position beats a large offset. Querying one shard misses data; bucket sharding brings back the big-bucket hotspot.",
+          "ref": "Listing Objects in a Bucket"
+        },
+        {
+          "id": "c24-04-04",
+          "type": "single",
+          "prompt": "A bucket has versioning on, and a user deletes the object `report.pdf`. What does the system do by default?",
+          "options": [
+            "Mark all versions of the object read-only",
+            "Roll the current version back to the previous version",
+            "Physically delete the bytes of all versions at once",
+            "Insert a delete marker as the newest version"
+          ],
+          "answer": 3,
+          "explanation": "Deleting just inserts a special delete marker as the newest version, so a default GET sees it and returns 404. The old version bytes remain and may still be read by version number; space is freed only by lifecycle cleanup and GC. It also does not “restore” the previous version as the current one.",
+          "ref": "Object Versioning"
+        },
+        {
+          "id": "c24-04-05",
+          "type": "judge",
+          "prompt": "Two clients upload new versions of the same key at almost the same moment. The system can use each client’s local clock to decide which version is newer.",
+          "answer": false,
+          "explanation": "Client clocks can drift or even be tampered with, so they can’t decide version order. `object_version` uses a TIMEUUID so versions sort by time, but the order of concurrent versions of one key should be decided by server-side rules, so that every reader sees the same “latest version.”",
+          "ref": "Object Versioning"
+        },
+        {
+          "id": "c24-04-06",
+          "type": "order",
+          "prompt": "Put the steps of a multipart upload of a large file in order",
+          "items": [
+            "The client sends an initiation request",
+            "The server returns a unique upload_id",
+            "The client uploads each part with the upload_id",
+            "The server returns an ETag for each successful part",
+            "The client commits the upload_id, part numbers, and ETags",
+            "The server assembles the object and returns success"
+          ],
+          "explanation": "Parts travel independently, and a failure retransmits only that part. The commit must carry every part number and ETag, so each part must have returned its ETag first. The full object becomes visible only after the commit, and uncommitted temporary parts are cleaned up by garbage collection.",
+          "ref": "Optimizing Uploads of Large Files"
+        },
+        {
+          "id": "c24-04-07",
+          "type": "single",
+          "prompt": "A client uploads a file in two parts, then compares `md5(local file)` with the returned ETag and finds they differ. What is the most reasonable conclusion?",
+          "options": [
+            "The ETag of a multipart upload is not an MD5 of the whole file in the first place",
+            "The local file was modified during the upload",
+            "The server missed the last part when computing the MD5",
+            "One part was corrupted in transit; delete the object and re-upload"
+          ],
+          "answer": 0,
+          "explanation": "An ETag is an identifier defined by the service. For multipart uploads and some encryption modes it is not the MD5 of the full bytes (it often has a part-count suffix), so a mismatch doesn’t show corruption. To verify integrity, use a declared checksum algorithm and check whether it covers the whole object or combines parts.",
+          "ref": "Q24-04"
+        },
+        {
+          "id": "c24-04-08",
+          "type": "judge",
+          "prompt": "If one part fails during a multipart upload, you only need to resend that part with the same upload_id instead of uploading the whole file again.",
+          "answer": true,
+          "explanation": "The point of multipart upload is that parts transfer and retry independently, and parts that already succeeded are kept. Once all parts are in, you commit the part list, and the object becomes visible only after the server has assembled it, so readers never see half a file.",
+          "ref": "Optimizing Uploads of Large Files"
+        },
+        {
+          "id": "c24-04-09",
+          "type": "multi",
+          "prompt": "What space can the garbage collector reclaim?",
+          "options": [
+            "Space held by objects whose deletion was deferred",
+            "Orphaned data left by failed uploads and confirmed to have no references",
+            "A new upload whose bytes were just written but whose metadata isn’t published yet",
+            "An old file whose mapping was switched but is still used by in-flight reads",
+            "Corrupted replicas confirmed to be replaceable"
+          ],
+          "answers": [
+            0,
+            1,
+            4
+          ],
+          "explanation": "GC reclaims deferred deletions, orphans from failed uploads, and corrupted replicas that can be replaced. A new upload by design writes bytes before publishing metadata, so having no reference at this instant isn’t proof of garbage, and an old file must wait for in-flight reads. Reclamation lags behind visibility.",
+          "ref": "Garbage Collection"
+        },
+        {
+          "id": "c24-04-10",
+          "type": "order",
+          "prompt": "Put the steps of one compaction (merging and cleaning up files) in order",
+          "items": [
+            "Pick old files that reach the compaction threshold",
+            "Copy still-valid objects from the old files to a new file",
+            "Point object_mapping to the new location in a transaction",
+            "Free the old files after in-flight reads finish"
+          ],
+          "explanation": "First copy the valid objects, and switch the mapping only after the new file is durable, so readers can always find the data. Switch the mapping in one transaction so nothing is half old, half new. An old file may still be being read, so it can’t be deleted at the instant of the switch.",
+          "ref": "Garbage Collection"
+        }
+      ]
+    }
+  ]
+}

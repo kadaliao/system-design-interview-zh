@@ -1,0 +1,500 @@
+{
+  "chapter": 11,
+  "title": "News Feed",
+  "fullTitle": "Chapter 11: Design a News Feed System",
+  "intro": [
+    "**Learning goal**: Start from “query my friends’ posts” and see why a read-heavy news feed should be precomputed.",
+    "**Remember first**: Fan-out on write puts post IDs into readers’ lists ahead of time; fan-out on read aggregates when the reader opens the feed; the hybrid handles the write amplification of celebrities.",
+    "**Common mistakes**: Thinking fan-out means copying the whole post; assuming every account suits fan-out on write; ignoring deletes and permission changes."
+  ],
+  "keyPoints": [
+    "The feed has two paths, publishing and reading. Newest-first is a simplifying assumption; ranking is a separate requirement.",
+    "Fan-out on write reads fast but amplifies writes; fan-out on read writes light but reads slowly. Hybrid: push for regular users, pull celebrities.",
+    "The feed cache stores only (post_id, user_id) with a capped length; bodies are cached separately, never copied into each feed.",
+    "Fan-out on write depends on follower count, reader activity, and posting frequency, not just a “celebrity” label.",
+    "A cache hit doesn’t mean still visible: filter by current permissions on read, clean old IDs asynchronously, and page with a stable cursor, not offset."
+  ],
+  "refs": {
+    "Requirements": "需求（Requirements）",
+    "Feed Publishing": "发布流程（Feed Publishing）",
+    "News Feed APIs": "News Feed APIs",
+    "Web Server": "Web 服务器",
+    "Fan-out Is a Table of Contents, Not a Photocopy": "批注：像“提前准备目录”而非复印整本书",
+    "Fan-out Service": "Fanout Service",
+    "Interview Answer Template": "批注：面试回答模板",
+    "Reliability": "可靠性（Reliability）",
+    "A Cache Hit Doesn’t Mean Still Visible": "批注：缓存命中也不代表内容仍可见",
+    "Cache Architecture": "缓存架构（Cache Architecture）",
+    "Key Optimizations": "关键优化（Key Optimizations）",
+    "Monitoring": "监控（Monitoring）",
+    "Scaling": "扩展（Scaling）",
+    "News Feed Building": "构建流程（News Feed Building）"
+  },
+  "lessons": [
+    {
+      "id": "c11-01",
+      "title": "Scope and Flows",
+      "summary": "Requirements, APIs, and the publish and read flows",
+      "exercises": [
+        {
+          "id": "c11-01-01",
+          "type": "single",
+          "prompt": "The interviewer says, “Sort by time, newest first.” What does that mean for the design?",
+          "options": [
+            "You must build a ranking model before you can return a feed",
+            "Only fan-out on read works; fan-out on write can’t keep time order",
+            "Merge posts by publish time; layer ranking on later",
+            "Every read must scan all friends’ posts in real time"
+          ],
+          "answer": 2,
+          "explanation": "Newest-first is a simplifying assumption: merge posts from all sources by time. Ranking is a separate requirement. IDs written by fan-out on write can be sorted by time too, and a precomputed feed cache exists precisely to avoid scanning every friend on each read.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c11-01-02",
+          "type": "order",
+          "prompt": "Put the steps for publishing a post in order",
+          "items": [
+            "The user calls POST /v1/me/feed",
+            "The load balancer routes the request to a web server",
+            "The web server authenticates and rate-limits",
+            "The post service writes to the database and cache",
+            "The fan-out service pushes the ID into friends’ feeds"
+          ],
+          "explanation": "Authenticate and rate-limit first to block invalid requests and spam. Save the post before fanning out, so the IDs in friends’ feeds point to a post that exists. The notification service that alerts friends runs in parallel as a side step.",
+          "ref": "Feed Publishing"
+        },
+        {
+          "id": "c11-01-03",
+          "type": "match",
+          "prompt": "Match each service to its job in the news feed",
+          "pairs": [
+            [
+              "Web server",
+              "Authenticates and rate-limits spam"
+            ],
+            [
+              "Post service",
+              "Stores the post in the DB and cache"
+            ],
+            [
+              "Fan-out service",
+              "Pushes post IDs into friends’ feed caches"
+            ],
+            [
+              "Notification service",
+              "Alerts friends to a new post"
+            ],
+            [
+              "News feed service",
+              "Fetches feed IDs, then fills in posts"
+            ]
+          ],
+          "explanation": "On the publishing path the jobs split into authentication and rate limiting, storing the post, fan-out, and notification. The news feed service handles reading: it gets the ID list first, then fills in details from the content cache or database.",
+          "ref": "Feed Publishing"
+        },
+        {
+          "id": "c11-01-04",
+          "type": "judge",
+          "prompt": "Writing a post ID into friends’ feed caches is the notification service’s job.",
+          "answer": false,
+          "explanation": "Writing feeds is the fan-out service’s job; the notification service only alerts friends that there is a new post. Both run after the post is saved, but their roles differ, so don’t mix them up.",
+          "ref": "Feed Publishing"
+        },
+        {
+          "id": "c11-01-05",
+          "type": "single",
+          "prompt": "Each person has at most 5,000 friends. A regular user publishes one post. At most how many friends’ feeds does fan-out on write update?",
+          "options": [
+            "1 feed",
+            "10 million feeds",
+            "It isn’t known until friends open the app",
+            "5,000 feeds"
+          ],
+          "answer": 3,
+          "explanation": "Fan-out on write pushes the post_id into every friend’s feed at publish time. With at most 5,000 friends, that is at most 5,000 writes (fewer after settings filters). The 10 million is the DAU, not one person’s friend count.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c11-01-06",
+          "type": "fill",
+          "prompt": "Complete the two news feed APIs",
+          "text": "Publish a post with [[POST]] /v1/me/feed and retrieve the feed with [[GET]] /v1/me/feed; both take an auth_token.",
+          "distractors": [
+            "PUT",
+            "DELETE"
+          ],
+          "explanation": "Publishing creates a new resource, so use POST; reading changes no state, so use GET. The `me` in the path means the current user, who is identified by the auth_token.",
+          "ref": "News Feed APIs"
+        },
+        {
+          "id": "c11-01-07",
+          "type": "judge",
+          "prompt": "A request to retrieve the feed doesn’t need a user ID; the server identifies the current user from the auth_token.",
+          "answer": true,
+          "explanation": "The retrieval API has a single parameter, auth_token, and `me` in the path stands for the logged-in user. That keeps the interface simple and stops anyone from forging another user’s ID to read their feed.",
+          "ref": "News Feed APIs"
+        },
+        {
+          "id": "c11-01-08",
+          "type": "multi",
+          "prompt": "In the publishing flow, what does the web server do?",
+          "options": [
+            "Rate-limits to block spam and flooding",
+            "Writes the post ID into friends’ feed caches",
+            "Reads the friend list from the graph database",
+            "Verifies the user’s identity with the auth_token"
+          ],
+          "answers": [
+            0,
+            3
+          ],
+          "explanation": "The web server guards the entry point: it authenticates the user, rate-limits against flooding, and then forwards the request to the backend. Fetching the friend list and writing feed caches are fan-out service steps.",
+          "ref": "Web Server"
+        }
+      ]
+    },
+    {
+      "id": "c11-02",
+      "title": "Fan-out Strategies",
+      "summary": "Fan-out on write, on read, and the hybrid trade-offs",
+      "exercises": [
+        {
+          "id": "c11-02-01",
+          "type": "single",
+          "prompt": "An author has 1 million readers and you use pure fan-out on write. They publish 10 posts a day. How many feed writes does the fan-out service do for them each day?",
+          "options": [
+            "10 writes",
+            "10 million writes",
+            "1 million writes",
+            "100 million writes"
+          ],
+          "answer": 1,
+          "explanation": "Each post is written into 1 million feeds, so 10 posts mean 10 million writes. That is write amplification: writes grow with the reader count, and the more active a celebrity is, the worse it gets.",
+          "ref": "Fan-out Is a Table of Contents, Not a Photocopy"
+        },
+        {
+          "id": "c11-02-02",
+          "type": "judge",
+          "prompt": "Fan-out on write copies the whole post into every friend’s feed.",
+          "answer": false,
+          "explanation": "Fan-out on write only prepares a list of post IDs to read for each reader. The feed cache stores (post_id, user_id) pairs, and the body is shared in a single copy. Write amplification means many list updates, not many copies of the body.",
+          "ref": "Fan-out Is a Table of Contents, Not a Photocopy"
+        },
+        {
+          "id": "c11-02-03",
+          "type": "single",
+          "prompt": "Many registered users in a community log in only once every few months. Which approach avoids doing work for them in advance?",
+          "options": [
+            "Fan-out on write, with shorter feed lists",
+            "All approaches cost the same",
+            "Fan-out on write",
+            "Fan-out on read"
+          ],
+          "answer": 3,
+          "explanation": "Fan-out on read aggregates only when the reader opens the app, so inactive users cost nothing. Fan-out on write writes their feeds on every post; shorter lists save memory but not write count.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-02-04",
+          "type": "single",
+          "prompt": "With the hybrid approach, what happens when a user opens the feed?",
+          "options": [
+            "Read only the feed cache; celebrity posts were pushed in too",
+            "Scan every friend’s full post history in real time, then sort",
+            "Read IDs from the cache, then pull celebrities’ recent posts and merge",
+            "Fetch only friends’ recent posts and skip the cache"
+          ],
+          "answer": 2,
+          "explanation": "In the hybrid approach, regular authors use fan-out on write while celebrities don’t push to all their followers. A read must merge and sort the cached IDs with the celebrities’ recent posts. That is the cost of its more complex merge logic.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-02-05",
+          "type": "judge",
+          "prompt": "Whether to fan out on write for an author depends on follower count, reader activity, and posting frequency, not just on a “celebrity” label.",
+          "answer": true,
+          "explanation": "Write amplification depends on the reader count and posting frequency, and pushing to inactive readers is wasted work. An account with many followers that almost never posts may be cheap to fan out on write.",
+          "ref": "Fan-out Is a Table of Contents, Not a Photocopy"
+        },
+        {
+          "id": "c11-02-06",
+          "type": "fill",
+          "prompt": "Complete the cost of each fan-out approach",
+          "text": "Fan-out on write makes reads fast, at the cost of [[write amplification]]; fan-out on read keeps writes light, at the cost of slower [[reads]].",
+          "distractors": [
+            "read amplification",
+            "publishing",
+            "storage"
+          ],
+          "explanation": "The trade-off is when the work happens: fan-out on write moves it to publish time, fan-out on read defers it to read time. The more friends, the heavier fan-out on write; the more sources to aggregate on each open, the slower fan-out on read.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-02-07",
+          "type": "multi",
+          "prompt": "Which statements about pure fan-out on write are correct?",
+          "options": [
+            "The more friends an author has, the more writes one post causes",
+            "Inactive readers get written to as well",
+            "Aggregation starts only after a reader opens the app",
+            "The feed is already prepared when the reader opens it, so reads are fast",
+            "It removes the hotspots caused by celebrities"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "Fan-out on write pushes IDs to all friends at publish time, so reads are fast, but writes grow with the friend count and also go to people who never open the app. Aggregating after the reader opens the app describes fan-out on read; celebrities are exactly where fan-out on write creates hotspots.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-02-08",
+          "type": "single",
+          "prompt": "In the hybrid approach, authors whose follower count exceeds a threshold switch to pull at read time. What happens if you lower the threshold from 1 million to 10,000?",
+          "options": [
+            "Both writes and reads drop, saving on both sides",
+            "Neither is affected; the threshold only affects storage",
+            "Site-wide writes drop, but reads must merge more authors",
+            "Writes go up, and reads merge fewer authors"
+          ],
+          "answer": 2,
+          "explanation": "A lower threshold turns more authors from push to pull: fewer writes at publish time, but readers must pull and merge more authors when they open the feed. Writes and reads trade off against each other; no threshold is free.",
+          "ref": "Fan-out Service"
+        }
+      ]
+    },
+    {
+      "id": "c11-03",
+      "title": "Fan-out Service",
+      "summary": "Fetch friends, filter, enqueue, and bounded ID lists",
+      "exercises": [
+        {
+          "id": "c11-03-01",
+          "type": "order",
+          "prompt": "Put the fan-out service’s steps for a new post in order",
+          "items": [
+            "Fetch friend IDs from the graph database",
+            "Check settings cache; filter out muted or blocked friends",
+            "Hand the friend list and post_id to the message queue",
+            "A worker writes to friends’ feed caches"
+          ],
+          "explanation": "First decide who gets the post, then exclude people who shouldn’t see it, then hand off to the queue for asynchronous processing, and finally a fan-out worker writes the caches. Filtering before enqueueing avoids writing feeds for friends who can’t see the post.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-02",
+          "type": "single",
+          "prompt": "Why query the user settings cache before fanning out?",
+          "options": [
+            "To recheck the poster’s login state and permissions again",
+            "To exclude friends who muted or blocked the author or are outside the sharing scope",
+            "To fetch the post body so it can be written into friends’ feeds as well",
+            "To decide whether the post is ordered by time or by recommendation"
+          ],
+          "answer": 1,
+          "explanation": "Not every friend should receive the post: those who muted or blocked the author, or who are outside the sharing scope, are excluded first. The login check already happened at the web server, and a feed holds only the post_id, never the body.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-03",
+          "type": "single",
+          "prompt": "Suppose you keep the latest 500 feed entries for each of 10 million DAU, at about 16 bytes per (post_id, user_id). About how much memory does the feed cache need?",
+          "options": [
+            "About 8 GB",
+            "About 80 GB",
+            "About 800 GB",
+            "About 8 TB"
+          ],
+          "answer": 1,
+          "explanation": "10 million × 500 = 5 billion entries; × 16 bytes = 80 billion bytes ≈ 80 GB. Copying a full post of about 2 KB into every entry would take about 10 TB, which is why the cache stores only IDs and caps the list length.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-04",
+          "type": "single",
+          "prompt": "The feed cache keeps only the most recent post IDs (the length is configurable). What is the rationale?",
+          "options": [
+            "Only short lists can keep time order",
+            "The system deletes old posts after a certain age",
+            "Users mostly read the newest content, so this caps memory",
+            "Cache systems can’t store long lists"
+          ],
+          "answer": 2,
+          "explanation": "Users rarely scroll back to very old posts, so caching everyone’s full history isn’t worth it. Capping the length keeps the memory cost under control; time order has nothing to do with list length.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-05",
+          "type": "judge",
+          "prompt": "The fan-out service hands work to a message queue and fan-out workers, so the publish request doesn’t wait for every friend’s feed to be written.",
+          "answer": true,
+          "explanation": "Writing 5,000 friends’ feeds synchronously would make publishing slow. With a queue, workers consume tasks asynchronously, the publish request returns quickly, and the queue buffers fan-out tasks at peak.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-06",
+          "type": "fill",
+          "prompt": "Complete the data source and what gets written",
+          "text": "The friend list comes from the [[graph database]]; the worker writes only the mapping between [[post_id]] and user_id into the feed cache.",
+          "distractors": [
+            "content cache",
+            "full post text",
+            "counter cache"
+          ],
+          "explanation": "Friend relationships form a graph, so they are read from the graph database. The feed cache only records who should see which post; bodies, author profiles, and counts live in their own caches and are assembled at read time.",
+          "ref": "Fan-out Service"
+        },
+        {
+          "id": "c11-03-07",
+          "type": "single",
+          "prompt": "A fan-out worker crashes midway; when the task is redelivered, it rewrites some friends’ feeds. How do you keep the same post from appearing twice in a feed?",
+          "options": [
+            "Write idempotently by post_id, and skip it if it already exists",
+            "Give up retrying; friends who weren’t reached don’t see the post",
+            "Generate a new post_id on each retry",
+            "Clear the friend’s entire feed before retrying"
+          ],
+          "answer": 0,
+          "explanation": "Fan-out tasks may be consumed more than once, so writes must be idempotent: a given post_id appears only once per feed. A new ID creates duplicates, clearing the feed loses other posts, and giving up on retries leaves friends without the post.",
+          "ref": "Interview Answer Template"
+        },
+        {
+          "id": "c11-03-08",
+          "type": "judge",
+          "prompt": "Once a fan-out task is in a message queue, it can never be lost.",
+          "answer": false,
+          "explanation": "A queue provides decoupling and buffering, but reliability depends on configuration: whether messages are persisted, whether you ack only after successful processing, and whether failures are retried. Misconfigured, tasks are still lost when the queue goes down or a worker crashes.",
+          "ref": "Reliability"
+        }
+      ]
+    },
+    {
+      "id": "c11-04",
+      "title": "Reads and Caching",
+      "summary": "Five caches, visibility filters, paging, and scaling",
+      "exercises": [
+        {
+          "id": "c11-04-01",
+          "type": "match",
+          "prompt": "Match each cache to the data it holds",
+          "pairs": [
+            [
+              "Feed cache",
+              "Each user’s post IDs to read"
+            ],
+            [
+              "Content cache",
+              "Post details; popular posts go to a hot cache"
+            ],
+            [
+              "Social graph cache",
+              "Friend and follow relationships"
+            ],
+            [
+              "Action cache",
+              "Whether I liked, replied to, or shared"
+            ],
+            [
+              "Counter cache",
+              "Like, reply, and follower counts"
+            ]
+          ],
+          "explanation": "The feed cache holds only IDs, so a read still fetches the bodies from the content cache. “Did I like this?” goes to the action cache and “how many likes in total?” to the counter cache; these two are the easiest to confuse.",
+          "ref": "Cache Architecture"
+        },
+        {
+          "id": "c11-04-02",
+          "type": "single",
+          "prompt": "User A deletes a post, but its ID is still in friends’ feed caches. What should a read do?",
+          "options": [
+            "Show it as usual and let the cache expire on its own",
+            "Delete the ID from every friend’s feed synchronously before reporting success",
+            "Filter it out by current status and permissions, and clean up old IDs asynchronously",
+            "Clear every friend’s feed cache"
+          ],
+          "answer": 2,
+          "explanation": "An ID in the cache doesn’t mean the content is still visible. When assembling a page, filter by the latest delete, block, and privacy state, and let a background job clean up stale IDs. Cleaning every friend’s feed synchronously is expensive and would slow the delete itself.",
+          "ref": "A Cache Hit Doesn’t Mean Still Visible"
+        },
+        {
+          "id": "c11-04-03",
+          "type": "single",
+          "prompt": "You finish page 1 (20 items), then friends publish 3 new posts. What happens when you fetch page 2 with offset=20?",
+          "options": [
+            "The first 3 items on page 2 repeat ones you already saw",
+            "The request errors out; you must go back to page 1 and refresh",
+            "The result is exactly right; new posts only affect page 1",
+            "Page 2 skips 3 older posts"
+          ],
+          "answer": 0,
+          "explanation": "New posts are inserted at the front, so older posts shift back by 3 positions: items 18–20 become 21–23 and show up again at the start of page 2. Using the last item you saw as a stable cursor is unaffected by insertions.",
+          "ref": "A Cache Hit Doesn’t Mean Still Visible"
+        },
+        {
+          "id": "c11-04-04",
+          "type": "fill",
+          "prompt": "Complete the limits of consistent hashing",
+          "text": "Consistent hashing mainly reduces [[key remapping]] when nodes change; it cannot remove a [[hotspot]] caused by one key being accessed too often.",
+          "distractors": [
+            "write amplification",
+            "duplicate messages",
+            "message reordering"
+          ],
+          "explanation": "When nodes are added or removed, consistent hashing moves only a few keys. But if one celebrity’s data is extremely hot, whichever node it lands on stays busy; hotspots call for caching, replication, or splitting.",
+          "ref": "Reliability"
+        },
+        {
+          "id": "c11-04-05",
+          "type": "multi",
+          "prompt": "Which practices reduce the load on the news feed database?",
+          "options": [
+            "Layered caching of frequently accessed data",
+            "Send all reads to the primary and use read replicas only as backups",
+            "Shard, and use read replicas to absorb high-traffic queries",
+            "Put popular posts in a hot cache",
+            "Fall through to the database on every read to guarantee freshness"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Sharding and read replicas share the database’s own load, while layered caches and the hot cache keep most reads from reaching it at all. Hitting the database on every read, or sending all reads to the primary, pushes the pressure back onto it and makes the read replicas pointless.",
+          "ref": "Key Optimizations"
+        },
+        {
+          "id": "c11-04-06",
+          "type": "judge",
+          "prompt": "Monitoring the cache hit rate helps you decide whether cache capacity and policies need adjusting.",
+          "answer": true,
+          "explanation": "A falling hit rate means many reads are falling through to the database, possibly because of too little capacity, lists that are too short, or too-frequent invalidation. A common recommendation is to track QPS, latency, and cache hit rate and tune accordingly.",
+          "ref": "Monitoring"
+        },
+        {
+          "id": "c11-04-07",
+          "type": "judge",
+          "prompt": "Keeping user sessions in a web server’s local memory makes the news feed easier to scale horizontally.",
+          "answer": false,
+          "explanation": "If a session lives on one machine, requests must return to that machine, and adding or removing servers loses sessions. Keep the web tier stateless and put state in shared storage so you can scale out freely.",
+          "ref": "Scaling"
+        },
+        {
+          "id": "c11-04-08",
+          "type": "single",
+          "prompt": "After the news feed service gets 20 post IDs from the feed cache, what does it usually do next?",
+          "options": [
+            "Return the IDs as they are and let the client query each one",
+            "Fetch post details from the content cache or database and assemble the page",
+            "Write the IDs back into the fan-out queue",
+            "Re-query all friends’ posts and aggregate again"
+          ],
+          "answer": 1,
+          "explanation": "The feed cache stores only IDs, so the news feed service fetches bodies from the content cache (falling through to the database on a miss), adds author and count information, and returns the assembled page. Letting the client query item by item would cause many round trips.",
+          "ref": "News Feed Building"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,550 @@
+{
+  "chapter": 2,
+  "title": "Back-of-the-Envelope Estimation",
+  "fullTitle": "Chapter 2: Back-of-the-Envelope Estimation",
+  "intro": [
+    "**Positioning**: This is the “order-of-magnitude math” exercise from system design interviews. The goal is not to calculate to the decimal point, but to judge in a few minutes whether a design is feasible, where the bottleneck is, and how much capacity it needs.",
+    "**A memory aid for CRUD engineers**: First write “people × actions,” then divide by “time.” Compute the average first, then apply the peak factor, and write the unit on every number. If you cannot work something out, state your assumption out loud and let the interviewer correct it."
+  ],
+  "keyPoints": [
+    "Write “people × actions ÷ time” first, then multiply by a peak factor. Give every number a unit, and write assumptions down so they are easy to swap.",
+    "2^10≈10^3 and 2^30≈a billion. GB is decimal and GiB is base 1024; for exact capacity, go back to the exact value.",
+    "Memory takes hundreds of nanoseconds, SSD hundreds of microseconds, an HDD seek ten milliseconds: seek less, cache more, batch, compress first.",
+    "Each extra 9 cuts the downtime budget by ten times. Independent dependencies in series multiply, so three 99.9% components leave about 99.7%.",
+    "Size capacity for the peak, not the average, and state how you count headroom. If measurements disagree, align definitions and units before blaming code."
+  ],
+  "refs": {
+    "Power of Two": "2 的幂（Power of Two）",
+    "Latency Numbers Every Programmer Should Know": "程序员应该知道的延迟数字（Latency Numbers Every Programmer Should Know）",
+    "Availability Numbers": "可用性数字（Availability Numbers）",
+    "Estimations": "估算（Estimations）",
+    "1. Queries per Second (QPS)": "1. 每秒查询数（QPS）",
+    "2. Media Storage": "2. 媒体存储",
+    "90-Second Template for Interviews": "面试可直接套用的 90 秒模板",
+    "1. Rounding and Approximation": "1. 四舍五入与近似（Rounding and Approximation）",
+    "4. Common Estimation Scenarios": "4. 常见估算场景（Common Estimation Scenarios）",
+    "2. Write Down Assumptions": "2. 写下假设（Write Down Assumptions）"
+  },
+  "lessons": [
+    {
+      "id": "c02-01",
+      "title": "Powers and Latency",
+      "summary": "Binary magnitudes and a feel for latency numbers",
+      "exercises": [
+        {
+          "id": "c02-01-01",
+          "type": "single",
+          "prompt": "Back-of-the-envelope estimates often treat 2^30 as “about a billion.” What is the basis for that?",
+          "options": [
+            "Each extra binary bit multiplies the value by ten",
+            "2^30 is exactly equal to 1 billion",
+            "30 binary bits can represent at most 3 billion values",
+            "2^10≈10^3, so cubing both sides gives about 1 billion"
+          ],
+          "answer": 3,
+          "explanation": "1024≈1000, and every 10 extra bits multiplies the value by about 1,000, so 2^30≈(10^3)^3. The exact value, 1,073,741,824, is about 7.4% above a billion, which is still the same order of magnitude. Each extra bit only multiplies the value by 2, not by 10.",
+          "ref": "Q02-01"
+        },
+        {
+          "id": "c02-01-02",
+          "type": "single",
+          "prompt": "Each record is a fixed 8 bytes, with no overhead at all. In theory, how many records fit in 1 GiB?",
+          "options": [
+            "About 8 billion records",
+            "About 134 million records (2^27)",
+            "About 125 million records (1 billion ÷ 8)",
+            "About 1 billion records"
+          ],
+          "answer": 1,
+          "explanation": "1 GiB is 2^30 bytes; divided by 8 that is 2^27=134,217,728 records. 1 billion ÷ 8 uses the decimal GB convention, and “a billion records” mistakes the number of bytes for the number of records. Real systems also lose space to indexes and object headers, so they fit fewer.",
+          "ref": "Q02-01"
+        },
+        {
+          "id": "c02-01-03",
+          "type": "judge",
+          "prompt": "A vendor’s decimal 1 GB is slightly smaller than 1 GiB.",
+          "answer": true,
+          "explanation": "Decimal 1 GB is 1 billion bytes, about 0.931 GiB; 1 GiB is 2^30 bytes, about 1.074 GB. In an interview it is enough to state which convention you use, but for exact capacities or field limits, use the exact value.",
+          "ref": "Power of Two"
+        },
+        {
+          "id": "c02-01-04",
+          "type": "fill",
+          "prompt": "Complete the link between powers of 2 and magnitudes",
+          "text": "[[2^20]] is about a million; [[2^40]] is about a trillion, which corresponds to the TB scale.",
+          "distractors": [
+            "2^30",
+            "2^50",
+            "2^10"
+          ],
+          "explanation": "Every 10 binary bits multiplies the value by about 1,000: 2^10 is thousands, 2^20 millions, 2^30 billions, 2^40 trillions (TB), and 2^50 quadrillions (PB).",
+          "ref": "Power of Two"
+        },
+        {
+          "id": "c02-01-05",
+          "type": "order",
+          "prompt": "Put these operations in order from fastest to slowest, using 2020 reference latencies",
+          "items": [
+            "L1 cache access",
+            "Main memory access",
+            "SSD random read",
+            "Round trip within a data center",
+            "HDD random seek",
+            "Cross-region data center round trip"
+          ],
+          "explanation": "0.5 ns → 100 ns → 150 µs → 500 µs → 10 ms → 150 ms. Memory is thousands of times faster than an SSD, and an HDD seek is more than sixty times slower than an SSD random read. That is the basis for “memory is fast, disk is slow, avoid seeks.”",
+          "ref": "Latency Numbers Every Programmer Should Know"
+        },
+        {
+          "id": "c02-01-06",
+          "type": "single",
+          "prompt": "A request randomly reads 100 records. By the reference latencies, an HDD seek takes about 10 ms and an SSD random read about 150 µs. Roughly how long does this part alone take on each?",
+          "options": [
+            "About 100 ms / about 1.5 ms",
+            "About 1 s / about 150 ms",
+            "About 10 s / about 15 ms",
+            "About 1 s / about 15 ms"
+          ],
+          "answer": 3,
+          "explanation": "100×10 ms=1 s, and 100×150 µs=15,000 µs=15 ms. For the same number of accesses, the medium alone makes a difference of nearly 70 times, so avoid disk seeks where you can and keep hot data in memory.",
+          "ref": "Latency Numbers Every Programmer Should Know"
+        },
+        {
+          "id": "c02-01-07",
+          "type": "single",
+          "prompt": "By the reference latencies, one cross-region data center round trip (about 150 ms) equals roughly how many round trips within a data center (about 500 µs)?",
+          "options": [
+            "About 3,000",
+            "About 3",
+            "About 300",
+            "About 30"
+          ],
+          "answer": 2,
+          "explanation": "150 ms=150,000 µs, and dividing by 500 µs gives 300. If an endpoint makes a few serial calls to cross-region services, the network alone costs hundreds of milliseconds. That is why multi-data center systems route users to the nearest site.",
+          "ref": "Latency Numbers Every Programmer Should Know"
+        },
+        {
+          "id": "c02-01-08",
+          "type": "multi",
+          "prompt": "Given the latency numbers, which of these optimizations make sense?",
+          "options": [
+            "After switching to SSDs, hot data no longer needs to live in memory",
+            "Keep hot data in an in-memory cache",
+            "Avoid random disk seeks where possible",
+            "Split one batch request into many single-item requests",
+            "Compress data before sending it over the internet"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "Memory is fast, disk is slow, and crossing the network is expensive, so cache, avoid seeks, and compress before sending. An SSD random read takes about 150 µs, still thousands of times slower than memory, so SSDs cannot replace a cache. Splitting a batch into single items multiplies the network round trips.",
+          "ref": "Latency Numbers Every Programmer Should Know"
+        },
+        {
+          "id": "c02-01-09",
+          "type": "judge",
+          "prompt": "The numbers in the latency table can be used directly as your cloud provider’s performance guarantee for capacity planning.",
+          "answer": false,
+          "explanation": "They are orders of magnitude for reference, not any vendor’s SLA. SSD model, network, indexes, and concurrency all change the measured values. Use the table to judge direction, and verify real capacity with load tests or monitoring.",
+          "ref": "Latency Numbers Every Programmer Should Know"
+        }
+      ]
+    },
+    {
+      "id": "c02-02",
+      "title": "Availability Math",
+      "summary": "Nines to downtime; chained dependencies multiply",
+      "exercises": [
+        {
+          "id": "c02-02-01",
+          "type": "single",
+          "prompt": "An internal reporting system is 99.9% available today, and the business says up to a day of downtime per year is acceptable. Someone proposes multi-region deployment to reach 99.999%. How do you assess that?",
+          "options": [
+            "Drop to 99% to save money; it is still within budget",
+            "Worth it, because 99.9% means 3.65 days of downtime a year",
+            "The current level is within budget, so this is not a priority",
+            "Worth it, because higher availability is always better"
+          ],
+          "answer": 2,
+          "explanation": "99.9% allows about 8.8 hours of downtime per year, well inside “under a day.” Every extra 9 costs redundancy, multi-region setups, and operations effort, so work out the downtime budget before deciding. 3.65 days corresponds to 99%, so dropping to 99% would exceed the budget.",
+          "ref": "Availability Numbers"
+        },
+        {
+          "id": "c02-02-02",
+          "type": "match",
+          "prompt": "Match each availability target with its allowed downtime per year",
+          "pairs": [
+            [
+              "99%",
+              "About 3.65 days"
+            ],
+            [
+              "99.9%",
+              "About 8.8 hours"
+            ],
+            [
+              "99.99%",
+              "About 52 minutes"
+            ],
+            [
+              "99.999%",
+              "About 5.3 minutes"
+            ]
+          ],
+          "explanation": "A year has about 525,600 minutes; multiply by the unavailable fraction. 1% is about 5,256 minutes (3.65 days), 0.1% is about 526 minutes (8.8 hours), and each extra 9 divides it by ten. Remember the formula rather than memorizing the numbers.",
+          "ref": "Availability Numbers"
+        },
+        {
+          "id": "c02-02-03",
+          "type": "fill",
+          "prompt": "Complete the availability conversion rule",
+          "text": "Yearly downtime ≈ total time in a year × [[unavailable fraction]]; each extra 9 shrinks the downtime budget to about [[one tenth]] of what it was.",
+          "distractors": [
+            "available fraction",
+            "half",
+            "one percent"
+          ],
+          "explanation": "99.9% means 0.1% unavailable and 99.99% means 0.01%, exactly a factor of ten apart. Multiply “1 − availability” by the roughly 525,600 minutes in a year and you can compute the downtime budget for any target on the spot.",
+          "ref": "Availability Numbers"
+        },
+        {
+          "id": "c02-02-04",
+          "type": "single",
+          "prompt": "A payment must succeed through the API, the database, and the payment gateway in turn. Each is 99.9% available, and failures are independent. What is the end-to-end availability?",
+          "options": [
+            "About 99.97%",
+            "About 97%",
+            "About 99.7%",
+            "99.9%"
+          ],
+          "answer": 2,
+          "explanation": "All three must be up at once, and for independent events you multiply the success rates: 0.999³≈0.997, about 99.7%. That is lower than any single component, so it does not inherit the “three nines” label of the weakest one. 97% comes from mistaking 0.1% for 1%.",
+          "ref": "Q02-02"
+        },
+        {
+          "id": "c02-02-05",
+          "type": "single",
+          "prompt": "Three required dependencies in series, each 99.9% available with independent failures, give about 99.7% end to end. Roughly how much downtime per year does that chain have?",
+          "options": [
+            "About 26 hours",
+            "About 3.65 days",
+            "About 8.8 hours",
+            "About 52 minutes"
+          ],
+          "answer": 0,
+          "explanation": "The unavailable fraction is about 0.3%, and 8,760 hours × 0.002997 ≈ 26.25 hours, about three times a single 99.9% component (8.76 hours). The more dependencies, the faster the failure budget adds up.",
+          "ref": "Q02-02"
+        },
+        {
+          "id": "c02-02-06",
+          "type": "single",
+          "prompt": "For a quick estimate, you add up the unavailability of three components, about 0.1% each, and get about 0.3%. Why does this approximation work?",
+          "options": [
+            "Availability adds up by nature; it does not multiply",
+            "Components in series never fail at the same time, so nothing overlaps",
+            "When failure rates are small, the overlap of simultaneous failures is negligible",
+            "Adding is more precise than multiplying, so it should be preferred"
+          ],
+          "answer": 2,
+          "explanation": "The exact calculation 1 − 0.999³ subtracts the overlap where failures coincide, but at 0.1% the chance of two failing at once is around one in a million, so you can ignore it. When failure rates are large, simple addition clearly overestimates.",
+          "ref": "Q02-02"
+        },
+        {
+          "id": "c02-02-07",
+          "type": "judge",
+          "prompt": "Every required component on a request path is 99.9% available, so the whole path is 99.9% available too.",
+          "answer": false,
+          "explanation": "If any dependency in series fails, the request fails. For independent failures, availability multiplies, and three 99.9% components leave only about 99.7%; more dependencies mean lower still. The path would be exactly 99.9% only in the extreme case where the components always fail at the same moments.",
+          "ref": "Availability Numbers"
+        },
+        {
+          "id": "c02-02-08",
+          "type": "judge",
+          "prompt": "If the failures of three 99.9% components always happen at the same moments, directly multiplying to 99.7% underestimates the availability of the chain.",
+          "answer": true,
+          "explanation": "Multiplication assumes independent failures. If all three always fail together, their downtime windows coincide completely and the chain is still 99.9%, which is higher than 99.7%. Shared failure domains such as a common data center or power supply call for re-analysis based on the real joint events.",
+          "ref": "Q02-02"
+        },
+        {
+          "id": "c02-02-09",
+          "type": "multi",
+          "prompt": "Which of these make “multiply the availability of each component” no longer apply?",
+          "options": [
+            "A dependency can degrade and return cached results when it fails",
+            "A critical dependency is deployed with redundant replicas",
+            "Components share a data center, power supply, or DNS",
+            "The three components have different availabilities",
+            "All three components must be up, and their failures are independent"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "Multiplication applies only to a series where everything must be up and failures are independent. Shared failure domains break independence; degradation and redundancy change the success condition, so redraw it before writing the formula. Different availabilities still multiply, e.g. 0.999×0.99.",
+          "ref": "Q02-02"
+        }
+      ]
+    },
+    {
+      "id": "c02-03",
+      "title": "Twitter Estimate",
+      "summary": "From MAU to QPS, peak load, and storage",
+      "exercises": [
+        {
+          "id": "c02-03-01",
+          "type": "order",
+          "prompt": "Put the steps of a QPS and server-count estimate in order",
+          "items": [
+            "List assumptions: MAU, DAU ratio, actions per user",
+            "DAU = MAU × daily-active ratio",
+            "Average QPS = DAU × actions ÷ 86,400",
+            "Peak QPS = average QPS × peak factor",
+            "Instances = peak ÷ per-server load-test capacity"
+          ],
+          "explanation": "Write “people × actions” first, then divide by time, then apply the peak factor, and finally convert to servers using the load-test capacity. Each step depends on the one before it. With the assumptions written first, an interviewer can change one parameter and you can recompute down the chain.",
+          "ref": "Estimations"
+        },
+        {
+          "id": "c02-03-02",
+          "type": "single",
+          "prompt": "300 million MAU, 50% of them daily active, and each active user posts 2 tweets a day on average. What is the average tweet QPS?",
+          "options": [
+            "About 7,000",
+            "About 3,500",
+            "About 35,000",
+            "About 1,700"
+          ],
+          "answer": 1,
+          "explanation": "DAU is 150 million, so 300 million tweets a day; divided by 86,400 seconds that is ≈3,472, about 3,500 tweets/s. 7,000 is the peak after a 2× peak factor. For mental math, round 86,400 to 100,000 to judge the order of magnitude.",
+          "ref": "1. Queries per Second (QPS)"
+        },
+        {
+          "id": "c02-03-03",
+          "type": "fill",
+          "prompt": "Complete the formula for average QPS",
+          "text": "Average QPS = DAU × [[actions per user per day]] ÷ [[86,400 seconds]]",
+          "distractors": [
+            "peak factor",
+            "3,600 seconds",
+            "MAU"
+          ],
+          "explanation": "A day has 86,400 seconds, which is the “time” in “people × actions ÷ time.” Apply the peak factor only after you have the average; using MAU instead of DAU counts inactive users too.",
+          "ref": "1. Queries per Second (QPS)"
+        },
+        {
+          "id": "c02-03-04",
+          "type": "single",
+          "prompt": "150 million DAU, 2 tweets per person per day, and 10% of tweets carry 1 MB of media. How much new media storage is added per day?",
+          "options": [
+            "About 30 TB",
+            "About 3 TB",
+            "About 300 TB",
+            "About 30 GB"
+          ],
+          "answer": 0,
+          "explanation": "150 million × 2 × 10% = 30 million media items at 1 MB each, about 30 TB/day; keeping them for 5 years is about 30 TB × 365 × 5 ≈ 55 PB. 300 TB forgets the 10% media share. Carrying units through every step makes such mistakes less likely.",
+          "ref": "2. Media Storage"
+        },
+        {
+          "id": "c02-03-05",
+          "type": "single",
+          "prompt": "DAU stays the same, but each person’s daily actions go from 2 to 10. The distribution of active hours, the data written per action, and the retention period all stay the same. What happens to average QPS and new storage?",
+          "options": [
+            "QPS is unchanged; storage becomes 5 times",
+            "Both become 5 times",
+            "QPS becomes 5 times; storage is unchanged",
+            "Both increase by 8 times"
+          ],
+          "answer": 1,
+          "explanation": "The ratio of actions is 10÷2=5. QPS follows requests and storage follows new bytes, so both become 5 times. Each person adds 8 actions, but the total is 5 times the original, an increase of 400%, not “8 times more.”",
+          "ref": "Q02-03"
+        },
+        {
+          "id": "c02-03-06",
+          "type": "judge",
+          "prompt": "The estimated peak of about 7,000 QPS can be used directly to plan the read capacity of the home feed.",
+          "answer": false,
+          "explanation": "7,000 is the peak for tweet writes. Real systems usually read far more than they write, so estimate read QPS separately: how many times each DAU refreshes per day and how many items each refresh pulls.",
+          "ref": "2. Media Storage"
+        },
+        {
+          "id": "c02-03-07",
+          "type": "single",
+          "prompt": "The chapter sizes tweet_id at 64 bytes, while a common 64-bit integer ID takes only 8 bytes. After correcting to the real size, what happens to the conclusion of about 55 PB of media over 5 years?",
+          "options": [
+            "It must be recomputed together with QPS",
+            "Almost unchanged, since media dwarfs the ID",
+            "It drops to one eighth",
+            "It grows to 8 times"
+          ],
+          "answer": 1,
+          "explanation": "The 55 PB figure counts only the 1 MB media items, and 64 bytes versus 8 bytes is negligible next to 1 MB. In an estimate, focus on the largest term. For real capacity planning, still measure the actual serialized format.",
+          "ref": "2. Media Storage"
+        },
+        {
+          "id": "c02-03-08",
+          "type": "multi",
+          "prompt": "Which of these are **not** included in the 5-year result of about 55 PB?",
+          "options": [
+            "The original media files of tweets with media",
+            "Replicas and backups",
+            "Thumbnails",
+            "The media added each day over 5 years",
+            "Object storage metadata and indexes"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "55 PB is raw media data only. Replicas, thumbnails, metadata, indexes, and backups are counted separately. For capacity planning you can multiply by a redundancy factor of 2 to 4, and list average media size and peak upload bandwidth on their own.",
+          "ref": "2. Media Storage"
+        },
+        {
+          "id": "c02-03-09",
+          "type": "single",
+          "prompt": "You have estimated about 30 TB of new media per day and a write peak of about 7,000 per second. What is the most reasonable architectural conclusion?",
+          "options": [
+            "Keep all media in Redis memory for the lowest read latency",
+            "Store media on the web servers’ local disks and read it from nearby",
+            "Put media in object storage behind a CDN; the database holds only metadata",
+            "Store media in relational BLOB columns and shard by user"
+          ],
+          "answer": 2,
+          "explanation": "Tens of terabytes of large files per day suit object storage for holding and a CDN for delivery, with the database keeping only metadata and references. Relational storage or memory is too costly and hard to scale. Local web disks make the web tier stateful, lose files when a machine dies, and block free scaling in and out.",
+          "ref": "90-Second Template for Interviews"
+        }
+      ]
+    },
+    {
+      "id": "c02-04",
+      "title": "Estimation Tips",
+      "summary": "Rounding, units, peak headroom, and calibration",
+      "exercises": [
+        {
+          "id": "c02-04-01",
+          "type": "judge",
+          "prompt": "In an estimate, rounding 99987 / 9.1 to 100,000 / 10 = 10,000 is off by about a tenth, which is perfectly acceptable when you only need the order of magnitude.",
+          "answer": true,
+          "explanation": "The exact value is about 10,988, and the approximation stays in the same order of magnitude. System design estimates care about “10 servers or 100,” so the process and assumptions matter more than decimals. Return to exact math only when you need exact capacity.",
+          "ref": "1. Rounding and Approximation"
+        },
+        {
+          "id": "c02-04-02",
+          "type": "single",
+          "prompt": "10 million users, 10% of them daily active, about 20 KB of hot data per user, and a cache target covering 50% of daily active users. Ignoring replicas, roughly how much memory does the cache need?",
+          "options": [
+            "About 100 GB",
+            "About 1 GB",
+            "About 20 GB",
+            "About 10 GB"
+          ],
+          "answer": 3,
+          "explanation": "10 million × 10% × 50% = 500,000 people, and × 20 KB = 10 million KB ≈ 10 GB. 20 GB forgets the 50% coverage ratio. A real deployment also adds replicas and protocol overhead.",
+          "ref": "4. Common Estimation Scenarios"
+        },
+        {
+          "id": "c02-04-03",
+          "type": "single",
+          "prompt": "Peak load is 7,000 QPS, and one instance sustains 350 QPS in load tests. With about 30% headroom, what is a reasonable instance count?",
+          "options": [
+            "About 10",
+            "Exactly 20",
+            "About 70",
+            "About 26 to 30"
+          ],
+          "answer": 3,
+          "explanation": "7,000 / 350 = 20 is the theoretical minimum with no headroom at all, so losing one machine or a small traffic rise causes overload. With 30% headroom, take 26 to 30, and say that this is an estimate to be calibrated with load-test results.",
+          "ref": "4. Common Estimation Scenarios"
+        },
+        {
+          "id": "c02-04-04",
+          "type": "single",
+          "prompt": "At the evening peak of 5,000 QPS, one instance steadily handles 500 QPS at the target P99. If each server may be used at only 70% of its load-tested capacity, how many servers are needed at minimum?",
+          "options": [
+            "10 servers",
+            "15 servers",
+            "13 servers",
+            "16 servers"
+          ],
+          "answer": 1,
+          "explanation": "Count each server at only 500×70%=350 QPS: 5,000/350≈14.3, rounded up to 15. 10 leaves no headroom. 13 is “10 servers plus 30%,” a different convention from a 70% target utilization. 16 would also require meeting the target with 1 server down.",
+          "ref": "Q02-04"
+        },
+        {
+          "id": "c02-04-05",
+          "type": "single",
+          "prompt": "At peak, tasks arrive at 5,000 per second, and the backend can process only 3,000 per second. This lasts for 60 seconds. How much does the backlog grow?",
+          "options": [
+            "180,000 tasks",
+            "300,000 tasks",
+            "2,000 tasks",
+            "120,000 tasks"
+          ],
+          "answer": 3,
+          "explanation": "The backlog grows by arrivals minus processing: 2,000 tasks/s × 60 s = 120,000 tasks. A queue can absorb a spike, but the backlog does not vanish by itself, so plan time to drain it after the peak. Online requests certainly cannot queue forever.",
+          "ref": "Q02-04"
+        },
+        {
+          "id": "c02-04-06",
+          "type": "judge",
+          "prompt": "If the all-day average QPS works out as sufficient, the evening peak and the start of a promotion will not be a problem either.",
+          "answer": false,
+          "explanation": "An average flattens busy and quiet periods, but servers face the arrival rate within a particular time window. When arrivals outpace processing, queueing and timeouts grow fast. Do the accounting with the average, and protect the service with the peak.",
+          "ref": "Q02-04"
+        },
+        {
+          "id": "c02-04-07",
+          "type": "single",
+          "prompt": "The estimate says the application sees 1,000 QPS, but database monitoring shows 6,000 queries/s. Tracing shows each API call runs 5 SQL statements on average, and failure retries add 20% more attempts. What is the most reasonable conclusion?",
+          "options": [
+            "The database does six times the business work; the code has a bug",
+            "The estimate’s assumptions are wrong; re-estimate DAU",
+            "Different units of count plus amplification explain the gap",
+            "Retries amplified requests 6 times; turn retries off first"
+          ],
+          "answer": 2,
+          "explanation": "1,000 × 5 × 1.2 = 6,000. The gap comes from “API requests” and “SQL statements” being different quantities. Retries add only a factor of 1.2, so the database is not doing six times the work, and the DAU assumption stands. Compare the same quantity first, then suspect code or assumptions.",
+          "ref": "Q02-05"
+        },
+        {
+          "id": "c02-04-08",
+          "type": "order",
+          "prompt": "When an estimate and the monitored reality differ widely, put the troubleshooting steps in order",
+          "items": [
+            "Align metric definitions, windows, and units",
+            "Check assumptions such as DAU and read/write ratio",
+            "Trace requests and load-test to find implementation cost",
+            "Record the corrected formula and the evidence"
+          ],
+          "explanation": "First confirm you are comparing the same quantity, over the same window, in the same unit; this is cheapest. Then check the estimate’s inputs. Only if a large gap remains should you look for N+1 queries, duplicate consumption, and similar issues. Finally, record the correction so nobody guesses again.",
+          "ref": "Q02-05"
+        },
+        {
+          "id": "c02-04-09",
+          "type": "fill",
+          "prompt": "Complete the unit conversion",
+          "text": "The estimate says 100 MB/s of uploads, and network monitoring shows 800 Mbit/s. In decimal terms, the two are [[equal]], because 1 byte = [[8 bits]].",
+          "distractors": [
+            "off by a factor of 8",
+            "1,024 bits",
+            "not comparable"
+          ],
+          "explanation": "MB means bytes and Mbit means bits, and 100 MB/s × 8 = 800 Mbit/s. Bits and bytes differ by a factor of 8, and milliseconds and seconds by a factor of 1,000. Labeling units exists so that one quantity is not mistaken for a discrepancy.",
+          "ref": "Q02-05"
+        },
+        {
+          "id": "c02-04-10",
+          "type": "judge",
+          "prompt": "One benefit of writing down assumptions is that when the interviewer changes the peak factor from 2 to 5, you only replace that one parameter and recompute.",
+          "answer": true,
+          "explanation": "With assumptions clearly recorded, checking and adjusting touches only one input, and nobody has to argue over the whole design again. If you cannot compute something, stating your assumption also gives the interviewer a chance to correct it.",
+          "ref": "2. Write Down Assumptions"
+        }
+      ]
+    }
+  ]
+}

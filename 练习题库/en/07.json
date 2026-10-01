@@ -1,0 +1,560 @@
+{
+  "chapter": 7,
+  "title": "Distributed Unique ID Generator",
+  "fullTitle": "Chapter 7: Design a Unique ID Generator in Distributed Systems",
+  "intro": [
+    "In single-machine CRUD, an auto-increment primary key lets the database issue IDs for you. When several machines issue IDs at once, the question becomes whether different machines can issue the same number. This chapter’s goal is to understand four approaches and be able to explain Snowflake’s fields, capacity, and failure boundaries.",
+    "Remember this first: **the machine position tells generators apart, the sequence tells apart multiple IDs in the same millisecond, and the time field supports rough ordering**. A common mistake is treating “unique,” “consecutive,” and “time-ordered” as one requirement, or memorizing bit counts while ignoring clock rollback."
+  ],
+  "keyPoints": [
+    "Unique, consecutive, and ordered are three independent properties; this problem needs 64 bits, unique, and roughly time-ordered, not consecutive.",
+    "Multi-primary step is hard to resize and not time-increasing; UUID exceeds 64 bits (v7 is also 128); a ticket server is a central single point.",
+    "Snowflake: 1 sign bit, 41 millisecond bits, 5 data center, 5 machine, 12 sequence bits; any differing field means a different ID.",
+    "One machine issues 4096 IDs per millisecond, in theory about 4.096 million per second; 41 bits last about 69.7 years. Bits are a fixed budget.",
+    "Machine IDs must be exclusive and not reused until the old instance is confirmed stopped; taking a sequence number must be synchronized across threads.",
+    "When the sequence runs out, wait for the next millisecond or reject; on rollback, wait or reject and alert. NTP cuts drift but isn’t rollback protection."
+  ],
+  "refs": {
+    "Introduction": "简介（Introduction）",
+    "Basic Requirements": "基本要求（Basic Requirements）",
+    "4. Twitter Snowflake Approach": "4. Twitter Snowflake 方案",
+    "1. Multi-Master Replication": "1. 多主复制（Multi-Master Replication）",
+    "2. UUID (Universally Unique Identifier)": "2. UUID（Universally Unique Identifier，通用唯一标识符）",
+    "3. Ticket Server": "3. 票据服务器（Ticket Server）",
+    "Step 2: High-Level Design Options": "第 2 步：高层方案（High-Level Design Options）",
+    "Note: Why the Combination Never Repeats": "批注：为什么组合后不重复",
+    "2. Section Length Tuning": "2. 字段长度调优（Section Length Tuning）",
+    "3. High Availability": "3. 高可用（High Availability）",
+    "1. Clock Synchronization": "1. 时钟同步（Clock Synchronization）"
+  },
+  "lessons": [
+    {
+      "id": "c07-01",
+      "title": "ID Properties",
+      "summary": "Unique, consecutive, ordered, and the 64-bit limit",
+      "exercises": [
+        {
+          "id": "c07-01-01",
+          "type": "match",
+          "prompt": "These ID sequences are listed in the order they were issued. Match each one to the property it shows",
+          "pairs": [
+            [
+              "10, 12, 15",
+              "Unique and increasing, but not consecutive"
+            ],
+            [
+              "30, 10, 20",
+              "Unique, but not increasing in issue order"
+            ],
+            [
+              "10, 10, 11",
+              "Has a duplicate, so it can’t be a unique key"
+            ],
+            [
+              "7, 8, 9",
+              "Unique, consecutive, and increasing"
+            ]
+          ],
+          "explanation": "Unique prevents collisions, consecutive means no gaps, and ordered tells you what came first; the three are independent. 10, 12, 15 has gaps yet is perfectly valid. This problem needs only unique IDs that roughly increase with time, not consecutive ones.",
+          "ref": "Q07-01"
+        },
+        {
+          "id": "c07-01-02",
+          "type": "single",
+          "prompt": "Why does the traditional database auto-increment primary key run into trouble when several machines issue IDs?",
+          "options": [
+            "Machines increment independently and will issue the same number unless synchronized",
+            "Auto-increment IDs inevitably have gaps in a distributed setup",
+            "Auto-increment IDs can’t be sorted by size",
+            "Auto-increment IDs don’t fit in a 64-bit integer"
+          ],
+          "answer": 0,
+          "explanation": "A single database issues auto-increment values serially. With several machines issuing at once, you must either coordinate or partition the number space, or they will collide. Auto-increment values fit in 64 bits and sort fine; gaps come from rollbacks or preallocation, not from distribution itself.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c07-01-03",
+          "type": "single",
+          "prompt": "An interviewer says, “IDs should be sorted by time.” If you don’t ask a follow-up, where are you most likely to end up disagreeing?",
+          "options": [
+            "Whether sorting happens in the database or the application",
+            "Whether time is shown in UTC or local time",
+            "Whether IDs are stored as strings or 64-bit integers",
+            "Whether roughly ordered is enough, or globally strictly increasing"
+          ],
+          "answer": 3,
+          "explanation": "Clocks differ across machines. Snowflake delivers “roughly ordered,” but a global, strictly increasing order that respects real-time ordering needs extra coordination and a completely different design. The other points are implementation details that don’t change which design you pick.",
+          "ref": "Basic Requirements"
+        },
+        {
+          "id": "c07-01-04",
+          "type": "single",
+          "prompt": "The business has a single database whose auto-increment key easily handles the traffic, and there is no multi-data-center requirement. What is the better choice?",
+          "options": [
+            "Switch to multi-primary step to prepare for more data centers",
+            "Switch to UUIDs to rule out collisions for good",
+            "Switch to Snowflake now to avoid migrating later",
+            "Keep using database auto-increment and skip an ID service"
+          ],
+          "answer": 3,
+          "explanation": "When one database meets the scale, auto-increment is still a great fit. This chapter covers distributed ID generation because issuing has to scale across nodes; adding a new service before you need it only adds complexity and failure points.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c07-01-05",
+          "type": "judge",
+          "prompt": "A gap in the order number sequence means some orders were lost.",
+          "answer": false,
+          "explanation": "Transaction rollbacks and preallocated ID ranges both make auto-increment skip numbers, so a gap doesn’t mean an order was lost. “Consecutive” is a separate requirement; if you truly need gap-free voucher numbers for accounting, you may need a separate business numbering scheme.",
+          "ref": "Q07-01"
+        },
+        {
+          "id": "c07-01-06",
+          "type": "judge",
+          "prompt": "One transaction gets ID 100 and another gets 101 afterward, so in the database 100 must have committed before 101.",
+          "answer": false,
+          "explanation": "Issue order is not commit order: the transaction holding 101 may commit first. When you say “ordered,” specify whether you mean issue order, physical time, or commit order; ID size reflects only one of them.",
+          "ref": "Q07-01"
+        },
+        {
+          "id": "c07-01-07",
+          "type": "fill",
+          "prompt": "Complete the basic requirements",
+          "text": "IDs must fit in [[64]] bits, be generated at more than [[10,000]] per second, and sort by date.",
+          "distractors": [
+            "128",
+            "1,000",
+            "32"
+          ],
+          "explanation": "The bit width rules out 128-bit UUIDs; the throughput requirement means the design must scale horizontally. These two numbers drive the trade-offs of every approach that follows.",
+          "ref": "Basic Requirements"
+        },
+        {
+          "id": "c07-01-08",
+          "type": "multi",
+          "prompt": "The interviewer requires “ordered IDs.” Which of these might “ordered” mean and should be confirmed on the spot?",
+          "options": [
+            "Arranged by physical time",
+            "Arranged by issue order",
+            "No two IDs are ever the same",
+            "Arranged by transaction commit order",
+            "No gaps between adjacent IDs"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "Ordered means comparing sizes reflects some notion of “before,” which can be issue order, physical time, or commit order, and these don’t always agree. No gaps is “consecutive” and no duplicates is “unique”: two other independent properties that don’t belong under “ordered.”",
+          "ref": "Q07-01"
+        },
+        {
+          "id": "c07-01-09",
+          "type": "judge",
+          "prompt": "Even with a single machine issuing IDs, Snowflake IDs are not guaranteed to be consecutive.",
+          "answer": true,
+          "explanation": "When a new millisecond starts, the time field goes up by 1 and the value jumps by about 4 million. Within a millisecond, usually only part of the sequence is used and the rest stays empty forever. This problem only requires IDs to increase with time, not to go up by exactly 1 each time, so gaps are not a defect.",
+          "ref": "4. Twitter Snowflake Approach"
+        }
+      ]
+    },
+    {
+      "id": "c07-02",
+      "title": "Alternatives",
+      "summary": "Where multi-primary, UUID, ticket server fall short",
+      "exercises": [
+        {
+          "id": "c07-02-01",
+          "type": "single",
+          "prompt": "Two databases issue 1,3,5… and 2,4,6… respectively. Machine A has issued up to 101 while machine B has just issued 20. What follows?",
+          "options": [
+            "20 must have been generated before 101",
+            "B will eventually collide with A if it keeps going",
+            "B lags so far behind that its start was misconfigured",
+            "You can’t judge real order from ID size"
+          ],
+          "answer": 3,
+          "explanation": "A issues only odd numbers and B only even numbers, so they never collide; but the machines issue at different speeds, so the numbers decouple from real time, and B lagging doesn’t mean a misconfiguration. So the step approach gives uniqueness but not IDs that increase with time.",
+          "ref": "1. Multi-Master Replication"
+        },
+        {
+          "id": "c07-02-02",
+          "type": "judge",
+          "prompt": "When growing the multi-primary step approach from two machines to three, you can change the step from 2 to 3 and let each machine continue from its current value.",
+          "answer": false,
+          "explanation": "For example, if B has reached 20 and then steps by 3, it will issue 23 and 29, odd numbers that A has long since issued, so B runs into historical IDs. When adding or removing machines, start values, steps, and existing ranges all need replanning.",
+          "ref": "1. Multi-Master Replication"
+        },
+        {
+          "id": "c07-02-03",
+          "type": "single",
+          "prompt": "What is the most prominent advantage of the UUID approach?",
+          "options": [
+            "It takes only 64 bits, saving storage",
+            "IDs are naturally sorted by time",
+            "Each server generates IDs independently, with no coordination",
+            "A central server guarantees they never repeat"
+          ],
+          "answer": 2,
+          "explanation": "Each server can generate on its own, so it scales with the web servers. But a UUID is 128 bits, and random versions don’t sort by time; uniqueness comes from a huge random space that makes collisions extremely unlikely, not from a central guarantee.",
+          "ref": "2. UUID (Universally Unique Identifier)"
+        },
+        {
+          "id": "c07-02-04",
+          "type": "single",
+          "prompt": "The high 48 bits of a UUIDv7 are Unix milliseconds, so it already sorts by time. Why does it still fail this problem’s requirements?",
+          "options": [
+            "It needs a central server to assign the random bits",
+            "It has too few random bits, so same-millisecond IDs collide easily",
+            "It is still 128 bits and doesn’t fit in 64",
+            "It can only be stored as a hyphenated string"
+          ],
+          "answer": 2,
+          "explanation": "v7 fixes the time layout, but `48+4+2+12+62=128` bits, so the width is unchanged; 74 of those bits are available for randomness or counters, so it doesn’t lack uniqueness. It can also be stored as 16-byte binary instead of a string. It is ruled out because the constraint doesn’t match, not because the design is outdated.",
+          "ref": "Q07-02"
+        },
+        {
+          "id": "c07-02-05",
+          "type": "judge",
+          "prompt": "Storing a UUID as binary instead of 36-character text meets this problem’s 64-bit requirement.",
+          "answer": false,
+          "explanation": "A binary UUID is 16 bytes, which is 128 bits: you only save the text overhead, and it is still twice as wide as a 64-bit ID. Changing the storage format can’t change the bit count.",
+          "ref": "Q07-02"
+        },
+        {
+          "id": "c07-02-06",
+          "type": "single",
+          "prompt": "Someone proposes “just take the first 64 bits of a UUIDv7 as the ID.” What is the main problem?",
+          "options": [
+            "The time part is dropped, so it no longer sorts by time",
+            "With the version bits added, it still exceeds 64 bits",
+            "Few random bits separate same-millisecond IDs, so collisions are likely",
+            "Version bits sit inside the first 64 bits, so values can’t be compared by time"
+          ],
+          "answer": 2,
+          "explanation": "The first 64 bits are 48 bits of time, 4 version bits, and 12 random bits, so only 12 bits tell apart IDs from the same millisecond. The version bits are fixed and don’t affect time comparison; taking the second half is what loses time ordering. In general, 128 bits can’t be mapped to 64 bits without collisions.",
+          "ref": "Q07-02"
+        },
+        {
+          "id": "c07-02-07",
+          "type": "judge",
+          "prompt": "A random UUID’s uniqueness comes from a huge random space that makes collisions extremely unlikely, not from a mathematical guarantee that duplicates never occur.",
+          "answer": true,
+          "explanation": "Random generation always carries a tiny collision probability, and it also depends on a good random source and implementation. So you can’t treat every UUID implementation as absolutely duplicate-free.",
+          "ref": "2. UUID (Universally Unique Identifier)"
+        },
+        {
+          "id": "c07-02-08",
+          "type": "single",
+          "prompt": "What is the main risk of a ticket server (a central database that issues incrementing IDs)?",
+          "options": [
+            "Each server needs a different step configured",
+            "The IDs it generates aren’t numbers",
+            "The IDs it generates may repeat",
+            "The central server can become a single point of failure"
+          ],
+          "answer": 3,
+          "explanation": "It works like a central ticket dispenser: easy to understand and control, but if it breaks, nobody can get a number. It does generate numeric IDs, and a single incrementing point doesn’t repeat; going to several servers brings back synchronization and conflicts to solve.",
+          "ref": "3. Ticket Server"
+        },
+        {
+          "id": "c07-02-09",
+          "type": "fill",
+          "prompt": "Complete one optimization for a ticket server",
+          "text": "A ticket server can hand an application a whole [[ID range]] at a time to cut the cost of each call; when it fails over for high availability, the ranges must be [[non-overlapping]].",
+          "distractors": [
+            "timestamp",
+            "consecutive",
+            "machine ID"
+          ],
+          "explanation": "After batch allocation, the application uses up a range locally before coming back, which cuts visits to the central server. If a primary-standby failover hands out the same range again, IDs collide. Range allocation is an add-on direction, not part of the original design.",
+          "ref": "3. Ticket Server"
+        },
+        {
+          "id": "c07-02-10",
+          "type": "match",
+          "prompt": "Match each approach to its main weakness in this problem",
+          "pairs": [
+            [
+              "Multi-primary step",
+              "Step and ranges are hard to adjust when scaling"
+            ],
+            [
+              "UUID",
+              "128 bits, over the 64-bit limit"
+            ],
+            [
+              "Ticket server",
+              "Centralized issuing makes it a single point"
+            ],
+            [
+              "Snowflake",
+              "Depends on the clock and unique machine IDs"
+            ]
+          ],
+          "explanation": "Multi-primary step is also hard to extend across data centers, and its IDs don’t increase with time; UUID exceeds the bit width; a ticket server is a single point. Snowflake has prerequisites too: machine IDs must be exclusive and the clock must not move backward, which is its failure boundary.",
+          "ref": "Step 2: High-Level Design Options"
+        }
+      ]
+    },
+    {
+      "id": "c07-03",
+      "title": "Bit Layout",
+      "summary": "What each Snowflake field does, and capacity math",
+      "exercises": [
+        {
+          "id": "c07-03-01",
+          "type": "fill",
+          "prompt": "Complete Snowflake’s 64-bit layout",
+          "text": "1 sign bit, [[41]] bits of millisecond timestamp, 5 bits of data center, 5 bits of machine, and [[12]] bits of sequence number.",
+          "distractors": [
+            "10",
+            "22",
+            "32"
+          ],
+          "explanation": "`1+41+5+5+12=64`. Time sits in the high bits so IDs sort by time; data center and machine tell generators apart; the sequence tells apart multiple IDs from the same machine in the same millisecond.",
+          "ref": "4. Twitter Snowflake Approach"
+        },
+        {
+          "id": "c07-03-02",
+          "type": "match",
+          "prompt": "In each case, which field guarantees that two IDs differ? (DC = data center)",
+          "pairs": [
+            [
+              "Different data centers",
+              "Data center ID differs"
+            ],
+            [
+              "Same DC, other machine",
+              "Machine ID differs"
+            ],
+            [
+              "Same machine, other ms",
+              "Timestamp differs"
+            ],
+            [
+              "Same machine and ms",
+              "Sequence number differs"
+            ]
+          ],
+          "explanation": "Think of an ID as “issue time + window position + this millisecond’s ticket number.” As long as machine identities are unique and the clock and sequence are maintained by the rules, any two IDs differ in at least one field.",
+          "ref": "Note: Why the Combination Never Repeats"
+        },
+        {
+          "id": "c07-03-03",
+          "type": "single",
+          "prompt": "Why does Snowflake put the timestamp in the highest bits, right after the sign bit?",
+          "options": [
+            "Time determines integer size, so IDs sort roughly by time",
+            "It leaves more usable bits for the sequence number",
+            "High bits are read faster, which raises issuing throughput",
+            "A sequence overflow can’t spill into the sign bit"
+          ],
+          "answer": 0,
+          "explanation": "Comparing integers starts with the high bits, so with time in the most significant bits, an earlier ID has a smaller value. Where a field sits affects neither read speed nor how many bits each field gets.",
+          "ref": "4. Twitter Snowflake Approach"
+        },
+        {
+          "id": "c07-03-04",
+          "type": "single",
+          "prompt": "With a 12-bit sequence, what is the theoretical maximum number of IDs one machine can generate per second?",
+          "options": [
+            "40,960",
+            "4,096",
+            "4,096,000",
+            "10,000"
+          ],
+          "answer": 2,
+          "explanation": "Each millisecond allows `2^12 = 4096`, and a second has 1000 milliseconds, so `4096×1000 = 4,096,000`. This is a theoretical ceiling; real throughput is limited by the implementation and runtime. 4096 is only one millisecond’s worth.",
+          "ref": "Note: Why the Combination Never Repeats"
+        },
+        {
+          "id": "c07-03-05",
+          "type": "single",
+          "prompt": "About how many years can a 41-bit millisecond timestamp cover?",
+          "options": [
+            "About 69.7 years",
+            "About 34.9 years",
+            "About 139 years",
+            "About 41 years"
+          ],
+          "answer": 0,
+          "explanation": "`2^41 / 1000 / 60 / 60 / 24 / 365 ≈ 69.7`. 34.9 years is the result for 40 bits and 139 years for 42 bits. Before it runs out you need to migrate the epoch or the bit layout; this layout can’t be used forever.",
+          "ref": "Note: Why the Combination Never Repeats"
+        },
+        {
+          "id": "c07-03-06",
+          "type": "single",
+          "prompt": "The chapter counts from Twitter’s epoch (2010-11-04 UTC). Given a 41-bit millisecond span, around which year does the time field run out?",
+          "options": [
+            "About 2080",
+            "About 2039",
+            "About 2149",
+            "About 2059"
+          ],
+          "answer": 0,
+          "explanation": "The timestamp is milliseconds since a custom epoch; counting about 69.7 years from late 2010 runs out around 2080. If you wrongly count from 1970, you get around 2039.",
+          "ref": "4. Twitter Snowflake Approach"
+        },
+        {
+          "id": "c07-03-07",
+          "type": "single",
+          "prompt": "The business has one data center but needs 200 machines issuing IDs at once. How should the Snowflake fields be adjusted?",
+          "options": [
+            "No change; the 5-bit machine field is enough",
+            "Reuse machine IDs by wrapping around after 31",
+            "Extend the total ID width to 72 bits",
+            "Borrow bits from the data center field for the machine field"
+          ],
+          "answer": 3,
+          "explanation": "5 bits distinguish only 32 machines. The bits are a fixed 64-bit budget: with one data center, you can give the data center field’s bits to the machine field; for example, 8 bits distinguish 256 machines. Reusing IDs by wrapping around makes machine IDs repeat and collide right away.",
+          "ref": "2. Section Length Tuning"
+        },
+        {
+          "id": "c07-03-08",
+          "type": "judge",
+          "prompt": "To make IDs last more years, you can add bits to the timestamp without affecting the other fields.",
+          "answer": false,
+          "explanation": "The total is fixed at 64 bits, so 1 more time bit means 1 fewer machine or sequence bit, which lowers the number of machines you can tell apart or the per-millisecond throughput. You also need to consider parsing and sort compatibility with existing IDs.",
+          "ref": "2. Section Length Tuning"
+        },
+        {
+          "id": "c07-03-09",
+          "type": "judge",
+          "prompt": "A JavaScript Number can’t represent every 64-bit integer exactly, so JSON APIs often pass such IDs as decimal strings.",
+          "answer": true,
+          "explanation": "Number is a double-precision float and can’t hold every 64-bit integer, so a large ID may lose its last few digits once parsed. Inside services you can use a 64-bit integer type or BigInt; sending a decimal string externally is the safest.",
+          "ref": "3. High Availability"
+        }
+      ]
+    },
+    {
+      "id": "c07-04",
+      "title": "Failure Boundaries",
+      "summary": "Duplicate machine IDs, sequence overflow, rollback",
+      "exercises": [
+        {
+          "id": "c07-04-01",
+          "type": "single",
+          "prompt": "Two cloned instances are both configured with dc=3, machine=7, and each issues its first ID in the same millisecond. What happens?",
+          "options": [
+            "There is a very small chance of collision, which can be ignored",
+            "They generate identical IDs: a deterministic duplicate",
+            "No duplicates, because the two machines have different IPs",
+            "The sequence numbers stagger automatically, so no duplicates"
+          ],
+          "answer": 1,
+          "explanation": "Time, data center, machine, and sequence are all identical, so the formula necessarily produces the same output; this isn’t a rare hash collision. The IP isn’t part of the calculation, and each instance maintains its own sequence, so they don’t stagger.",
+          "ref": "Q07-03"
+        },
+        {
+          "id": "c07-04-02",
+          "type": "judge",
+          "prompt": "A machine=7 instance in data center 1 and one in data center 2 issue IDs at the same time, and this causes no ID conflict.",
+          "answer": true,
+          "explanation": "Machine IDs only need to be exclusive within one data center; the data center fields differ, so the combinations differ. The real danger is the same dc and machine pair being used by two active instances at once.",
+          "ref": "Q07-03"
+        },
+        {
+          "id": "c07-04-03",
+          "type": "single",
+          "prompt": "An old instance lost its network connection, and ops want to give its machine ID to a new instance. What must be true for that to be safe?",
+          "options": [
+            "Wait for the new instance to finish NTP clock sync first",
+            "Confirm the old instance can no longer issue IDs, e.g. its lease expired",
+            "A failed ping to the old instance proves it has stopped",
+            "The new instance starts its sequence from 0 at startup"
+          ],
+          "answer": 1,
+          "explanation": "Losing contact doesn’t mean it stopped issuing; the old instance may still be issuing IDs to other clients. Use a lease or similar mechanism to revoke its right to issue, or use identities or time ranges that don’t overlap, before reusing the machine ID.",
+          "ref": "Q07-03"
+        },
+        {
+          "id": "c07-04-04",
+          "type": "single",
+          "prompt": "lastTimestamp=1000ms, and this machine has just issued seq=4095 while the clock still reads 1000ms. How should the next request be handled?",
+          "options": [
+            "Wait for the next millisecond, then reset the sequence to 0",
+            "Borrow an idle machine ID and keep issuing",
+            "Borrow data center bits as extra sequence bits",
+            "Wrap the sequence to 0 and keep issuing at 1000ms"
+          ],
+          "answer": 0,
+          "explanation": "A 12-bit sequence has only 0…4095, so at most 4096 values per millisecond; the 4097th request must wait for the next millisecond, queue, or be rejected explicitly. Wrapping to 0 duplicates IDs already issued in this millisecond; borrowing other fields or machine IDs may collide with other generators.",
+          "ref": "Q07-04"
+        },
+        {
+          "id": "c07-04-05",
+          "type": "judge",
+          "prompt": "If servers run NTP time sync, the ID generator code no longer needs to detect clock rollback.",
+          "answer": false,
+          "explanation": "NTP only reduces drift; a clock can still move backward because of time adjustments, VM resume, and so on. The code must compare the current time with the last issue time, and on seeing it go backward, wait, reject, or use a deliberately designed logical time.",
+          "ref": "1. Clock Synchronization"
+        },
+        {
+          "id": "c07-04-06",
+          "type": "multi",
+          "prompt": "The last issue time was 1000ms, but the clock rolled back to 998ms. Which responses are acceptable?",
+          "options": [
+            "Keep using 1000ms and increment the unused sequence",
+            "Ignore the rollback; NTP will fix it later",
+            "Reject issuing and raise an alert on a large rollback",
+            "Wait a bounded time to catch up on a small rollback",
+            "Reset the sequence to zero and issue at 998ms"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Waiting, rejecting with an alert, and a deliberately designed logical time all work; logical time drifts from real time and must still handle sequence exhaustion and restart state. Issuing again at 998ms may repeat IDs already issued at 998ms.",
+          "ref": "Q07-04"
+        },
+        {
+          "id": "c07-04-07",
+          "type": "order",
+          "prompt": "Put the steps of one ID issue, run under synchronization, in order",
+          "items": [
+            "Read the current time now",
+            "If now < last time, apply the rollback policy",
+            "Same ms: sequence +1; new ms: sequence to 0",
+            "If the sequence overflows, wait for the next millisecond",
+            "Save this time and assemble the ID"
+          ],
+          "explanation": "Comparing time, updating the sequence, and saving state must happen as one synchronized step: first block rollbacks, then update the sequence depending on whether it is the same millisecond, wait for the next millisecond on overflow, and finally record the time and assemble the ID from the fields.",
+          "ref": "Q07-04"
+        },
+        {
+          "id": "c07-04-08",
+          "type": "single",
+          "prompt": "In the generator, comparing the time and updating the sequence are not synchronized, and two threads take IDs at the same time. What can happen?",
+          "options": [
+            "They get the same sequence number and generate duplicate IDs",
+            "The two threads’ timestamps stagger by 1 millisecond automatically",
+            "The machine ID field is overwritten by the other thread",
+            "Only the ID order is reversed; no duplicates occur"
+          ],
+          "answer": 0,
+          "explanation": "Both threads may read seq=5 and each add one to get 6; with the same time and machine, they issue the same ID. So incrementing the sequence on one machine must also be synchronized across threads; making machine IDs exclusive only solves the cross-instance part.",
+          "ref": "Q07-04"
+        },
+        {
+          "id": "c07-04-09",
+          "type": "judge",
+          "prompt": "As long as machine IDs are exclusive and the clock never rolls back, Snowflake guarantees globally strictly increasing IDs across machines.",
+          "answer": false,
+          "explanation": "Machine clocks always differ a little, so an ID issued earlier by A can be larger than one issued later by B; Snowflake is only roughly ordered by time. Strictly respecting real-time order across nodes needs extra coordination, not local clocks.",
+          "ref": "Note: Why the Combination Never Repeats"
+        },
+        {
+          "id": "c07-04-10",
+          "type": "judge",
+          "prompt": "After a generator restarts, if the clock falls back into a millisecond already used, a sequence starting at 0 may repeat historical IDs.",
+          "answer": true,
+          "explanation": "A restart wipes the last time and sequence held in memory; if the clock lands in a millisecond that already issued IDs, (time, machine, sequence) coincides with historical IDs. Persist the last issue time and, at startup, wait for the current clock to pass it before issuing.",
+          "ref": "Q07-03"
+        }
+      ]
+    }
+  ]
+}

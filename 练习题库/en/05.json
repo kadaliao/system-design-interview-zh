@@ -1,0 +1,449 @@
+{
+  "chapter": 5,
+  "title": "Consistent Hashing",
+  "fullTitle": "Chapter 5: Design Consistent Hashing",
+  "intro": [
+    "**How to read this chapter**: From CRUD you already know `SELECT ... WHERE id = ?`. Once the database is split across several machines, a new question appears: **which machine should this key go to?** Consistent hashing answers it by changing the destination of as few keys as possible when nodes are added or removed.",
+    "Remember three words first: **ring, clockwise, virtual node**. A common misconception is that “hashing is always even,” or that “an even distribution means no hot keys.” In practice you still need virtual nodes, traffic monitoring, and hotspot handling."
+  ],
+  "keyPoints": [
+    "When N changes, `hash % N` moves most keys to other machines. The cache misses en masse, and scaling out can crush the database first.",
+    "Consistent hashing puts keys and nodes in one hash space; a key walks clockwise to the first node. The ring is a sorted table, not a network cable.",
+    "A new node takes over only the range after its predecessor, up to itself. A removed node hands its whole range to its clockwise successor.",
+    "Virtual nodes cut a big territory into many small pieces: less skew, and the count can follow capacity. Too many raise routing upkeep.",
+    "Even data placement is not even traffic: one hot key still lives on one machine. Use replication, request coalescing, or splitting.",
+    "The ring only says which keys should move. A real migration still needs copying, throttling, and verification, plus one node-table version everywhere."
+  ],
+  "refs": {
+    "Key Issue": "关键问题（Key Issue）",
+    "Explanation": "解释（Explanation）",
+    "Definition": "定义（Definition）",
+    "1. Hash Space and Ring": "1. 哈希空间与环（Hash Space and Ring）",
+    "2. Server Lookup": "2. 查找服务器（Server Lookup）",
+    "Affected Keys": "受影响的 key（Affected Keys）",
+    "3. Adding and Removing Servers": "3. 新增与移除服务器（Adding and Removing Servers）",
+    "Two Issues in Basic Approach": "基础方案的两个问题（Two Issues in Basic Approach）",
+    "Solution: Virtual Nodes": "解决办法：虚拟节点（Virtual Nodes）"
+  },
+  "lessons": [
+    {
+      "id": "c05-01",
+      "title": "The Cost of Modulo",
+      "summary": "Why hash % N breaks on every resize",
+      "exercises": [
+        {
+          "id": "c05-01-01",
+          "type": "single",
+          "prompt": "Requests are routed with `hash(key) % N`, and a key has `hash(key)=17`. The pool grows from 4 to 5 servers (numbered from 0). What happens to this key?",
+          "options": [
+            "It moves to server 4, the new one, which takes it over",
+            "It stays on server 1, because server 1 never failed",
+            "It moves to server 2, even though server 1 is still healthy",
+            "It moves only if server 1 goes offline"
+          ],
+          "answer": 2,
+          "explanation": "`17 % 4 = 1` and `17 % 5 = 2`. A key’s remainder depends only on N, so when N changes most remainders change, whether or not the old machine is healthy. Expecting keys to move only to the new machine applies a property of consistent hashing to modulo.",
+          "ref": "Key Issue"
+        },
+        {
+          "id": "c05-01-02",
+          "type": "judge",
+          "prompt": "With `hash(key) % N` cache sharding, adding one server invalidates only the keys that get assigned to the new server.",
+          "answer": false,
+          "explanation": "When N changes, most keys get a new remainder and land on other old servers, not just on the new one. Moving only a fraction of the keys is exactly what consistent hashing sets out to achieve.",
+          "ref": "Explanation"
+        },
+        {
+          "id": "c05-01-03",
+          "type": "single",
+          "prompt": "A cache cluster shards with modulo hashing. After adding a cache server to handle more traffic, the database shows a load spike first. What is the most likely cause?",
+          "options": [
+            "The new cache server must bulk-load its data from the database before going live",
+            "A larger N makes every routing decision cost a heavier modulo operation",
+            "Every client must restart to pick up the new N when the cluster scales",
+            "Most keys changed machines, so they miss the cache and hit the database"
+          ],
+          "answer": 3,
+          "explanation": "Changing N reroutes most keys, and their new cache locations are empty, so a flood of misses goes straight to the database. The modulo operation costs almost nothing and the cache needs no bulk preload. The problem is the wholesale reshuffle of routes.",
+          "ref": "Key Issue"
+        },
+        {
+          "id": "c05-01-04",
+          "type": "order",
+          "prompt": "Put in order how a modulo-hash resize causes a database load spike",
+          "items": [
+            "Server count N goes from 4 to 5",
+            "Most keys get a new remainder and route elsewhere",
+            "New locations lack these keys: mass cache misses",
+            "Requests fall through to the database, causing a spike"
+          ],
+          "explanation": "The root cause is that changing N reshuffles the routes. Cache invalidation is the result, and database load is the final knock-on effect. So scaling out, normally a good thing, can hit you with a shock first.",
+          "ref": "Key Issue"
+        },
+        {
+          "id": "c05-01-05",
+          "type": "multi",
+          "prompt": "With `hash(key) % N` routing, which changes make most keys move to a different server?",
+          "options": [
+            "Servers restart one by one, with the pool size always unchanged",
+            "One server crashes and is removed from the pool",
+            "Two servers are taken offline to scale in",
+            "One server gets a CPU upgrade and stays in the pool",
+            "One server is added to scale out"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "The remainder depends only on N: adding a machine, removing a failed one, or scaling in all change N and cause a large-scale remapping. A hardware upgrade or restart that leaves the count unchanged does not change any key’s route. Losing cached contents on restart is a separate problem.",
+          "ref": "Explanation"
+        },
+        {
+          "id": "c05-01-06",
+          "type": "single",
+          "prompt": "What is the core improvement of consistent hashing over modulo hashing?",
+          "options": [
+            "It automatically moves data to the new node when nodes change",
+            "It gives every server exactly the same number of keys",
+            "It spreads the requests of a hot key evenly across all nodes",
+            "When servers are added or removed, only some keys change owner"
+          ],
+          "answer": 3,
+          "explanation": "By definition, consistent hashing remaps only some of the keys when nodes come and go, which limits the disruption. It does not guarantee a perfectly even spread (virtual nodes improve that), does not move data on its own, and cannot split up a single hot key.",
+          "ref": "Definition"
+        },
+        {
+          "id": "c05-01-07",
+          "type": "judge",
+          "prompt": "A hash ring requires servers to be connected in a ring topology, with a request forwarded server by server around the ring until it reaches the responsible one.",
+          "answer": false,
+          "explanation": "The ring is a numbering space, not a network cable. In practice you usually need just one table of nodes sorted by hash value: look up the successor position and send the request straight to it. “Walking around the ring” is only a picture of the routing rule.",
+          "ref": "1. Hash Space and Ring"
+        },
+        {
+          "id": "c05-01-08",
+          "type": "single",
+          "prompt": "In code, how do you usually find the first server clockwise from a key’s hash position?",
+          "options": [
+            "Compute the numeric distance from the key to each server and take the nearest",
+            "Start at any server and forward step by step until the owner is found",
+            "Look up the successor in the sorted node table, wrapping to the start past the end",
+            "Take the key’s hash modulo the node count to get a node index"
+          ],
+          "answer": 2,
+          "explanation": "Once nodes are sorted by hash value, you only need to find the successor, and past the maximum you wrap around to the smallest node. “Numerically nearest” is a common misconception, since the rule cares only about the clockwise direction. Taking the modulo of the node count brings back the original problem.",
+          "ref": "1. Hash Space and Ring"
+        },
+        {
+          "id": "c05-01-09",
+          "type": "fill",
+          "prompt": "Complete the routing rule of consistent hashing",
+          "text": "Keys and servers are mapped into [[the same hash space]]; the server responsible for a key is the first one found [[clockwise]] from its position.",
+          "distractors": [
+            "two separate spaces",
+            "counterclockwise",
+            "a random direction"
+          ],
+          "explanation": "Nodes and keys must be compared within one space for a “successor” to be defined. The direction is a clockwise convention; if implementations disagreed on it, the same key would be sent to different machines.",
+          "ref": "2. Server Lookup"
+        },
+        {
+          "id": "c05-01-10",
+          "type": "judge",
+          "prompt": "When the server pool size never changes, `hash(key) % N` by itself assigns keys to servers stably.",
+          "answer": true,
+          "explanation": "With N fixed, the same key always yields the same remainder, so routing is stable. The trouble with modulo hashing only shows up when servers are added or removed and N changes.",
+          "ref": "Explanation"
+        }
+      ]
+    },
+    {
+      "id": "c05-02",
+      "title": "Owners on the Ring",
+      "summary": "Clockwise lookup, node changes, affected ranges",
+      "exercises": [
+        {
+          "id": "c05-02-01",
+          "type": "single",
+          "prompt": "On a ring 0…99 running clockwise (99 wraps to 0), servers are S1=20, S2=50, S3=80, and a key belongs to the first server at a position ≥ its hash. Who owns a key with hash 90?",
+          "options": [
+            "S3",
+            "No server is at a position ≥ 90, so the write fails",
+            "S1",
+            "S2"
+          ],
+          "answer": 2,
+          "explanation": "No server lies after 90, so the search goes clockwise past 99 back to 0 and meets S1=20 first. S3 is only the numerically nearest, but the rule cares about the clockwise direction alone. So S1 owns the range (80,20], which crosses zero.",
+          "ref": "Q05-01"
+        },
+        {
+          "id": "c05-02-02",
+          "type": "single",
+          "prompt": "On a ring 0…99 with S1=20, S2=50, S3=80, a key belongs to the first server at a position ≥ its hash. Who owns a key whose hash is exactly 50?",
+          "options": [
+            "S2",
+            "S3",
+            "S1"
+          ],
+          "answer": 0,
+          "explanation": "The rule is “greater than or equal,” so 50 belongs to S2, which sits at position 50. S2 owns (20,50]. Giving it to S3 gets the range endpoint backwards; the endpoint convention must match the lookup implementation.",
+          "ref": "Q05-01"
+        },
+        {
+          "id": "c05-02-03",
+          "type": "single",
+          "prompt": "On a ring 0…99 with S1=20, S2=50, S3=80 (a key belongs to the first server at a position ≥ its hash) and four keys with hashes 10, 35, 60, 90, S4=65 is added. Which keys change servers?",
+          "options": [
+            "Only 60, from S3 to S4",
+            "60 and 90, both to S4",
+            "35 and 60, with S2 and S3 each giving up one",
+            "All four keys must be recomputed for the new node count"
+          ],
+          "answer": 0,
+          "explanation": "The counterclockwise predecessor of S4 is S2=50, so it takes over only (50,65], which used to belong to S3. Of the four keys, only 60 falls inside; 10, 35, and 90 keep their owners. “Recompute everything” is the modulo-hash way of thinking.",
+          "ref": "Q05-02"
+        },
+        {
+          "id": "c05-02-04",
+          "type": "match",
+          "prompt": "On the ring S1=20, S2=50, S3=80, perform each operation (always starting from the original ring) and match it to the one range that changes owner",
+          "pairs": [
+            [
+              "Add S4=65",
+              "(50,65] moves from S3 to S4"
+            ],
+            [
+              "Add S4=35",
+              "(20,35] moves from S2 to S4"
+            ],
+            [
+              "Remove S2",
+              "(20,50] goes entirely to S3"
+            ],
+            [
+              "Remove S3",
+              "(50,80] goes entirely to S1"
+            ]
+          ],
+          "explanation": "Adding a node: find its predecessor counterclockwise, and (predecessor, new node] moves from the old owner to the new node. Removing a node: its whole range goes to its clockwise successor, and the successor of S3, wrapping past zero, is S1.",
+          "ref": "Affected Keys"
+        },
+        {
+          "id": "c05-02-05",
+          "type": "single",
+          "prompt": "On a ring 0…99 with S1=20, S2=50, S3=80 (a key belongs to the first server at a position ≥ its hash), S4=5 is added. Which range changes owner?",
+          "options": [
+            "None, since 5 is lower than every node position and takes no keys",
+            "[0,5], that is 0…5, moving from S1 to S4",
+            "(80,5], crossing zero, moving from S1 to S4",
+            "(5,20], that is 6…20, moving from S1 to S4"
+          ],
+          "answer": 2,
+          "explanation": "The counterclockwise predecessor of S4=5 is S3=80, so the affected range must be written across zero as (80,5]. Cutting off only 0…5 forgets that 81…99 also lies after the predecessor. A small number does not mean there is no range.",
+          "ref": "Q05-02"
+        },
+        {
+          "id": "c05-02-06",
+          "type": "judge",
+          "prompt": "On a basic ring with no virtual nodes, when a server is removed, its keys are split evenly among all the remaining servers.",
+          "answer": false,
+          "explanation": "The removed server hands only its own range, as a whole, to its clockwise successor; the other servers are unaffected. This also means the successor’s load can suddenly double, an imbalance that virtual nodes are meant to ease.",
+          "ref": "3. Adding and Removing Servers"
+        },
+        {
+          "id": "c05-02-07",
+          "type": "judge",
+          "prompt": "On a basic ring, when one ordinary node is added at a time, only the keys between the new node and its counterclockwise predecessor change primary owner.",
+          "answer": true,
+          "explanation": "The new node cuts off only the stretch after its predecessor, up to itself. That stretch used to belong to its clockwise successor, and no other range changes hands. Only when one physical machine joins with several virtual nodes at once do multiple small ranges change.",
+          "ref": "Q05-02"
+        },
+        {
+          "id": "c05-02-08",
+          "type": "fill",
+          "prompt": "Complete the rule for the range a new node takes over",
+          "text": "A new node takes over the keys from its counterclockwise [[predecessor]] up to itself, and these keys used to belong to its clockwise [[successor]].",
+          "distractors": [
+            "numerically nearest node",
+            "largest-hash node"
+          ],
+          "explanation": "Rule of thumb: “find the owner clockwise, find the range by looking at the predecessor.” Keys after the predecessor used to walk clockwise to the old successor first; now they meet the new node first.",
+          "ref": "Affected Keys"
+        },
+        {
+          "id": "c05-02-09",
+          "type": "multi",
+          "prompt": "On the basic ring S1=20, S2=50, S3=80, S2 is removed. Which statements are correct?",
+          "options": [
+            "S1 and S3 each take half of S2’s range",
+            "The range S3 owns becomes (20,80]",
+            "The keys S1 owns are unaffected",
+            "The keys in (20,50] are handed to S3",
+            "All keys must be recomputed and migrated"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "S2’s whole range goes to its clockwise successor S3, so S3’s range grows to (20,80] and S1 is not affected at all. Splitting it between the two neighbors, or recomputing everything, is not how the basic ring behaves.",
+          "ref": "3. Adding and Removing Servers"
+        },
+        {
+          "id": "c05-02-10",
+          "type": "single",
+          "prompt": "If the lookup is changed to “find the first node at a position strictly greater than the key’s hash,” how should each node’s range be written?",
+          "options": [
+            "(node, successor]",
+            "(predecessor, node], unchanged",
+            "[node, successor)",
+            "[predecessor, node)"
+          ],
+          "answer": 3,
+          "explanation": "With strictly greater, a key whose hash equals a node’s position goes to the next node: a node’s own position is not its own, while its predecessor’s position is, so the range becomes [predecessor, node). The endpoint convention must match the lookup implementation.",
+          "ref": "Affected Keys"
+        }
+      ]
+    },
+    {
+      "id": "c05-03",
+      "title": "Virtual Nodes",
+      "summary": "Skew, virtual nodes, hot keys, and migration",
+      "exercises": [
+        {
+          "id": "c05-03-01",
+          "type": "single",
+          "prompt": "3 servers each take a single position on the ring. What problem is most likely?",
+          "options": [
+            "Gaps differ, so some servers get much larger ranges",
+            "Every key must migrate whenever a server is added or removed",
+            "The same key is mapped to two servers",
+            "Looking up a key requires scanning all servers"
+          ],
+          "answer": 0,
+          "explanation": "The basic approach has two issues, uneven partition sizes and uneven key distribution: server positions are decided by the hash, so the gaps can differ a lot, and an unlucky machine gets a big territory. Lookup efficiency and migration scope are not the problem.",
+          "ref": "Two Issues in Basic Approach"
+        },
+        {
+          "id": "c05-03-02",
+          "type": "single",
+          "prompt": "Why do virtual nodes make the key distribution more even?",
+          "options": [
+            "They make the hash function’s output more random",
+            "One machine owns many scattered small ranges, so deviations cancel out more easily",
+            "They shrink the routing table, so lookups are faster",
+            "Each key is stored on several machines and reads pick any one"
+          ],
+          "answer": 1,
+          "explanation": "Think of opening branches in many neighborhoods: owning one big block can leave you much better or worse off, while owning many small pieces lets the deviations cancel and shrinks the standard deviation of the distribution. It does no data replication, and the routing table gets bigger, not smaller.",
+          "ref": "Solution: Virtual Nodes"
+        },
+        {
+          "id": "c05-03-03",
+          "type": "single",
+          "prompt": "Machine A has twice the capacity of machine B. How do virtual nodes reflect that?",
+          "options": [
+            "Give A about twice as many virtual nodes",
+            "Place A earlier on the ring",
+            "Give A one position, but make its range twice as long",
+            "Let A receive keys both clockwise and counterclockwise"
+          ],
+          "answer": 0,
+          "explanation": "The number of virtual nodes can follow capacity: a machine with more nodes covers more of the ring in total and gets more keys. The length of a single position’s range is decided by the hash and cannot be set precisely, and the direction rule is the same for every node.",
+          "ref": "Solution: Virtual Nodes"
+        },
+        {
+          "id": "c05-03-04",
+          "type": "judge",
+          "prompt": "The more virtual nodes the better; adding more costs nothing except a more even distribution.",
+          "answer": false,
+          "explanation": "Too few virtual nodes is still uneven, while too many increases the routing table and maintenance cost, and more small ranges are involved whenever a machine joins or leaves. The count is a parameter to trade off, not something to raise without limit.",
+          "ref": "Solution: Virtual Nodes"
+        },
+        {
+          "id": "c05-03-05",
+          "type": "single",
+          "prompt": "10 million keys are spread evenly over 10 machines. `product:hot` takes 500,000 QPS, and all other keys together take another 500,000 QPS. After greatly increasing each machine’s virtual nodes, what is the least load on the machine holding `product:hot`?",
+          "options": [
+            "Close to 0, since the hot key is split across all machines",
+            "About 1/10, since virtual nodes spread the requests",
+            "Still at least half, since this key is located on one machine only",
+            "It depends on whether the number of keys is spread evenly enough"
+          ],
+          "answer": 2,
+          "explanation": "Virtual nodes improve the statistical balance of many keys across machines. Every lookup still locates `product:hot` at the same primary owner, so all 500,000 QPS land on one machine. Even data is not even traffic.",
+          "ref": "Q05-03"
+        },
+        {
+          "id": "c05-03-06",
+          "type": "multi",
+          "prompt": "Which measures really relieve the pressure from a single hot key?",
+          "options": [
+            "Coalesce requests on a cache miss so they do not all hit the origin",
+            "Switch the hash function from MD5 to SHA-1",
+            "Replicate read-only hot data to several caches to spread the reads",
+            "Split a hot counter into sub-counters and sum them on read",
+            "Add virtual nodes to the machine that holds the key"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Hotspots need application-level fixes matched to the operation: replication spreads reads, request coalescing blocks the stampede to the origin, and sub-counters spread writes. Adding virtual nodes only changes how other keys are assigned, and switching hash functions just moves this key to another machine.",
+          "ref": "Q05-03"
+        },
+        {
+          "id": "c05-03-07",
+          "type": "judge",
+          "prompt": "For inventory deduction that must never oversell, replicating a hot key to several machines that each deduct on their own breaks the inventory constraint.",
+          "answer": true,
+          "explanation": "Each machine deducts without seeing the others’ deductions, so the total can oversell. Replication suits read-only hot data; a write hotspot still needs coordination, pre-allocated quotas, or a redesign around the business logic.",
+          "ref": "Q05-03"
+        },
+        {
+          "id": "c05-03-08",
+          "type": "fill",
+          "prompt": "Complete the role of virtual nodes",
+          "text": "One physical server maps to several [[virtual nodes]] on the ring; usually, the more there are, the smaller the [[standard deviation]] of the key distribution.",
+          "distractors": [
+            "replicas",
+            "average",
+            "hash functions"
+          ],
+          "explanation": "Virtual nodes cut a machine’s territory into many small pieces, so the fluctuation of per-machine load shrinks, while the average stays the same. They are not replicas: a key still has a single primary owner.",
+          "ref": "Solution: Virtual Nodes"
+        },
+        {
+          "id": "c05-03-09",
+          "type": "single",
+          "prompt": "During a scale-out, half the clients have the new node table and the other half still use the old one. What goes wrong?",
+          "options": [
+            "The hash ring detects and rejects requests from the old table",
+            "The same key goes to different machines, and fresh writes may not be found",
+            "Only some requests get slower; reads and writes stay correct",
+            "Every key is remapped and the whole cache is invalidated"
+          ],
+          "answer": 1,
+          "explanation": "The two node tables name different owners for the affected range: one side writes to the new node while the other reads from the old one, so reads return stale values or nothing. Migration therefore has to manage node-view versions; the ring itself will not detect this for you.",
+          "ref": "3. Adding and Removing Servers"
+        },
+        {
+          "id": "c05-03-10",
+          "type": "order",
+          "prompt": "After adding a new node to the ring, put the steps of a real migration in order",
+          "items": [
+            "Determine the range the new node takes over",
+            "Copy that range from its current owner, throttled",
+            "Confirm the new node’s data is complete and readable",
+            "Publish the new routing version and switch traffic",
+            "Delete the migrated data from the old node"
+          ],
+          "explanation": "The hash ring only tells you which keys should move; it never moves the data itself. Copy and verify first, then switch routing, and delete old data last. Switching or deleting too early sends requests where the data does not exist yet.",
+          "ref": "3. Adding and Removing Servers"
+        }
+      ]
+    }
+  ]
+}

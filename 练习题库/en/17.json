@@ -1,0 +1,588 @@
+{
+  "chapter": 17,
+  "title": "Nearby Friends",
+  "fullTitle": "Chapter 17: Nearby Friends",
+  "intro": [
+    "What sets this chapter apart from nearby businesses is that **people keep moving**. Don’t scan everyone on every refresh; have online devices report their location and push it out through friend channels. Remember this first: **WebSocket connects devices, Redis holds current locations, each person gets one channel, and friends subscribe and filter by distance.** Geohash is the later extension for “nearby strangers,” not this chapter’s main design."
+  ],
+  "keyPoints": [
+    "People keep moving: online devices report locations over WebSocket and the backend fans out to online friends instead of scanning everyone.",
+    "The Redis location cache holds only current locations with a TTL; expiry means inactive. History goes to a write-heavy store like Cassandra.",
+    "One Pub/Sub channel per user: you publish to your own channel, friends’ servers subscribe, and distance filtering happens on the subscriber side.",
+    "10 million ÷ 30 seconds ≈ 333,000 updates/s (the chapter rounds to 334,000); a fan-out of about 40 gives about 14 million pushes/s.",
+    "Pub/Sub finds channels via service discovery and consistent hashing; migrating a channel forces resubscribes and missed points, so do it off-peak.",
+    "Nearby strangers use per-geohash-cell channels plus neighboring cells; Erlang can replace Redis Pub/Sub, but talent is hard to find."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Design Scope": "第一步：理解问题并确定范围",
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Scaling Redis Pub/Sub": "深入扩展 Redis Pub/Sub",
+    "Non-Functional Requirements": "非功能需求",
+    "High-Level Design": "高层设计",
+    "Periodic Location Update": "周期位置更新",
+    "Scaling Each Component": "各组件如何扩展？",
+    "Adding and Removing Friends": "添加/删除好友",
+    "API Design": "API 设计",
+    "Data Model": "数据模型",
+    "Users with Many Friends": "好友特别多的用户",
+    "Nearby Random Persons": "附近陌生人",
+    "Step 3: Design Deep Dive": "第三步：深入设计"
+  },
+  "lessons": [
+    {
+      "id": "c17-01",
+      "title": "Scope & Estimates",
+      "summary": "Scoping Q&A, update QPS, and push volume",
+      "exercises": [
+        {
+          "id": "c17-01-01",
+          "type": "multi",
+          "prompt": "Which assumptions agreed during the opening scope Q&A directly affect the design?",
+          "options": [
+            "Distance must account for actual roads and rivers",
+            "Location history must be kept for analytics such as machine learning",
+            "Inactive friends can drop off the list after 10 minutes",
+            "“Nearby” means a straight-line distance within 5 miles, configurable",
+            "GDPR data-deletion requests must be handled in real time"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "The 5-mile straight-line distance decides how you filter, the 10-minute disappearance maps to the location cache’s TTL, and keeping history calls for a separate history database. The scope explicitly uses straight-line distance; GDPR is set aside to keep the interview simple, but a real product can’t ignore privacy.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c17-01-02",
+          "type": "single",
+          "prompt": "When estimating location-update QPS, why use 10 million rather than 100 million daily active users?",
+          "options": [
+            "Only 10% of the 100 million have any friends",
+            "Only users online at the same time report locations periodically",
+            "Redis can store at most 10 million keys",
+            "Only 10% of each person’s friends use the feature"
+          ],
+          "answer": 1,
+          "explanation": "Periodic reporting only happens while the app is open. Of 100 million daily users, 10% online at once gives 10 million, the number that keeps generating updates. The 10% of friends online comes in later, for fan-out; don’t mix the two up.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c17-01-03",
+          "type": "single",
+          "prompt": "With 10 million users online at once, each reporting every 30 seconds, roughly what is the location-update QPS?",
+          "options": [
+            "About 33,000 per second",
+            "About 330,000 per second",
+            "About 3.3 million per second",
+            "About 14 million per second"
+          ],
+          "answer": 1,
+          "explanation": "10 million ÷ 30 ≈ 333,000 per second; the chapter rounds this to 334,000 and carries it through the later estimates. 14 million is the push volume after multiplying by a fan-out of about 40, so don’t confuse reports with pushes.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c17-01-04",
+          "type": "fill",
+          "prompt": "Complete the push-volume estimate",
+          "text": "With an average of 400 friends, [[10%]] of them online, one update fans out to about [[40]] messages; multiplied by about 334,000 updates per second, that gives about [[14 million]] pushes per second.",
+          "distractors": [
+            "1%",
+            "400",
+            "1.4 million"
+          ],
+          "explanation": "400 × 10% = 40, and 334,000 × 40 ≈ 13.36 million, which the chapter rounds to about 14 million. This push volume, not memory capacity, determines how many Redis Pub/Sub servers you need.",
+          "ref": "Scaling Redis Pub/Sub"
+        },
+        {
+          "id": "c17-01-05",
+          "type": "single",
+          "prompt": "The chapter sets the location refresh interval at 30 seconds, not 1 second. What is the main reason?",
+          "options": [
+            "Redis TTLs can’t be set shorter than 30 seconds",
+            "People move slowly, so reporting more often gains little while multiplying the load",
+            "A phone’s GPS chip can only get one fix every 30 seconds",
+            "A WebSocket connection can only send one message every 30 seconds"
+          ],
+          "answer": 1,
+          "explanation": "Update QPS = online users ÷ interval, so shrinking the interval to 1 second multiplies the load by 30. People walk slowly, and a position that is a few dozen seconds old barely affects a “within 5 miles” check, so it isn’t worth multiplying the cost.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c17-01-06",
+          "type": "single",
+          "prompt": "If the refresh interval drops from 30 seconds to 10 seconds with all other assumptions unchanged, roughly how many Pub/Sub pushes per second result?",
+          "options": [
+            "About 40 million, 3 times the original",
+            "Still about 14 million, because push volume depends only on friend count",
+            "About 140 million, 10 times the original",
+            "About 4.7 million, one third of the original"
+          ],
+          "answer": 0,
+          "explanation": "Update QPS becomes 10 million ÷ 10 = 1 million per second, and each update still fans out to about 40 messages, so pushes reach about 40 million per second, 3 times the original. At about 100,000 per second per server, the Pub/Sub cluster would need about 400 servers.",
+          "ref": "Scaling Redis Pub/Sub"
+        },
+        {
+          "id": "c17-01-07",
+          "type": "judge",
+          "prompt": "Nearby friends can tolerate the occasional lost location point, because the next periodic update brings a fresh position soon.",
+          "answer": true,
+          "explanation": "The non-functional requirements say an occasional lost point is acceptable as long as the system stays generally available. Locations refresh every 30 seconds, so one lost point is quickly overwritten by the next. This is also why a few missed points during a Pub/Sub migration are tolerable.",
+          "ref": "Non-Functional Requirements"
+        },
+        {
+          "id": "c17-01-08",
+          "type": "judge",
+          "prompt": "Location store replicas must be strongly consistent with each other, or friends will see wrong distances.",
+          "answer": false,
+          "explanation": "The requirements call only for eventual consistency: a few seconds of lag between replicas is acceptable. Locations update only every 30 seconds and carry a timestamp, so a few seconds of lag barely affects whether a friend is “within 5 miles.”",
+          "ref": "Non-Functional Requirements"
+        },
+        {
+          "id": "c17-01-09",
+          "type": "match",
+          "prompt": "Match each requirement with its design choice",
+          "pairs": [
+            [
+              "Low latency",
+              "WebSocket connections that push updates"
+            ],
+            [
+              "Occasional loss OK",
+              "A few missed points tolerated in migration"
+            ],
+            [
+              "Eventual consistency",
+              "A few seconds of cache replica lag is fine"
+            ],
+            [
+              "Vanish after 10 min",
+              "TTL on the location cache"
+            ],
+            [
+              "Location history",
+              "A separate location history database"
+            ]
+          ],
+          "explanation": "Each requirement lands on a component: long connections keep updates timely, a TTL makes inactive users drop off on their own, and the history store is kept separate from the current-location cache. Tolerating lost points and eventual consistency relax the constraints and make the system easier to scale.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        }
+      ]
+    },
+    {
+      "id": "c17-02",
+      "title": "Push Architecture",
+      "summary": "Connections, location cache, a channel per user",
+      "exercises": [
+        {
+          "id": "c17-02-01",
+          "type": "single",
+          "prompt": "Why not have friends’ phones exchange locations directly, peer to peer (P2P)?",
+          "options": [
+            "Mobile networks are flaky and drain batteries, so P2P links are hard to keep up",
+            "P2P takes more hops, so latency is always higher than going through a server",
+            "Phones have no way to filter friends by a 5-mile range",
+            "P2P communication has no way to encrypt location data"
+          ],
+          "answer": 0,
+          "explanation": "Each person would need a connection to dozens of online friends, but mobile networks come and go and batteries are limited, so P2P is impractical. Phones can do both encryption and distance filtering, so those aren’t the issue. The backend handles fan-out, and a phone needs only one long connection to a server.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-02",
+          "type": "single",
+          "prompt": "Location updates use WebSocket, while friend management and profile edits use REST. Why split them this way?",
+          "options": [
+            "WebSocket servers are stateless, so they scale more easily",
+            "Locations need server-initiated pushes; auxiliary features are plain request-response",
+            "REST endpoints can’t carry decimals such as latitude and longitude",
+            "WebSocket encrypts more strongly, which suits sensitive locations"
+          ],
+          "answer": 1,
+          "explanation": "The server must push friends’ locations to clients at any time, which needs a bidirectional long connection; adding a friend or editing a profile is an ordinary request-response call. Note that WebSocket servers are stateful, so scaling them is actually harder.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-03",
+          "type": "judge",
+          "prompt": "Each user subscribes only to their own channel, and friends’ location updates are written into that channel.",
+          "answer": false,
+          "explanation": "A channel belongs to the person being followed: A publishes their location to A’s own channel, and the server hosting A’s friend B subscribes to A’s channel. One server can share a single subscription on behalf of many of its local clients.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-04",
+          "type": "single",
+          "prompt": "A and B are friends, both online, connected to servers S1 and S2. After A reports a new location, how does B receive it?",
+          "options": [
+            "B’s client queries Redis for A’s location every 30 seconds",
+            "S1 publishes to A’s channel, and subscriber S2 filters and pushes it to B",
+            "S1 finds that B is on S2 and sends the location straight to S2",
+            "S1 publishes to B’s channel, and B subscribes to their own channel"
+          ],
+          "answer": 1,
+          "explanation": "The publisher just publishes to its own channel and doesn’t need to know which server each friend is on; Redis Pub/Sub delivers to all subscribers; S2 computes the distance using B’s coordinates in memory and pushes only if it is within 5 miles.",
+          "ref": "Periodic Location Update"
+        },
+        {
+          "id": "c17-02-05",
+          "type": "single",
+          "prompt": "Friend C is 30 miles away. What happens after C’s location update reaches the server hosting B?",
+          "options": [
+            "It is pushed to B as usual, and B’s client hides it",
+            "C’s server never publishes the update in the first place",
+            "The server computes a distance over 5 miles and doesn’t push it to B",
+            "Redis intercepts it before delivery"
+          ],
+          "answer": 2,
+          "explanation": "A publisher always publishes to its own channel and doesn’t know where each friend is. Filtering happens on the subscribing server, which holds its local users’ coordinates and drops the update when the distance exceeds the threshold.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-06",
+          "type": "multi",
+          "prompt": "Which statements about the Redis location cache are correct?",
+          "options": [
+            "Clients load friends’ current locations from it at initialization",
+            "It must keep full trajectories for machine-learning analysis",
+            "Entries carry a TTL; expiry means the user is inactive",
+            "Replicas must replicate with strong consistency",
+            "It stores only each active user’s latest location"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "The cache only cares about where someone is now; the TTL lets people who stop reporting disappear on their own, and initialization reads friends’ locations from here. Full trajectories go to the history store, and the requirements call only for eventual consistency.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-07",
+          "type": "judge",
+          "prompt": "The nearby friends list reads from the location cache; the location history database is not on this read path.",
+          "answer": true,
+          "explanation": "The history store records trajectories for analysis and has a different retention policy. Showing nearby friends needs only each person’s current location, read straight from the TTL cache. The two have different jobs.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-08",
+          "type": "single",
+          "prompt": "A friend closes the app and stops reporting, and their location cache entry is deleted when its TTL expires. What do other people see?",
+          "options": [
+            "Their last known location, shown indefinitely",
+            "The system fills in the last location from the history database",
+            "Their channel is deleted and you must add them as a friend again",
+            "They disappear from the nearby friends list, treated as inactive"
+          ],
+          "answer": 3,
+          "explanation": "TTL expiry means the user is inactive and the cache entry is deleted, which matches “inactive friends can disappear after 10 minutes.” The history database isn’t on the read path, and channel names are agreed in advance, so no channel is deleted.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c17-02-09",
+          "type": "match",
+          "prompt": "Match each component with its role",
+          "pairs": [
+            [
+              "WebSocket",
+              "Holds long connections, relays updates"
+            ],
+            [
+              "Location cache",
+              "Current location per user, with a TTL"
+            ],
+            [
+              "Location history DB",
+              "Write-heavy; stores trajectories for analysis"
+            ],
+            [
+              "User database",
+              "User profiles and friend relationships"
+            ],
+            [
+              "Pub/Sub",
+              "Message bus with one channel per user"
+            ]
+          ],
+          "explanation": "The WebSocket servers are stateful and hold the device connections. Redis plays two roles: a location cache with TTLs and a lightweight Pub/Sub bus. For the history, choose a write-heavy store such as Cassandra.",
+          "ref": "High-Level Design"
+        }
+      ]
+    },
+    {
+      "id": "c17-03",
+      "title": "Update Flow",
+      "summary": "Reporting, init, subscriptions, and data model",
+      "exercises": [
+        {
+          "id": "c17-03-01",
+          "type": "order",
+          "prompt": "Put one location update in order, from the phone to the friend’s screen",
+          "items": [
+            "Phone sends its location to a WebSocket server",
+            "Server publishes to that user’s own Redis channel",
+            "Redis delivers it to servers subscribed to that channel",
+            "Subscribing server computes distances to local friends",
+            "Only updates within 5 miles are pushed to clients"
+          ],
+          "explanation": "This leaves out two steps: writing to the history database and updating the location cache. The key point is that the publisher does no distance check and only publishes to its own channel; filtering happens on the subscribing servers.",
+          "ref": "Periodic Location Update"
+        },
+        {
+          "id": "c17-03-02",
+          "type": "single",
+          "prompt": "While updating the location cache, the WebSocket server also keeps the user’s coordinates in memory. Why?",
+          "options": [
+            "As the only backup of locations in case Redis fails",
+            "As a write buffer for batching inserts into the history database",
+            "To decide which Redis server should host that user’s own channel",
+            "To compute distances from local coordinates when a friend’s update arrives"
+          ],
+          "answer": 3,
+          "explanation": "A subscribing server must decide whether a friend is within 5 miles, which requires its local user’s latest coordinates; keeping them in memory avoids a Redis lookup for every friend update. It is not a durable backup.",
+          "ref": "Periodic Location Update"
+        },
+        {
+          "id": "c17-03-03",
+          "type": "judge",
+          "prompt": "When a client first connects, the server fetches friends’ current locations from the location cache and sends them right away, without waiting for the friends’ next report.",
+          "answer": true,
+          "explanation": "Client initialization: fetch the friend list, subscribe to each friend’s channel, pull current locations from the location cache, then send them to the client. Otherwise a newly online user could wait up to 30 seconds to see the first nearby friends.",
+          "ref": "Scaling Each Component"
+        },
+        {
+          "id": "c17-03-04",
+          "type": "single",
+          "prompt": "B has just become friends with D, and both are online. What must B’s WebSocket server do before B starts receiving D’s location?",
+          "options": [
+            "Forward B’s channel to D",
+            "Create a new channel for D",
+            "Subscribe to D’s channel",
+            "Pull D’s entire trajectory from the history database"
+          ],
+          "answer": 2,
+          "explanation": "When a friendship changes, the server hosting the affected user subscribes to the new friend’s channel; this is the “subscribe to a new friend” operation in the API. Channel names are agreed in advance, so none needs to be created on the fly, and the history database isn’t on this path.",
+          "ref": "Adding and Removing Friends"
+        },
+        {
+          "id": "c17-03-05",
+          "type": "single",
+          "prompt": "B removes friend A. What should happen so that B no longer receives A’s location?",
+          "options": [
+            "B’s server unsubscribes from A’s channel",
+            "Clear A’s entry in the location cache",
+            "Delete A’s channel",
+            "Tell A’s server to stop publishing"
+          ],
+          "answer": 0,
+          "explanation": "A’s channel still has other friends subscribed and A’s server keeps publishing as usual, so only B’s side unsubscribes. Deleting the channel or clearing the cache would hide A from A’s other friends too.",
+          "ref": "Adding and Removing Friends"
+        },
+        {
+          "id": "c17-03-06",
+          "type": "judge",
+          "prompt": "When a client asks to subscribe to a user’s channel, the server can simply comply, since only friends know each other’s user ID.",
+          "answer": false,
+          "explanation": "User IDs are not secret, so you can’t protect locations by assuming others don’t know them. The server must verify the real friendship and the location-sharing permission before subscribing on the client’s behalf.",
+          "ref": "Adding and Removing Friends"
+        },
+        {
+          "id": "c17-03-07",
+          "type": "multi",
+          "prompt": "Which of these operations go over WebSocket rather than the regular HTTP API?",
+          "options": [
+            "Adding a friendship record to the friends table",
+            "Reporting your own location periodically",
+            "The server sending down which friends to subscribe or unsubscribe",
+            "Receiving friends’ location updates",
+            "Editing your profile"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "Location reporting, receiving updates, client initialization, and subscribing or unsubscribing to friends all happen on the long connection. Auxiliary features such as editing a profile or maintaining friendships use traditional HTTP request/response.",
+          "ref": "API Design"
+        },
+        {
+          "id": "c17-03-08",
+          "type": "single",
+          "prompt": "Because of network jitter, A’s 12:00:30 location reaches the server later than A’s 12:00:00 location. How do you keep the older location from overwriting the newer one?",
+          "options": [
+            "Average the two locations and write the result to the cache",
+            "Shorten the TTL so old locations expire sooner",
+            "Overwrite in the order the server received them",
+            "Attach a sequence number or event time and accept only newer locations"
+          ],
+          "answer": 3,
+          "explanation": "Add a sequence number to each report or compare event times: if the cache already holds the 12:00:30 location, a late 12:00:00 one is discarded. Overwriting in arrival order is exactly what causes the bug.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c17-03-09",
+          "type": "fill",
+          "prompt": "Complete the data model",
+          "text": "The location cache stores `user_id → (latitude, longitude, [[timestamp]])`. It only cares about the current location and needs a TTL, so it uses [[Redis]]; the write-heavy history table uses [[Cassandra]].",
+          "distractors": [
+            "ZooKeeper",
+            "geohash",
+            "friend_id"
+          ],
+          "explanation": "The timestamp tells users how long ago a location was updated. A current location with a TTL is Redis’s strength; the history is a constant stream of heavy writes, which Cassandra handles well. ZooKeeper is what records how Pub/Sub channels are distributed.",
+          "ref": "Data Model"
+        }
+      ]
+    },
+    {
+      "id": "c17-04",
+      "title": "Scaling & Variants",
+      "summary": "Pub/Sub cluster, scaling in and out, nearby strangers",
+      "exercises": [
+        {
+          "id": "c17-04-01",
+          "type": "single",
+          "prompt": "What is the right way to scale in (remove) a WebSocket server?",
+          "options": [
+            "Copy its connection info to Redis, then shut the machine down immediately",
+            "Wait until the machine’s CPU usage drops to 0, then shut it down",
+            "Shut it down right away; clients will reconnect to other servers on their own",
+            "Mark it as draining so it takes no new connections, then remove it from the pool"
+          ],
+          "answer": 3,
+          "explanation": "A WebSocket server is stateful and holds a large number of long connections. Mark it as draining so it stops accepting new connections, then take it out of the pool, which avoids dropping a big batch of users at once.",
+          "ref": "Scaling Each Component"
+        },
+        {
+          "id": "c17-04-02",
+          "type": "single",
+          "prompt": "The chapter’s estimate puts the channels at about 200 GB of memory, which two 100 GB Redis servers could hold. Why does it end up needing about 140 servers?",
+          "options": [
+            "The memory estimate is wrong; about 14 TB is really needed",
+            "Every channel must be replicated 70 times for reliability",
+            "The bottleneck is about 14 million pushes per second, not memory",
+            "Each Redis server can create at most 1 million channels"
+          ],
+          "answer": 2,
+          "explanation": "Memory and throughput are separate budgets: at about 100,000 pushes per second per server, 14 million ÷ 100,000 = 140 servers, so CPU is the real bottleneck. These are estimates; message size, subscription count, and Redis version all change the result, so load test before launch.",
+          "ref": "Scaling Redis Pub/Sub"
+        },
+        {
+          "id": "c17-04-03",
+          "type": "judge",
+          "prompt": "A Redis Pub/Sub channel with no subscribers keeps its messages like a durable queue and replays them when subscribers come online.",
+          "answer": false,
+          "explanation": "A channel with no subscribers doesn’t need to retain messages the way a durable queue does. That suits nearby friends: an offline person doesn’t need old locations, and on coming online gets the current location from the location cache.",
+          "ref": "Scaling Each Component"
+        },
+        {
+          "id": "c17-04-04",
+          "type": "judge",
+          "prompt": "You can agree on all users’ channel names in advance, so no extra coordination is needed to create a channel when a user comes online.",
+          "answer": true,
+          "explanation": "A channel name can be derived directly from the user ID, so publishers and subscribers both know where to look; a channel nobody subscribes to doesn’t need to retain messages, so agreeing on names in advance adds no coordination step.",
+          "ref": "Scaling Each Component"
+        },
+        {
+          "id": "c17-04-05",
+          "type": "judge",
+          "prompt": "Because the location cache has a TTL and bounded data size, a single Redis server can handle all the location writes.",
+          "answer": false,
+          "explanation": "The TTL limits how much data is held at once, but the write load of about 334,000 location updates per second remains. The chapter’s answer is to add Redis nodes and shard.",
+          "ref": "Scaling Each Component"
+        },
+        {
+          "id": "c17-04-06",
+          "type": "single",
+          "prompt": "After Pub/Sub grows to several Redis servers, how does a WebSocket server know which machine holds a user’s channel?",
+          "options": [
+            "Broadcast a query to every Redis server, one by one",
+            "The client reports which server its channel is on",
+            "Get channel distribution from service discovery, then use a local hash ring",
+            "Keep all channels on one primary Redis"
+          ],
+          "answer": 2,
+          "explanation": "A service discovery component such as ZooKeeper or etcd records the live nodes and channel distribution, and each WebSocket server caches the hash ring in memory and computes a channel’s location directly from its name. Querying every server is too expensive, and one primary Redis can’t carry the push volume.",
+          "ref": "Scaling Redis Pub/Sub"
+        },
+        {
+          "id": "c17-04-07",
+          "type": "multi",
+          "prompt": "When you scale out the Redis Pub/Sub cluster and move channels, which statements are correct?",
+          "options": [
+            "Consistent hashing reduces the number of channels that must move",
+            "It triggers many resubscribe requests",
+            "The migration wipes the data in the location cache",
+            "Pub/Sub nodes are stateless and can be added or removed at any time",
+            "Some location points may be missed during migration"
+          ],
+          "answers": [
+            0,
+            1,
+            4
+          ],
+          "explanation": "Channels carry subscriptions, so moving one forces its subscribers to resubscribe, and points may be missed meanwhile. A few lost points are tolerable, but schedule it off-peak anyway. Consistent hashing means a node change affects only a small share of channels. The location cache is separate and unaffected.",
+          "ref": "Scaling Redis Pub/Sub"
+        },
+        {
+          "id": "c17-04-08",
+          "type": "single",
+          "prompt": "A “super user” has 5,000 friends. How does the chapter view the load such users create?",
+          "options": [
+            "Deploy a dedicated Redis cluster just for them",
+            "Have all their friends poll for their location every second",
+            "Stop fanning out their updates and only write them to the history database",
+            "Cap the number of friends and let the many servers spread out the rest of the load"
+          ],
+          "answer": 3,
+          "explanation": "The chapter cites Facebook’s 5,000-friend limit as an example: cap friend counts first. The WebSocket server hosting a super user carries more load, but their friends are spread across a large number of servers, so the total pressure is spread out.",
+          "ref": "Users with Many Friends"
+        },
+        {
+          "id": "c17-04-09",
+          "type": "single",
+          "prompt": "The interviewer adds a requirement: “occasionally show nearby strangers on the map.” What does the chapter suggest?",
+          "options": [
+            "Every user subscribes to the location channels of all users",
+            "Have strangers become friends first, then subscribe to each other’s channels",
+            "Scan the whole table every 30 seconds to find people nearby",
+            "Create channels per geohash cell and subscribe to neighboring cells too"
+          ],
+          "answer": 3,
+          "explanation": "Strangers have no friend relationship, so you can’t use “subscribe to a friend’s channel.” Instead, everyone in the same geohash area shares one channel, and you also subscribe to adjacent cells so nearby people just across a cell border aren’t missed.",
+          "ref": "Nearby Random Persons"
+        },
+        {
+          "id": "c17-04-10",
+          "type": "match",
+          "prompt": "Match each scaling problem with its approach",
+          "pairs": [
+            [
+              "Nearby strangers",
+              "Channel per geohash cell, subscribe to neighbors"
+            ],
+            [
+              "Super users",
+              "Cap the number of friends"
+            ],
+            [
+              "Channel migration",
+              "Consistent hashing to move fewer channels"
+            ],
+            [
+              "WebSocket scale-in",
+              "Mark draining, then remove"
+            ],
+            [
+              "Erlang alternative",
+              "Powerful lightweight processes, hard to hire"
+            ]
+          ],
+          "explanation": "Strangers have no friendship, so channels are built per area; super users first get a friend cap; migration uses consistent hashing to move fewer channels; stateful WebSocket servers must be drained before going down. Erlang handles connections and channels with lightweight processes, but it is niche and hard to hire for.",
+          "ref": "Step 3: Design Deep Dive"
+        }
+      ]
+    }
+  ]
+}

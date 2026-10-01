@@ -1,0 +1,544 @@
+{
+  "chapter": 22,
+  "title": "Hotel Reservation System",
+  "fullTitle": "Chapter 22: Hotel Reservation System",
+  "intro": [
+    "You may have written `SELECT inventory → INSERT order → UPDATE inventory`. This chapter asks: **What if two people read the last room at the same time? How many inventory rows does a three-night stay deduct? If a request times out and the user clicks again, will two orders be created?**",
+    "Remember two different problems first: retries of the same order use an idempotency key, while different orders competing for stock use transactions and concurrency control. Then remember that the inventory unit is “hotel × room type × stay date,” not a physical room."
+  ],
+  "keyPoints": [
+    "The inventory unit is hotel × room type × stay date, and stays are half-open; all nights commit in one transaction or the whole booking rolls back.",
+    "Same-order retries need an idempotency key and unique constraint; competing orders need row locks, version checks, or conditional updates.",
+    "Optimistic locking uses WHERE version = the version you read and checks affected rows; fine at low contention, heavy retries at high contention.",
+    "10% overselling becomes an integer cap floor(1.1N) that reservations must not exceed; it does not mean forbidding all overselling.",
+    "The cache is for display only; the database decides sales. Write a time-limited hold before payment, and never hold a lock while waiting for payment.",
+    "Microservices lose same-database atomicity: 2PC can block, Saga needs compensation; keep tightly linked inventory and booking in one database."
+  ],
+  "refs": {
+    "Back-of-the-Envelope Estimation": "粗略估算（Back-of-the-envelope estimation）",
+    "API Design": "API 设计（API Design）",
+    "Data Model": "数据模型（Data model）",
+    "High-Level Design": "高层设计（High-level Design）",
+    "Improved Data Model": "改进数据模型（Improved data model）",
+    "Option 3: Database Constraints": "方案 3：数据库约束（Database constraints）",
+    "Concurrency Issues": "并发问题（Concurrency issues）",
+    "Option 2: Optimistic Locking": "方案 2：乐观锁（Optimistic locking）",
+    "Option 1: Pessimistic Locking": "方案 1：悲观锁（Pessimistic locking）",
+    "Scalability": "可扩展性（Scalability）",
+    "Data Consistency Among Services": "服务间数据一致性（Data consistency among services）"
+  },
+  "lessons": [
+    {
+      "id": "c22-01",
+      "title": "Needs & Estimation",
+      "summary": "Scale estimates, service split, and API semantics",
+      "exercises": [
+        {
+          "id": "c22-01-01",
+          "type": "single",
+          "prompt": "With 1 million rooms, 70% occupancy, and an average stay of 3 nights, about how many new reservations are made per day?",
+          "options": [
+            "About 700,000",
+            "About 2.1 million",
+            "About 240,000",
+            "About 30,000"
+          ],
+          "answer": 2,
+          "explanation": "About 1 million × 70% = 700,000 room nights are occupied per day. Each reservation takes 3 nights on average, so in steady state about 700,000 ÷ 3 ≈ 233,000 new reservations arrive per day, which rounds to about 240,000. 700,000 forgets to divide by 3, and 2.1 million multiplies instead of dividing.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c22-01-02",
+          "type": "fill",
+          "prompt": "Complete the estimate of booking write traffic and page QPS",
+          "text": "About 240,000 reservations a day over roughly 100,000 seconds is about [[3]] TPS. With 10% conversion at each step (detail page → booking page → booked), the detail page gets about [[300]] QPS.",
+          "distractors": [
+            "30",
+            "2,400",
+            "3,000"
+          ],
+          "explanation": "240,000 ÷ 100,000 = 2.4, rounded to about 3 TPS. Working back up the funnel, 3 bookings per second means 30 booking-page views and 300 room-detail views per second. 30 is the booking-page volume; 3,000 divides by the conversion rate once too often. Writes are low, reads two orders of magnitude higher.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c22-01-03",
+          "type": "judge",
+          "prompt": "Average site-wide booking TPS is only in the single digits, so you don’t need to worry about two people grabbing the same room at once.",
+          "answer": false,
+          "explanation": "A low average does not mean there are no hotspots: in peak season, the last few rooms of a popular hotel on a given date can still be fought over by many people at once. Concurrency control protects the invariant of each inventory row and has nothing to do with site-wide average traffic.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c22-01-04",
+          "type": "judge",
+          "prompt": "The 10% overselling the problem allows is a business strategy, not extra sales caused by database concurrency errors.",
+          "answer": true,
+          "explanation": "Overselling means a hotel deliberately sells more rooms than it has, expecting cancellations; the cap should be configurable, with a plan for guests when it bites. Overselling from a concurrency error goes past that cap. One is a rule and the other is a bug, so keep them apart.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c22-01-05",
+          "type": "single",
+          "prompt": "The booking request body carries a `reservationID`. What is its main purpose?",
+          "options": [
+            "The primary key of each row in the inventory table",
+            "The specific room number the guest will stay in",
+            "An idempotency key that detects duplicate submissions",
+            "Decides which database shard the booking is written to"
+          ],
+          "answer": 2,
+          "explanation": "`reservationID` is the idempotency key that prevents duplicate orders: a double click or a timeout retry carries the same ID, so the backend recognizes it and returns the existing result. An inventory row is identified by (hotel, room type, date), shards by hotel_id, and the room number is usually assigned later.",
+          "ref": "API Design"
+        },
+        {
+          "id": "c22-01-06",
+          "type": "single",
+          "prompt": "This design uses a relational database. What is the strongest justification?",
+          "options": [
+            "Inventory and bookings need atomic commit, unique constraints, and invariant checks",
+            "ACID automatically guarantees consistency with the payment provider",
+            "The data shape keeps changing, so a flexible schema helps",
+            "Relational databases scale writes horizontally more easily than NoSQL"
+          ],
+          "answer": 0,
+          "explanation": "The most direct reason is atomic commit, unique constraints, and invariant checks, which is exactly what preventing double-deducted rooms requires. ACID covers only this one database and does not automatically solve consistency with a payment provider; scaling writes and flexible schemas are not relational strengths either.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c22-01-07",
+          "type": "match",
+          "prompt": "Match each service to its responsibility",
+          "pairs": [
+            [
+              "Hotel service",
+              "Hotel and room info; cache aggressively"
+            ],
+            [
+              "Pricing service",
+              "Prices for each future date"
+            ],
+            [
+              "Reservation service",
+              "Takes bookings; tracks inventory changes"
+            ],
+            [
+              "Payment service",
+              "Charges payment; updates booking on success"
+            ],
+            [
+              "Public API gateway",
+              "Single entry point for auth and rate limiting"
+            ]
+          ],
+          "explanation": "Hotel and room info is fairly static, so cache it aggressively; rates can change daily and belong to pricing; the reservation service maintains inventory on booking and cancellation; booking status advances only after payment succeeds; the gateway handles cross-cutting concerns such as auth and rate limiting.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c22-01-08",
+          "type": "judge",
+          "prompt": "The cancel endpoint is `DELETE /v1/reservations/{id}`, so the implementation should physically delete the reservation record.",
+          "answer": false,
+          "explanation": "The endpoint name is only illustrative: cancellation is usually a status change (for example to “canceled”) that keeps an audit record and releases the matching inventory. Physical deletion would lose the history needed for refunds, reconciliation, and dispute handling.",
+          "ref": "API Design"
+        }
+      ]
+    },
+    {
+      "id": "c22-02",
+      "title": "Inventory Model",
+      "summary": "Room type × date rows, multi-night, oversell cap",
+      "exercises": [
+        {
+          "id": "c22-02-01",
+          "type": "single",
+          "prompt": "The first data model booked specific room numbers. Why do hotels manage inventory by room type instead?",
+          "options": [
+            "Prices vary by room number, so they are hard to compute",
+            "There are too many rooms for the database to store",
+            "Booking specific rooms cannot support cancellation",
+            "Guests book a room type; the room number is assigned later"
+          ],
+          "answer": 3,
+          "explanation": "Booking specific rooms is more like Airbnb; hotel guests choose a type such as “king room,” and the room number comes later. So the API changes roomID to roomTypeID and adds roomCount to book several rooms at once. Data volume, pricing, and cancellation are not reasons to change the model.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c22-02-02",
+          "type": "single",
+          "prompt": "Check-in is 4/28 and check-out is 4/30. Which inventory rows does this booking occupy?",
+          "options": [
+            "Three rows: the 28th, 29th, and 30th",
+            "Only one row: the 28th",
+            "Two rows: the 29th and 30th",
+            "Two rows: the 28th and 29th"
+          ],
+          "answer": 3,
+          "explanation": "The stay is the half-open interval [check_in, check_out): you stay the nights of the 28th and 29th, and the checkout day, the 30th, no longer uses a room night. Deducting three rows would needlessly sell one room fewer on the 30th; deducting only one row would miss the 29th.",
+          "ref": "Improved Data Model"
+        },
+        {
+          "id": "c22-02-03",
+          "type": "judge",
+          "prompt": "The original SQL queries inventory with `date BETWEEN startDate AND endDate`, which covers exactly the nights of the stay.",
+          "answer": false,
+          "explanation": "BETWEEN includes both ends, so it counts the checkout day too. A real implementation should use `date >= startDate AND date < endDate`, consistent with the half-open stay interval.",
+          "ref": "Improved Data Model"
+        },
+        {
+          "id": "c22-02-04",
+          "type": "judge",
+          "prompt": "If a date-range query returns fewer inventory rows than there are nights, the booking should be rejected even when every returned row has rooms available.",
+          "answer": true,
+          "explanation": "A missing row means some day’s inventory record does not exist (for example, it was not pre-generated), and that cannot be treated as “rooms available.” Verify that the returned row count equals the number of nights; otherwise a missed day would still let the booking succeed.",
+          "ref": "Improved Data Model"
+        },
+        {
+          "id": "c22-02-05",
+          "type": "single",
+          "prompt": "With 5,000 hotels of 20 room types each and inventory rows pre-generated for the next two years, about how many rows are there?",
+          "options": [
+            "About 7.3 million rows",
+            "About 146 million rows",
+            "About 36.5 million rows",
+            "About 73 million rows"
+          ],
+          "answer": 3,
+          "explanation": "5,000 × 20 × 2 × 365 = 73 million. 36.5 million counts only one year, and 146 million counts double. A single database can hold this much, but you should still judge it against row width, indexes, and real measurements.",
+          "ref": "Improved Data Model"
+        },
+        {
+          "id": "c22-02-06",
+          "type": "single",
+          "prompt": "A user books 1 room for 3 consecutive nights, and the remaining sellable counts for those nights are 2, 0, and 4. What is the correct handling?",
+          "options": [
+            "Book nights 1 and 3, and tell the user to deal with night 2 themselves",
+            "Confirm the order first, then fill night 2 if someone cancels",
+            "Fail the whole booking and roll back the nights already deducted",
+            "Average 2 rooms left over the three nights, so treat it as bookable"
+          ],
+          "answer": 2,
+          "explanation": "The tightest night decides: min(2,0,4)=0. A consecutive stay is one ticket that cannot be split, and if any night fails within the same transaction, everything rolls back. If the product allows splitting the booking or switching room types, that must be shown to the user explicitly and never substituted silently.",
+          "ref": "Q22-01"
+        },
+        {
+          "id": "c22-02-07",
+          "type": "fill",
+          "prompt": "Compute the integer sellable limit for “at most 10% overselling”",
+          "text": "100 physical rooms can sell [[110]] rooms, 15 rooms can sell [[16]], and 9 rooms can sell [[9]].",
+          "distractors": [
+            "17",
+            "10",
+            "115"
+          ],
+          "explanation": "The limit is floor(1.1 × N): 15 × 1.1 = 16.5, rounded down to 16. 9 × 1.1 = 9.9; rounding up to 10 would oversell by 1 room, which is 1/9 ≈ 11.1% and exceeds 10%, so only 9 can be sold.",
+          "ref": "Q22-04"
+        },
+        {
+          "id": "c22-02-08",
+          "type": "judge",
+          "prompt": "When 10% overselling is allowed, the database constraint should be written as `total_inventory - total_reserved >= 0`.",
+          "answer": false,
+          "explanation": "That constraint forbids any overselling, which contradicts the 10% the problem allows. Store an integer `sellable_limit`, constrain `total_reserved <= sellable_limit`, and on each order use a conditional update that checks `total_reserved + q <= sellable_limit`.",
+          "ref": "Option 3: Database Constraints"
+        },
+        {
+          "id": "c22-02-09",
+          "type": "single",
+          "prompt": "On one date, a room is temporarily taken out of service, so the sellable limit drops from 110 to 105 while 108 valid bookings already exist. What should you do?",
+          "options": [
+            "Automatically cancel the 3 most recent bookings",
+            "Ignore the outage and keep the limit at 110",
+            "Stop new sales and let operations arrange fulfillment or relocation",
+            "Do nothing and see whether anyone cancels by check-in day"
+          ],
+          "answer": 2,
+          "explanation": "This is an inventory gap that operations must resolve: stop selling first, then arrange fulfillment, relocation, or compensation under policy, with a full audit trail. Quietly canceling orders hurts users, ignoring the outage keeps overselling, and waiting until check-in day leaves no time to handle it well.",
+          "ref": "Q22-04"
+        }
+      ]
+    },
+    {
+      "id": "c22-03",
+      "title": "Concurrency",
+      "summary": "Idempotent retries, locks, and version numbers",
+      "exercises": [
+        {
+          "id": "c22-03-01",
+          "type": "judge",
+          "prompt": "Disabling the button on the front end after the user clicks submit reliably prevents duplicate orders from the same user.",
+          "answer": false,
+          "explanation": "Disabling the button only improves the experience: disabled scripts, timeout retries, and direct API calls all bypass it. The reliable approach is an idempotent API: the same order always carries the same reservation_id, with a database unique constraint as the backstop.",
+          "ref": "Concurrency Issues"
+        },
+        {
+          "id": "c22-03-02",
+          "type": "order",
+          "prompt": "Put the idempotent ordering flow in order",
+          "items": [
+            "Generate a globally unique reservation_id",
+            "Submit the booking with that ID attached",
+            "The user clicks again; the same ID is sent again",
+            "Unique constraint blocks it; original result returns"
+          ],
+          "explanation": "The key is that the ID is generated before submission, so repeated submissions carry the same ID; if each submission generated a new one, the server could not recognize duplicates. The database unique constraint is the last line of defense, and on spotting a duplicate it should return the existing order.",
+          "ref": "Concurrency Issues"
+        },
+        {
+          "id": "c22-03-03",
+          "type": "single",
+          "prompt": "The server already deducted the room for R7 and created the order; only the response was lost. The client retries with the same R7. What is the correct handling?",
+          "options": [
+            "Return R7’s existing order or status, and don’t deduct again",
+            "Report a unique-constraint error and ask the user to re-enter the order",
+            "Deduct inventory again, then merge the two orders afterward",
+            "Place the order again under a new ID to make sure it succeeds"
+          ],
+          "answer": 0,
+          "explanation": "Idempotency governs how many times one thing is done: R7 was already done, so return the original result. An error makes the user think it failed and reorder under a new ID, creating a duplicate; a new ID also bypasses idempotency. The server should store a request digest and reject the same ID with changed dates or room type.",
+          "ref": "Q22-02"
+        },
+        {
+          "id": "c22-03-04",
+          "type": "single",
+          "prompt": "1 room is left, and two different orders, R7 and R8, are submitted at the same time. What guarantees that only one succeeds?",
+          "options": [
+            "A conditional update or lock on the inventory row",
+            "A unique constraint on reservation_id",
+            "Disabling the button on the front end after submit",
+            "The remaining count in the Redis cache"
+          ],
+          "answer": 0,
+          "explanation": "R7 and R8 have different idempotency keys and are both valid new orders, so a unique constraint cannot stop them. You must atomically check `reserved + 1 <= sellable_limit` and update; one succeeds and the other gets sold out. Idempotency keys and inventory control are two different gates.",
+          "ref": "Q22-02"
+        },
+        {
+          "id": "c22-03-05",
+          "type": "judge",
+          "prompt": "Inserting the order (protected by a unique constraint) must commit in the same transaction as the inventory deduction; otherwise, when a duplicate request is blocked, inventory may already have been wrongly deducted.",
+          "answer": true,
+          "explanation": "If you deduct inventory first and then insert the order, and the insert is rejected as a duplicate without a rollback, inventory drops by one room with no matching order. The unique constraint and the inventory update must commit together: either both succeed or both roll back.",
+          "ref": "Concurrency Issues"
+        },
+        {
+          "id": "c22-03-06",
+          "type": "single",
+          "prompt": "The limit is 110 and 109 are booked, under read committed isolation (not serializable). Two transactions both read 109 and judge the room bookable, then each runs `total_reserved = total_reserved + 1` and commits. What is the result?",
+          "options": [
+            "Booked becomes 111, exceeding the limit",
+            "The database rolls back both transactions",
+            "The later transaction automatically rereads and gives up",
+            "Booked becomes 110 and the later committer is rejected automatically"
+          ],
+          "answer": 0,
+          "explanation": "Both transactions passed the check on a stale read, and each then added one to the current value, so 109 became 111. “Check, then update” has no concurrency protection by itself; you need pessimistic locking, optimistic locking, or a database constraint to close the gap.",
+          "ref": "Concurrency Issues"
+        },
+        {
+          "id": "c22-03-07",
+          "type": "single",
+          "prompt": "When updating an inventory row with optimistic locking, which approach actually detects a concurrent conflict?",
+          "options": [
+            "Compare each server’s local timestamp and let the later one win",
+            "Read the version once more before committing, and update if unchanged",
+            "`WHERE version = v_read`, then check the affected row count",
+            "`SET version = version + 1`, and pass if the new version is larger"
+          ],
+          "answer": 2,
+          "explanation": "Put “the version I read” in the WHERE clause: if someone else changed the row first, 0 rows are affected, and you roll back and reread. If the database computes version+1, the new version is always larger, so two stale reads would both pass; local clocks are unreliable; and reading then updating still leaves a race window.",
+          "ref": "Option 2: Optimistic Locking"
+        },
+        {
+          "id": "c22-03-08",
+          "type": "match",
+          "prompt": "Match each protection to how it works",
+          "pairs": [
+            [
+              "Pessimistic lock",
+              "Lock the row first, hold it until commit"
+            ],
+            [
+              "Optimistic lock",
+              "Verify the version on update; retry on conflict"
+            ],
+            [
+              "CHECK constraint",
+              "Reject writes that break the stock invariant"
+            ],
+            [
+              "Idempotency key",
+              "Make retries of one order take effect once"
+            ]
+          ],
+          "explanation": "A pessimistic lock (SELECT … FOR UPDATE) serializes conflicts; an optimistic lock verifies the version at update time; a CHECK constraint makes the database reject bad data. The first three guard against different orders competing for stock; the idempotency key (with a unique constraint) guards against the same order done twice.",
+          "ref": "Concurrency Issues"
+        },
+        {
+          "id": "c22-03-09",
+          "type": "single",
+          "prompt": "During a promotion, the same inventory row of a popular hotel sees extreme contention. If you still use optimistic locking, what is the most prominent problem?",
+          "options": [
+            "Many requests hit version conflicts and keep rolling back and retrying",
+            "Every read blocks, queuing behind the previous transaction’s commit",
+            "Two transactions wait on each other and deadlock",
+            "Several transactions succeed at once, causing overselling"
+          ],
+          "answer": 0,
+          "explanation": "Optimistic locking is cheap when conflicts are rare, but under high contention most requests find the version changed and roll back to retry, wasting resources and adding latency. Queued reads are what pessimistic locking looks like; deadlock is a pessimistic-locking risk; a correct optimistic lock does not oversell.",
+          "ref": "Option 2: Optimistic Locking"
+        },
+        {
+          "id": "c22-03-10",
+          "type": "judge",
+          "prompt": "Pessimistic locking remains usable under high contention if you keep transactions short, lock in a fixed order, and never hold the lock while waiting for third-party payment.",
+          "answer": true,
+          "explanation": "A hot inventory row needs some form of serialization anyway, so pessimistic locking is not always unscalable. The real risks are long transactions and out-of-order locking: the first blocks everyone behind it, the second causes deadlocks. Payment can take seconds, so never wait on it while holding an inventory row lock.",
+          "ref": "Option 1: Pessimistic Locking"
+        }
+      ]
+    },
+    {
+      "id": "c22-04",
+      "title": "Scale, Consistency",
+      "summary": "Sharding, caching, holds, cross-service transactions",
+      "exercises": [
+        {
+          "id": "c22-04-01",
+          "type": "single",
+          "prompt": "Traffic grows to 1,000 times the original, so the database needs sharding. Why choose `hotel_id` as the shard key?",
+          "options": [
+            "hotel_id is perfectly uniform and never creates hotspots",
+            "After sharding by hotel_id, transactions are no longer needed",
+            "Almost every query specifies a hotel, so an ordinary booking lands on one shard",
+            "It spreads a popular hotel’s traffic across several shards"
+          ],
+          "answer": 2,
+          "explanation": "Queries specify a hotel, so with hash(hotel_id) sharding, an ordinary multi-night booking’s inventory rows sit on one shard and a local transaction covers them (the transaction is still needed). One hotel lives on one shard, so a popular hotel’s traffic is not spread out; the distribution is not perfectly uniform.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c22-04-02",
+          "type": "judge",
+          "prompt": "Splitting 30,000 QPS across 16 shards by hotel_id gives about 1,875 QPS per shard on average, so no shard will be overloaded.",
+          "answer": false,
+          "explanation": "1,875 is only an average. A popular hotel’s traffic concentrates on its one shard, so the assumption of an even split fails; how much each shard can take must still be verified by load testing with real SQL, indexes, and hardware.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c22-04-03",
+          "type": "single",
+          "prompt": "The page shows 1 room left for a room type, but the user is told it is sold out on submit. What is the most likely cause?",
+          "options": [
+            "A database transaction bug misjudged an available room as sold out",
+            "Someone else just booked it, and CDC hasn’t synced the new inventory to the cache",
+            "The user double-clicked, and the first request already took that room",
+            "The reservation_id collided with another order and was rejected"
+          ],
+          "answer": 1,
+          "explanation": "CDC updates the cache asynchronously, so there is a brief delay: the database already shows 0 while the cache shows 1. The database is authoritative at submit time, so the rejection is correct, not a bug. A same-ID double click returns the original order; an ID collision gives a different error.",
+          "ref": "Q22-03"
+        },
+        {
+          "id": "c22-04-04",
+          "type": "judge",
+          "prompt": "Dropping the cache and querying the database directly every time completely eliminates “saw a room, order failed.”",
+          "answer": false,
+          "explanation": "Even when reading the database directly, a user who sees 1 room and hesitates for 10 seconds can still lose it to someone else. There is an inherent race window between viewing and ordering that removing the cache cannot close; the only fix is an atomic check on the authoritative inventory at submit time.",
+          "ref": "Q22-03"
+        },
+        {
+          "id": "c22-04-05",
+          "type": "single",
+          "prompt": "Under what condition can the system promise the user “this room is held for you for 15 minutes”?",
+          "options": [
+            "A time-limited hold has been written to the authoritative inventory",
+            "The cache still shows more than 0 rooms of that type",
+            "The page has started showing a 15-minute countdown",
+            "The user has reached the payment page and filled in their details"
+          ],
+          "answer": 0,
+          "explanation": "Only a hold that is actually deducted from the authoritative allocated count and carries an expiry time counts as a reservation. A front-end countdown is just an animation, a cache number is an observation that goes stale, and reaching the payment page does not mean the inventory has been taken.",
+          "ref": "Q22-03"
+        },
+        {
+          "id": "c22-04-06",
+          "type": "fill",
+          "prompt": "Complete how the inventory cache is updated and what it is for",
+          "text": "Database changes sync asynchronously to Redis through [[CDC]]; the cache is used only for [[display]], and the database decides whether a sale goes through.",
+          "distractors": [
+            "2PC",
+            "Saga",
+            "stock deduction"
+          ],
+          "explanation": "CDC (such as Debezium) reads database changes and applies them to Redis, so the cache and database can briefly disagree. The cache therefore only displays; the final booking must check the authoritative inventory. A CDC pipeline must also handle duplicates, reordering, and backlog.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c22-04-07",
+          "type": "multi",
+          "prompt": "When connecting payment to the booking flow, which approaches are reasonable?",
+          "options": [
+            "Write a time-limited inventory hold first, then take payment",
+            "If payment succeeds but confirmation fails, verify, then retry confirmation or refund",
+            "Release held inventory accurately when a hold expires or an order is canceled",
+            "Keep the database lock on the inventory row for the whole payment",
+            "Treat a payment API timeout as failure and release inventory right away"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "Payment connects through a state machine: time-limited hold → payment → confirm or release. Holding a lock while waiting for external payment blocks everyone; a timeout is not a failure, since the money may be charged and must be verified. A database rollback cannot undo a bank charge; retry the confirmation or refund.",
+          "ref": "Q22-01"
+        },
+        {
+          "id": "c22-04-08",
+          "type": "match",
+          "prompt": "Match each consistency approach to its characteristic",
+          "pairs": [
+            [
+              "Same-DB ACID",
+              "Local transaction in one DB, atomic by nature"
+            ],
+            [
+              "2PC",
+              "Atomic commit across nodes; may block"
+            ],
+            [
+              "Saga",
+              "Chained local transactions with compensation"
+            ],
+            [
+              "CDC",
+              "Async sync of database changes to the cache"
+            ]
+          ],
+          "explanation": "Keeping booking and inventory in one service and database lets local ACID guarantee atomicity. After splitting databases you can use 2PC (costly waiting and locking; a coordinator failure can block) or Saga (eventually consistent, relying on compensation). CDC only synchronizes and gives no transactional atomicity.",
+          "ref": "Data Consistency Among Services"
+        },
+        {
+          "id": "c22-04-09",
+          "type": "single",
+          "prompt": "A Saga chains “deduct inventory → take payment → send confirmation email,” and after the email goes out, the whole booking must be undone. Which understanding of compensation is correct?",
+          "options": [
+            "One catch at the outermost level is enough to roll everything back",
+            "Compensation makes completed steps look as if they never happened",
+            "Each step needs a retryable compensation; an email gets a correction notice",
+            "A Saga guarantees strong consistency between its steps at all times"
+          ],
+          "answer": 2,
+          "explanation": "Compensation is not time travel: a sent email cannot be recalled, only corrected, and a payment needs a separate refund transaction. A Saga needs durable state, retryable forward and compensating actions, and a path for manual handling; it is an eventually consistent flow, not a strongly consistent one.",
+          "ref": "Data Consistency Among Services"
+        },
+        {
+          "id": "c22-04-10",
+          "type": "judge",
+          "prompt": "Keeping inventory deduction and booking records in the same service and database is often simpler and more reliable than splitting them into two services coordinated by a Saga.",
+          "answer": true,
+          "explanation": "A pragmatic hybrid puts booking and inventory in one service and relies on same-database ACID for atomicity. Cross-microservice consistency adds the complexity of compensation, retries, and state management, so first judge whether splitting is worth it.",
+          "ref": "Data Consistency Among Services"
+        }
+      ]
+    }
+  ]
+}

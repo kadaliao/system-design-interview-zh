@@ -1,0 +1,633 @@
+{
+  "chapter": 26,
+  "title": "Payment System",
+  "fullTitle": "Chapter 26: Payment System",
+  "intro": [
+    "In CRUD, a “failed” response usually means you can retry; in payments, a timeout only means you don’t know the outcome, and the money may already be gone. The chapter’s thread: record the payment intent → call the external institution → update internal accounting idempotently → use reconciliation to settle uncertain results."
+  ],
+  "keyPoints": [
+    "At 1 million payments a day (about 12 TPS), the hard part isn’t throughput but moving money correctly exactly once.",
+    "Record the payment intent before calling the PSP. A timeout only means the result is unknown: query or retry with the original idempotency key.",
+    "The payment order, wallet, and ledger each answer one question: how far the charge got, what the balance is, and where the balance came from.",
+    "A browser redirect is not proof of payment; post the result from a signature-verified webhook or an active PSP query.",
+    "Exactly-once = at-least-once (retries) + at-most-once (idempotency); a consumer group alone doesn’t make business logic run once.",
+    "Reconciliation uses PSP settlement files as the safety net; fix differences with new correcting records, never by overwriting history."
+  ],
+  "refs": {
+    "Back-of-the-envelope estimation": "粗略估算（Back-of-the-envelope estimation）",
+    "APIs for payment service": "支付服务 API（APIs for payment service）",
+    "Pay-in flow": "收款流程（Pay-in flow）",
+    "Payment service data model": "支付服务数据模型（Payment service data model）",
+    "Double-entry ledger system": "复式记账（Double-entry ledger system）",
+    "Hosted payment page": "托管支付页（Hosted payment page）",
+    "PSP Integration": "PSP 集成（PSP Integration）",
+    "Pay-out flow": "付款流程（Pay-out flow）",
+    "Handling payment processing delays": "处理支付延迟（Handling payment processing delays）",
+    "Communication among internal services": "内部服务通信（Communication among internal services）",
+    "Handling failed payments": "处理失败支付（Handling failed payments）",
+    "Exactly-once delivery": "恰好一次投递（Exactly-once delivery）",
+    "Reconciliation": "对账（Reconciliation）",
+    "Consistency": "一致性（Consistency）",
+    "Payment security": "支付安全（Payment security）",
+    "Step 4: Wrap Up": "第 4 步：收尾（Wrap Up）"
+  },
+  "lessons": [
+    {
+      "id": "c26-01",
+      "title": "Pay-In Basics",
+      "summary": "Estimate scale, trace pay-in, and keep three records",
+      "exercises": [
+        {
+          "id": "c26-01-01",
+          "type": "single",
+          "prompt": "At 1 million payments a day, about how many TPS is that on average, and what does it mean for the design focus?",
+          "options": [
+            "About 1,200 TPS; the focus is sharding the database",
+            "About 12 TPS, so retries and reconciliation can be skipped",
+            "About 120 TPS; the focus is adding a cache",
+            "About 12 TPS; the focus is correctness, not throughput"
+          ],
+          "answer": 3,
+          "explanation": "`1,000,000 / 86,400 ≈ 11.6 TPS`; the chapter rounds it to about 10. That is no strain for a database. The hard part is moving money correctly exactly once, so failure handling, idempotency, and reconciliation all stay. Peak load needs a separate estimate.",
+          "ref": "Back-of-the-envelope estimation"
+        },
+        {
+          "id": "c26-01-02",
+          "type": "judge",
+          "prompt": "With a hosted payment page, the system represents the payment with a token or reference from the PSP and doesn’t store raw card numbers or CVVs as ordinary business fields.",
+          "answer": true,
+          "explanation": "The requirements rule out storing card data directly, for compliance reasons. A hosted payment page has the PSP collect and store the card details; the system keeps only a token that references the payment, so far less card data is exposed.",
+          "ref": "APIs for payment service"
+        },
+        {
+          "id": "c26-01-03",
+          "type": "match",
+          "prompt": "Match each component in the pay-in flow with its responsibility",
+          "pairs": [
+            [
+              "Payment service",
+              "Takes events, coordinates flow and risk checks"
+            ],
+            [
+              "Payment executor",
+              "Executes one payment order via the PSP"
+            ],
+            [
+              "PSP",
+              "Actually moves funds between accounts"
+            ],
+            [
+              "Wallet",
+              "Keeps each merchant’s account balance"
+            ],
+            [
+              "Ledger",
+              "Records every money movement as an entry"
+            ]
+          ],
+          "explanation": "The payment service orchestrates, the executor talks to the PSP, and the PSP is what actually charges the card. After a successful charge, the wallet records how much money the seller has now, and the ledger records where that money came from and where it went.",
+          "ref": "Pay-in flow"
+        },
+        {
+          "id": "c26-01-04",
+          "type": "order",
+          "prompt": "Put the main steps of one pay-in in order",
+          "items": [
+            "Payment service stores the payment event in the database",
+            "Payment service calls the executor for each order",
+            "Executor stores the payment order in its own database",
+            "Executor calls the PSP to charge the credit card",
+            "Wallet and ledger are updated from the charge result"
+          ],
+          "explanation": "The mnemonic is “record first, call out second”: the event and the order are saved before the PSP is called. Even if the call times out or the process crashes, the stored state shows how far this payment got, so it doesn’t simply vanish.",
+          "ref": "Pay-in flow"
+        },
+        {
+          "id": "c26-01-05",
+          "type": "single",
+          "prompt": "A customer checks out once with items from three sellers. Under this chapter’s data model, what is created?",
+          "options": [
+            "1 payment order containing 3 payment events",
+            "1 payment event containing 3 payment orders",
+            "3 checkout_ids, one for each seller",
+            "3 payment events, each with 1 payment order"
+          ],
+          "answer": 1,
+          "explanation": "One checkout maps to one `checkout_id`, which is one payment event. Each seller gets one payment order, linked to the event by the foreign key `checkout_id`. The executor calls the PSP once per payment order.",
+          "ref": "Payment service data model"
+        },
+        {
+          "id": "c26-01-06",
+          "type": "single",
+          "prompt": "The API passes `amount` as the string `3.15` rather than a double. What is the main reason?",
+          "options": [
+            "A double introduces rounding errors in money amounts",
+            "A string takes less space than a number",
+            "JSON doesn’t support decimals",
+            "It makes it easy to put a currency symbol in the amount"
+          ],
+          "answer": 0,
+          "explanation": "Binary floating point can’t represent many decimal fractions, so sums drift by a few cents. Pass strings at the boundary and compute internally with fixed-point decimals or integers in the smallest currency unit (such as cents), and be explicit about each currency’s decimal places.",
+          "ref": "APIs for payment service"
+        },
+        {
+          "id": "c26-01-07",
+          "type": "fill",
+          "prompt": "Complete what each of the three records answers",
+          "text": "The [[payment order]] tells you how far the external charge has got, the [[wallet]] tells you the seller’s available balance, and the [[ledger]] tells you where that balance came from.",
+          "distractors": [
+            "settlement file",
+            "risk service"
+          ],
+          "explanation": "A balance alone can’t explain history, let alone support reliable reconciliation. The order status tracks the external side effect, the wallet gives the current balance, and the ledger records every money movement as an entry. Keep the three separate.",
+          "ref": "Pay-in flow"
+        },
+        {
+          "id": "c26-01-08",
+          "type": "judge",
+          "prompt": "`payment_order_status` has been written as `EXECUTING`, which means the PSP has charged successfully.",
+          "answer": false,
+          "explanation": "`EXECUTING` only means the charge was started and the result is unknown; it becomes `SUCCESS` once the PSP confirms. A background job checks orders still in progress and raises an alert when one stays unfinished past a reasonable time limit.",
+          "ref": "Payment service data model"
+        },
+        {
+          "id": "c26-01-09",
+          "type": "single",
+          "prompt": "The PSP charged successfully and the wallet is updated, but the service crashed while calling the ledger. After a restart, how does it know which step to redo?",
+          "options": [
+            "Call the PSP and charge again",
+            "Check `ledger_updated` and redo only the ledger",
+            "Update both the wallet and the ledger again",
+            "Mark the whole order FAILED and refund"
+          ],
+          "answer": 1,
+          "explanation": "`wallet_updated` and `ledger_updated` track whether each internal side effect finished, so after a crash only the unfinished step is redone, and that redo must itself be idempotent. Charging again would collect the money twice; redoing the wallet would add the balance twice.",
+          "ref": "Payment service data model"
+        },
+        {
+          "id": "c26-01-10",
+          "type": "multi",
+          "prompt": "When choosing a database for a payment system, which factors does the chapter weigh most?",
+          "options": [
+            "The highest possible write throughput",
+            "A proven track record at large financial institutions",
+            "A rich ecosystem of tooling",
+            "Transactions and ACID guarantees",
+            "No fixed schema, so fields can be added or removed freely"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "For payments, performance is usually not the first concern; strong consistency is. The chapter also weighs proven deployments, tooling, and DBA hiring. But ACID support depends on the specific database and isolation level, so verify transactions, unique constraints, and failure recovery instead of trusting the label “SQL.”",
+          "ref": "Payment service data model"
+        }
+      ]
+    },
+    {
+      "id": "c26-02",
+      "title": "Ledger & PSP Page",
+      "summary": "Double entry, hosted pages, and webhooks",
+      "exercises": [
+        {
+          "id": "c26-02-01",
+          "type": "judge",
+          "prompt": "In double-entry bookkeeping, a debit simply means a decrease and a credit simply means an increase.",
+          "answer": false,
+          "explanation": "Whether a debit or credit increases or decreases a balance depends on the account type: a debit increases an asset account, while a credit increases liability and revenue accounts. What to remember is that in every entry, total debits equal total credits. Don’t treat debit as subtraction.",
+          "ref": "Double-entry ledger system"
+        },
+        {
+          "id": "c26-02-02",
+          "type": "single",
+          "prompt": "Every entry in the ledger balances (debits equal credits). What does that tell you?",
+          "options": [
+            "Every transaction was recorded correctly",
+            "The system no longer needs reconciliation",
+            "Wallet balances necessarily match PSP settlements",
+            "Only necessary; a wrong amount or account can still balance"
+          ],
+          "answer": 3,
+          "explanation": "Balance only means both sides of each entry are equal. If 100 is recorded as 1,000, or the wrong seller account is used, the books still balance as long as both sides are wrong together. Whether they match the external PSP is something only reconciliation can reveal.",
+          "ref": "Double-entry ledger system"
+        },
+        {
+          "id": "c26-02-03",
+          "type": "single",
+          "prompt": "Most companies choose a PSP’s hosted payment page. What is the main reason?",
+          "options": [
+            "The PSP collects and stores card data, easing the company’s compliance burden",
+            "A hosted page guarantees users never pay twice",
+            "A hosted page processes payments faster than an API integration",
+            "With a hosted page there is no need to handle payment result notifications"
+          ],
+          "answer": 0,
+          "explanation": "The PSP’s page collects and stores the card data, so the company’s systems never touch card numbers and the compliance scope shrinks a lot. You still need a webhook or a query to confirm the payment result, and idempotency keys to prevent duplicate payments.",
+          "ref": "Hosted payment page"
+        },
+        {
+          "id": "c26-02-04",
+          "type": "fill",
+          "prompt": "Complete when to use each of the two PSP integration styles",
+          "text": "When the system can collect payment details itself, use an [[API integration]]; to avoid the regulatory work of handling payment details, use a [[hosted payment page]].",
+          "distractors": [
+            "direct card network link",
+            "settlement file"
+          ],
+          "explanation": "Use an API integration when you can collect payment details yourself (and accept the compliance that comes with it); a hosted payment page has the PSP collect the card data, which removes that regulatory work. Connecting directly to banks or card networks is rare, worth it only for large companies, and no way to cut regulation.",
+          "ref": "PSP Integration"
+        },
+        {
+          "id": "c26-02-05",
+          "type": "order",
+          "prompt": "Put the main steps of a hosted payment page in order",
+          "items": [
+            "Payment service registers the payment with the PSP",
+            "PSP returns a token, which the service stores",
+            "Show the hosted page using the token and redirect URL",
+            "User completes payment on the PSP’s page",
+            "PSP reports the result to the backend by webhook"
+          ],
+          "explanation": "Registration carries the amount, currency, and an idempotency UUID. Store the token before showing the page so that the later result can be matched to it. The browser redirect and the webhook happen at about the same time; the authoritative result is the webhook the backend receives.",
+          "ref": "PSP Integration"
+        },
+        {
+          "id": "c26-02-06",
+          "type": "single",
+          "prompt": "After paying, the user is redirected to `redirectURL`, which carries a `payResult` parameter. Can you ship the goods based on it?",
+          "options": [
+            "No, you must wait for the next day’s settlement file before shipping",
+            "Yes, because the URL was generated by the PSP",
+            "No, rely on the webhook after verifying its signature",
+            "Yes, as long as the whole flow uses HTTPS"
+          ],
+          "answer": 2,
+          "explanation": "URL parameters pass through the user’s browser, so they can be tampered with or forged, and the user may close the page midway. The backend should verify the webhook signature, amount, and currency, and query the PSP when needed. The settlement file is for after-the-fact reconciliation; shipping doesn’t wait for it.",
+          "ref": "PSP Integration"
+        },
+        {
+          "id": "c26-02-07",
+          "type": "multi",
+          "prompt": "After the backend receives a webhook from the PSP, what should it do?",
+          "options": [
+            "Check that the order, amount, and currency match",
+            "Record it by idempotency key so duplicates aren’t posted twice",
+            "Treat receipt as success and ship immediately",
+            "Parse and reformat the body first, then compute the signature",
+            "Verify the signature using the raw body and the signature header"
+          ],
+          "answers": [
+            0,
+            1,
+            4
+          ],
+          "explanation": "Signature verification must use the raw body; verifying a rewritten body fails or can be bypassed. A valid signature only proves the message came from the PSP, so you still check the order, amount, and currency it refers to. The PSP may push the same notification repeatedly, so recording the payment must be idempotent.",
+          "ref": "PSP Integration"
+        },
+        {
+          "id": "c26-02-08",
+          "type": "judge",
+          "prompt": "When a payment registration request times out and is retried, it should reuse the idempotency UUID sent the first time rather than generate a new one.",
+          "answer": true,
+          "explanation": "The PSP deduplicates on this UUID, which is usually the payment order ID. If you reuse it, the PSP recognizes the same payment and returns the original result when it was already processed; a new UUID is treated as a new payment and may charge twice.",
+          "ref": "PSP Integration"
+        },
+        {
+          "id": "c26-02-09",
+          "type": "single",
+          "prompt": "In the pay-out flow, where does the money move from and to?",
+          "options": [
+            "Seller account → e-commerce platform (commission)",
+            "E-commerce bank account → seller bank accounts",
+            "Buyer credit card → e-commerce bank account",
+            "E-commerce bank account → buyer (refund)"
+          ],
+          "answer": 1,
+          "explanation": "Pay-in collects money from customers on the merchant’s behalf; pay-out settles money to sellers around the world, possibly through an accounts-payable provider such as Tipalti. Pay-out always goes to the receiving party (the seller), not to the buyer.",
+          "ref": "Pay-out flow"
+        },
+        {
+          "id": "c26-02-10",
+          "type": "single",
+          "prompt": "A payment is flagged high-risk and needs manual review for several hours. What is the most appropriate thing for the system to do?",
+          "options": [
+            "Fail it immediately and ask the user to order again",
+            "Show pending first, then wait for the webhook",
+            "Keep the HTTP connection blocked until a result arrives",
+            "Resubmit with a new idempotency key"
+          ],
+          "answer": 1,
+          "explanation": "Manual review of high-risk payments and 3D Secure verification can stretch a payment over hours. Leave the order pending, show a progress page or send an email when done, and wait for the PSP’s webhook (poll if there is none). Failing it and having the user reorder, or resubmitting with a new key, can both charge twice.",
+          "ref": "Handling payment processing delays"
+        }
+      ]
+    },
+    {
+      "id": "c26-03",
+      "title": "Async & Failures",
+      "summary": "Message delivery, backoff retries, idempotent dedup",
+      "exercises": [
+        {
+          "id": "c26-03-01",
+          "type": "multi",
+          "prompt": "If every service-to-service call is synchronous HTTP, what problems appear as the system scales?",
+          "options": [
+            "A downstream failure such as the PSP leaves the user waiting for a response",
+            "The longer the call chain, the slower the overall response",
+            "Messages are certain to be delivered more than once",
+            "You only get eventual consistency and can’t get results immediately",
+            "There is no buffer, so traffic spikes are hard to absorb"
+          ],
+          "answers": [
+            0,
+            1,
+            4
+          ],
+          "explanation": "The chapter lists four problems with synchronous communication: low performance, poor failure isolation, tight coupling, and hard scaling. Duplicate delivery comes from asynchronous retries; getting results immediately is actually a strength of synchronous calls, which async trades away for scalability and resilience.",
+          "ref": "Communication among internal services"
+        },
+        {
+          "id": "c26-03-02",
+          "type": "single",
+          "prompt": "After a payment succeeds, the ledger, wallet, notification, and other services must each process it. Which message distribution pattern fits?",
+          "options": [
+            "Each service polls the payment database on a timer",
+            "Single receiver: each message goes to only one consumer",
+            "Call each service in turn over synchronous HTTP",
+            "Multiple receivers: each message goes to all subscribers"
+          ],
+          "answer": 3,
+          "explanation": "One payment triggers several side effects handled by different services, and each service must receive the same message, so use multiple receivers. A single receiver suits spreading one kind of task across several workers.",
+          "ref": "Communication among internal services"
+        },
+        {
+          "id": "c26-03-03",
+          "type": "judge",
+          "prompt": "With a single receiver, each message goes to just one consumer, so the business logic runs only once by nature and needs no idempotency.",
+          "answer": false,
+          "explanation": "A consumer group only decides who receives the message. If a consumer finishes the work but crashes before acknowledging, the message is redelivered to another consumer and the business logic runs twice. Having only one effect still depends on idempotent handling.",
+          "ref": "Communication among internal services"
+        },
+        {
+          "id": "c26-03-04",
+          "type": "order",
+          "prompt": "Put the handling path for a failed payment in order",
+          "items": [
+            "Check status to decide if the failure is retryable",
+            "Send retryable payments to the retry queue",
+            "Retries reach the limit and still fail",
+            "Send it to the dead-letter queue for investigation"
+          ],
+          "explanation": "First check the status to decide between retrying and refunding; retryable payments go to the retry queue. Payments that still fail after several attempts can’t be retried forever; they go to the dead-letter queue to wait for a person. A dead letter isn’t discarded; it preserves the scene.",
+          "ref": "Handling failed payments"
+        },
+        {
+          "id": "c26-03-05",
+          "type": "match",
+          "prompt": "Match each retry strategy with its description",
+          "pairs": [
+            [
+              "Immediate retry",
+              "Send again right after the failure"
+            ],
+            [
+              "Fixed interval",
+              "Wait the same amount of time every time"
+            ],
+            [
+              "Exponential backoff",
+              "Each interval is twice the previous one"
+            ],
+            [
+              "Cancel",
+              "Give up on a terminal error or at the limit"
+            ],
+            [
+              "Retry-After",
+              "The server says how long to wait"
+            ]
+          ],
+          "explanation": "As a rule of thumb, default to exponential backoff to give the downstream time to recover; when the server sends `Retry-After`, follow it. For a terminal error such as an invalid card number, no number of retries helps, so cancel right away.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-03-06",
+          "type": "single",
+          "prompt": "After a short PSP outage, many clients retry at the same instant and knock it over again. What is the most direct improvement?",
+          "options": [
+            "Use a new idempotency key on every retry",
+            "Switch to retrying immediately after failure",
+            "Use a fixed 1-second retry interval everywhere",
+            "Exponential backoff with random jitter"
+          ],
+          "answer": 3,
+          "explanation": "Exponential backoff stretches the intervals, and jitter staggers when clients retry so they don’t all arrive together. A fixed interval makes everyone retry in lockstep; a new idempotency key is worse because it causes duplicate charges.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-03-07",
+          "type": "fill",
+          "prompt": "Complete the breakdown of “exactly-once”",
+          "text": "Exactly-once = [[at-least-once]] + [[at-most-once]]; the former comes from retries, the latter from idempotency.",
+          "distractors": [
+            "best effort",
+            "eventual consistency"
+          ],
+          "explanation": "Retries make sure the request eventually arrives, possibly several times; idempotency makes sure several arrivals produce only one effect. You need both. Bounded retries don’t guarantee eventual success; past the limit, a person or reconciliation still has to step in.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-03-08",
+          "type": "single",
+          "prompt": "Calling the PSP to charge timed out, and you don’t know whether it succeeded. What is the correct next step?",
+          "options": [
+            "Generate a new idempotency key and charge again",
+            "Query the status or retry with the same idempotency key",
+            "Mark it successful and go on to update the wallet",
+            "Mark it failed and tell the user to order again"
+          ],
+          "answer": 1,
+          "explanation": "A timeout only means the result is unknown; the money may already be gone. With the original key, the PSP returns the original result if it already processed the request and charges only if it hasn’t. A new key or a user reorder can charge twice; marking success could ship goods for money you never received.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-03-09",
+          "type": "single",
+          "prompt": "A second request arrives with the same `idempotency-key`, and the insert fails on a unique key conflict. What should the server do?",
+          "options": [
+            "Return a 500 error and let the client try later",
+            "Recognize the conflict and return the result of the existing payment",
+            "Delete the old record and insert a new one",
+            "Ignore the conflict and create a new record to continue"
+          ],
+          "answer": 1,
+          "explanation": "The unique constraint lets the database decide whether the request was already processed: a failed insert means this payment exists, so return the existing object and the client sees a consistent result however many times it calls. A 500 invites more retries; creating or overwriting a record breaks idempotency.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-03-10",
+          "type": "judge",
+          "prompt": "If a second request with the same idempotency key arrives with a different amount, the server should reject it rather than return the original result or charge the new amount.",
+          "answer": true,
+          "explanation": "An idempotency key stands for one logical request. Same key but a different amount means a client bug or a tampered request: returning the original result hides the problem, and charging the new amount breaks idempotency. The unique key must also work together with an atomic update of the business state.",
+          "ref": "Exactly-once delivery"
+        }
+      ]
+    },
+    {
+      "id": "c26-04",
+      "title": "Reconciliation",
+      "summary": "Reconciliation, replication lag, security, wrap-up",
+      "exercises": [
+        {
+          "id": "c26-04-01",
+          "type": "single",
+          "prompt": "Reconciliation finds that the internal ledger is missing a payment the PSP settled. What is the correct way to fix the books?",
+          "options": [
+            "Delete the payment and let it run through the flow again",
+            "Just correct the wallet balance",
+            "Edit the amount on the historical entry directly",
+            "Add a correcting entry linked to the original payment and PSP reference"
+          ],
+          "answer": 3,
+          "explanation": "Reconciliation is a safety net, not a way to rewrite history. Adding a correcting record and keeping the original event, PSP reference, amount, and settlement date keeps the problem traceable. Fixing only the wallet leaves the balance with no ledger explanation; rerunning the flow could charge again.",
+          "ref": "Reconciliation"
+        },
+        {
+          "id": "c26-04-02",
+          "type": "single",
+          "prompt": "Reconciliation finds a category of mismatch whose cause can be classified, but no standard procedure can adjust it automatically. How should it be handled, following the chapter?",
+          "options": [
+            "Adjust automatically with the standard procedure",
+            "The finance team adjusts it manually",
+            "Ask the PSP to resend the settlement file",
+            "Ignore it and wait for the next reconciliation"
+          ],
+          "answer": 1,
+          "explanation": "The chapter sorts mismatches into three kinds: classifiable with a standard procedure get adjusted by that procedure; classifiable but not automatable get adjusted manually by finance; unclassifiable ones are investigated by finance first, then adjusted. A mismatch won’t disappear just because you reconcile again.",
+          "ref": "Reconciliation"
+        },
+        {
+          "id": "c26-04-03",
+          "type": "judge",
+          "prompt": "As long as the local database uses strongly consistent transactions, the result of calling the PSP can’t be inconsistent with internal records.",
+          "answer": false,
+          "explanation": "The external PSP and the local database share no transaction. The PSP charged successfully but the response was lost and the internal record is stuck in progress: that is outside what a local transaction can cover. Close it by querying or retrying with the same idempotency key, then reconcile against the settlement file.",
+          "ref": "Consistency"
+        },
+        {
+          "id": "c26-04-04",
+          "type": "single",
+          "prompt": "After paying, the user refreshes the page and reads old state from a replica that hasn’t caught up. What is the simplest mitigation the chapter gives?",
+          "options": [
+            "Add a few more read replicas",
+            "Put a cache in front of the replicas",
+            "Turn the status update into an asynchronous message",
+            "Send reads and writes to the primary; replicas only serve failover"
+          ],
+          "answer": 3,
+          "explanation": "Replication lags, so a replica can be behind the primary. If reads and writes both go to the primary, nothing stale is read, and replicas exist only for redundancy and failover. Adding a cache or replicas only adds more sources of stale data; an asynchronous message makes the new state visible even later.",
+          "ref": "Consistency"
+        },
+        {
+          "id": "c26-04-11",
+          "type": "judge",
+          "prompt": "Even with a Raft-based distributed database, reading from a replica can still return a stale payment status.",
+          "answer": true,
+          "explanation": "Consensus guarantees that committed log entries agree on a majority, not that every replica is caught up at every moment. A lagging replica can still return an old state; strongly consistent reads depend on the specific read protocol and routing, such as confirming through the leader before reading.",
+          "ref": "Consistency"
+        },
+        {
+          "id": "c26-04-06",
+          "type": "single",
+          "prompt": "On the PSP side, “deduplicate by nonce and never process the same nonce twice.” What does the nonce refer to here?",
+          "options": [
+            "The payment token the PSP returns to the payment service",
+            "The idempotency UUID sent to the PSP at registration, usually the payment order ID",
+            "The signature in the webhook request",
+            "A random number freshly generated on each retry"
+          ],
+          "answer": 1,
+          "explanation": "The chapter first calls it a UUID and later a nonce, but it is the same idempotency identifier. If you read nonce as a random number generated anew each time, the PSP can’t recognize a retry as the same payment and deduplication fails. The token is what the PSP returns to identify this registration.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-04-07",
+          "type": "single",
+          "prompt": "A user clicks the “Pay” button twice in quick succession. What is the most reliable way to prevent charging twice?",
+          "options": [
+            "A new key for the second request; reconciliation catches and refunds it",
+            "Same idempotency key on both; a unique constraint returns the first result",
+            "Rely on the PSP to detect two charges on the same card",
+            "Gray out the button on the front end; that is enough"
+          ],
+          "answer": 1,
+          "explanation": "Graying out the button helps the experience but can’t stop network resends or scripts. With the same idempotency key on one checkout, the server’s unique constraint recognizes the second request and returns the original result, and the PSP deduplicates on that key too. Reconciliation is a safety net, not prevention.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-04-08",
+          "type": "order",
+          "prompt": "Put in order the steps that bring a payment to the correct state after a PSP call times out",
+          "items": [
+            "Order stays in progress, neither success nor failure",
+            "Query or retry the PSP with the original idempotency key",
+            "Update wallet and ledger idempotently from the result",
+            "Reconcile against the settlement file overnight"
+          ],
+          "explanation": "A timeout only means you don’t know the result, so keep the order in progress. Use the original key to query or retry for a definite result, then update the books idempotently; whatever is still missed, reconciliation catches. Memory hook: when unsure, query; reuse the key on retry; let reconciliation catch the rest.",
+          "ref": "Exactly-once delivery"
+        },
+        {
+          "id": "c26-04-09",
+          "type": "match",
+          "prompt": "Match each security risk with the countermeasure the chapter lists",
+          "pairs": [
+            [
+              "Request eavesdropping",
+              "HTTPS/TLS for all communication"
+            ],
+            [
+              "Card data theft",
+              "Use tokens; don’t store real card numbers"
+            ],
+            [
+              "DDoS",
+              "Rate limiting and firewalls"
+            ],
+            [
+              "Data loss",
+              "Cross-region replication and snapshots"
+            ],
+            [
+              "Fraud",
+              "Address check, CVV, and behavior analysis"
+            ]
+          ],
+          "explanation": "Each risk has its own line of defense. Note the limits: encryption alone doesn’t prove data wasn’t tampered with, so you also need authentication and integrity checks; a hosted PSP narrows the scope of card data but doesn’t automatically remove all PCI responsibility.",
+          "ref": "Payment security"
+        },
+        {
+          "id": "c26-04-10",
+          "type": "multi",
+          "prompt": "To make money move exactly once and correctly, which of the following are required?",
+          "options": [
+            "Using the browser redirect parameters as proof of payment",
+            "Reusing the same idempotency key when a timeout is retried",
+            "Reconciling regularly against the PSP settlement file",
+            "Scaling throughput to tens of thousands of payments per second",
+            "Confirming the result through a signature-verified webhook or an active query"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "Idempotency keys prevent duplicate charges, verified webhooks and active queries confirm the real result, and reconciliation closes the remaining uncertainty. At about 12 TPS you don’t need to chase throughput; browser redirect parameters can be tampered with and are not proof.",
+          "ref": "Step 4: Wrap Up"
+        }
+      ]
+    }
+  ]
+}

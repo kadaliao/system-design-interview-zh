@@ -1,0 +1,617 @@
+{
+  "chapter": 27,
+  "title": "Digital Wallet",
+  "fullTitle": "Chapter 27: Digital Wallet",
+  "intro": [
+    "Plain CRUD often overwrites the current value, but a wallet must answer “why is the balance this number?” First understand the two legs of a transfer, then transactions across databases, and finally use immutable events to explain history and recover the system. Every performance optimization stays bound by two rules: money cannot appear from nowhere, and money cannot go missing."
+  ],
+  "keyPoints": [
+    "A transfer has a debit leg and a credit leg; two writes across shards are not atomic; debiting first leaves money “in transit” rather than creating it.",
+    "2PC holds locks after prepare; TC/C and Saga commit local transactions and compensate idempotently, blocking empty rollbacks and hanging.",
+    "A command may fail; an event is a validated fact. A deterministic state machine and frozen external input let replay rebuild any past balance.",
+    "Replay proves reproducibility, not correctness; also check conservation of funds, reconcile against source records, and diff versions event by event.",
+    "Speed comes from local appends, mmap, and RocksDB; recovery from sequence-bound snapshots; reliability from Raft replicating the event list.",
+    "One Raft group has limited capacity, so accounts split into groups; TC/C or Saga still coordinates across them, and receipts carry the transaction ID."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Design Scope": "第 1 步：理解问题并确定范围",
+    "Back-of-the-Envelope Estimation": "粗略估算（Back-of-the-envelope estimation）",
+    "API Design": "API 设计（API Design）",
+    "In-Memory Sharding Solution": "内存分片方案（In-memory sharding solution）",
+    "Distributed Transactions": "分布式事务（Distributed transactions）",
+    "Try-Confirm/Cancel (TC/C)": "Try-Confirm/Cancel 分布式事务（TC/C）",
+    "TC/C Failure Modes": "TC/C 的故障模式（TC/C Failure modes）",
+    "Distributed Transaction Using Saga": "Saga 分布式事务（Distributed transaction using Saga）",
+    "Event Sourcing": "事件溯源（Event sourcing）",
+    "High-Performance Event Sourcing": "高性能事件溯源（High-performance event sourcing）",
+    "Reliable High-Performance Event Sourcing": "可靠的高性能事件溯源（Reliable high-performance event sourcing）",
+    "Distributed Event Sourcing": "分布式事件溯源（Distributed event sourcing）",
+    "Step 4: Wrap Up": "第 4 步：收尾（Wrap Up）"
+  },
+  "lessons": [
+    {
+      "id": "c27-01",
+      "title": "Needs and Two Legs",
+      "summary": "Estimation, the transfer API, and the atomicity gap",
+      "exercises": [
+        {
+          "id": "c27-01-01",
+          "type": "single",
+          "prompt": "The interviewer says reconciliation can only reveal differences, not root causes, and wants to replay the data from the start and rebuild the complete history. What does this requirement most directly push the design toward?",
+          "options": [
+            "Keeping multiple backup copies of each account’s current balance",
+            "Recording balance changes as immutable, replayable events",
+            "Running reconciliation every minute instead of less often",
+            "Switching every transfer to 2PC for strong consistency"
+          ],
+          "answer": 1,
+          "explanation": "Replaying to rebuild history means keeping an immutable record of every balance change: where event sourcing starts. Reconciliation, however frequent, only finds differences. More copies of the current balance hold only the latest value, not how it got there. 2PC covers one transfer’s atomicity but leaves no replayable history.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c27-01-02",
+          "type": "judge",
+          "prompt": "A stated availability of 99.99% means the wallet may get one transfer amount in ten thousand wrong.",
+          "answer": false,
+          "explanation": "The 99.99% figure is the availability from the interview, the fraction of time the service is reachable. A percentage cannot stand in for correctness of funds: even one transfer that creates or loses money is unacceptable.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c27-01-03",
+          "type": "single",
+          "prompt": "Assume one relational database node handles about 1,000 TPS. To support 1 million TPS of transfers, why does the estimate call for about 2,000 nodes instead of 1,000?",
+          "options": [
+            "Peak load must be provisioned at 2 times the average",
+            "Each transaction log must be written synchronously to two nodes",
+            "99.99% availability requires a hot standby for every node",
+            "Each transfer updates two accounts, doubling the operations"
+          ],
+          "answer": 3,
+          "explanation": "A transfer updates two accounts, so account operations double to about 2 million per second, and 2 million ÷ 1,000 = 2,000. The estimate adds no hot standbys or peak factor. Note that this is a capacity model: two legs on the same shard can also finish in one local transaction.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c27-01-04",
+          "type": "fill",
+          "prompt": "Complete the node counts for about 2 million account operations per second",
+          "text": "With only 100 TPS per node you need [[20,000]] nodes; raising each node to 10,000 TPS needs only [[200]].",
+          "distractors": [
+            "10,000",
+            "2,000",
+            "100"
+          ],
+          "explanation": "Nodes = 2 million ÷ TPS per node: 100 TPS needs 20,000 nodes, and 10,000 TPS needs only 200. Forgetting the two legs and counting 1 million operations would give 10,000 and 100. Every 10-fold gain in per-node TPS cuts the node count to one tenth.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c27-01-05",
+          "type": "judge",
+          "prompt": "If the source and destination accounts happen to be on the same shard, both legs can run in one local transaction, with no distributed transaction needed.",
+          "answer": true,
+          "explanation": "Two legs double the number of account updates, but that does not force two independent transactions. Within one shard, a single local transaction can debit and credit atomically. Only across shards do you need 2PC, TC/C, or Saga.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c27-01-06",
+          "type": "multi",
+          "prompt": "Which statements about the design of `POST /v1/wallet/balance_transfer` are correct?",
+          "options": [
+            "`transaction_id` serves as the idempotency key, so a client retry cannot transfer twice",
+            "`amount` is passed as a string to avoid losing precision",
+            "While a cross-shard transfer is still in progress, return a status that can be queried",
+            "After the balances are updated, the server may discard `transaction_id`",
+            "`currency` lets the API convert currencies internally"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "An idempotency key, a string amount, and a queryable in-progress status are all requirements of the design. Foreign exchange is explicitly out of scope. If the server discards `transaction_id`, a retry or a late receipt can no longer be recognized, and the credit would be applied twice.",
+          "ref": "API Design"
+        },
+        {
+          "id": "c27-01-07",
+          "type": "single",
+          "prompt": "The in-memory sharding solution splits the “account → balance” mapping across several Redis partitions, with ZooKeeper storing the partition configuration. What is this design’s most fundamental flaw?",
+          "options": [
+            "The wallet service is stateful and hard to scale out",
+            "There is no way to find the partition for an account ID",
+            "A debit and a credit across partitions cannot be done atomically",
+            "Every transfer reads and writes ZooKeeper, making it a bottleneck"
+          ],
+          "answer": 2,
+          "explanation": "Partitioning solves scaling, but A and C may sit on different Redis nodes, so the debit and the credit are two separate writes, and a failure between them leaves the data inconsistent. The wallet service itself is stateless and easy to scale, and ZooKeeper holds only configuration, so it is not on the data path of each transfer.",
+          "ref": "In-Memory Sharding Solution"
+        },
+        {
+          "id": "c27-01-08",
+          "type": "single",
+          "prompt": "A cross-partition transfer can only be done as two writes. If you credit C $1 first and then debit A $1, and the service crashes between the two steps, what is the risk?",
+          "options": [
+            "C is credited twice when the request is retried",
+            "Neither balance changes; the request just times out and must be retried",
+            "C may spend money A has not yet paid out, creating money from nothing",
+            "Money temporarily disappears: A is debited but C never receives it"
+          ],
+          "answer": 2,
+          "explanation": "If credit-then-debit stops midway, C already has an extra $1 while A has lost nothing, and C may spend it right away. “Money temporarily disappears” is what happens when debit-then-credit stops midway: the money is merely in transit and can be recovered, which is why the design debits first.",
+          "ref": "In-Memory Sharding Solution"
+        },
+        {
+          "id": "c27-01-09",
+          "type": "judge",
+          "prompt": "The sample algorithm `accountID.hashCode() % partitionNumber` is ready for production: to scale out, just raise the partition count in ZooKeeper.",
+          "answer": false,
+          "explanation": "Negative hash values must be handled before taking the modulo. More seriously, once the partition count changes, the result for most accounts changes too, causing a massive remapping of data. It is a demonstration partitioning algorithm, not a production sharding protocol.",
+          "ref": "In-Memory Sharding Solution"
+        },
+        {
+          "id": "c27-01-10",
+          "type": "match",
+          "prompt": "Match each element of the wallet design with its role",
+          "pairs": [
+            [
+              "Redis partition",
+              "Holds account balances in memory"
+            ],
+            [
+              "ZooKeeper",
+              "Stores partition count and node addresses"
+            ],
+            [
+              "Wallet service",
+              "Runs the transfer logic statelessly"
+            ],
+            [
+              "Idempotency key",
+              "Reused on retry to identify the same transfer"
+            ]
+          ],
+          "explanation": "Balances live in Redis, configuration sits in highly available ZooKeeper, and the wallet service keeps no state, so it scales out easily. The idempotency key is the `transaction_id` in the API: a client reuses the same value on retry, and the server recognizes the same transfer instead of performing it again.",
+          "ref": "In-Memory Sharding Solution"
+        }
+      ]
+    },
+    {
+      "id": "c27-02",
+      "title": "Atomic Transfers",
+      "summary": "How 2PC, TC/C, and Saga work, and their trade-offs",
+      "exercises": [
+        {
+          "id": "c27-02-01",
+          "type": "order",
+          "prompt": "Put the steps of a successful two-phase commit (2PC) in order",
+          "items": [
+            "The coordinator runs the normal reads and writes",
+            "To commit, it asks each database to enter prepare",
+            "Each database replies whether it can commit",
+            "After all reply yes, it tells every database to commit"
+          ],
+          "explanation": "2PC does the business reads and writes first, then collects prepare votes. Only when every database answers yes does the coordinator send commit; if any says no, it tells all of them to abort. From prepare until the decision arrives, each participant stays in a committable state.",
+          "ref": "Distributed Transactions"
+        },
+        {
+          "id": "c27-02-02",
+          "type": "single",
+          "prompt": "In 2PC, every database has replied that prepare succeeded, but the coordinator crashes before sending the final decision. What state are the participants most likely in?",
+          "options": [
+            "They stay committable and hold their locks, waiting for the decision",
+            "They time out and roll back on their own, with no effect on the system",
+            "Having already agreed, they may commit on their own and release the locks",
+            "They release the locks first and redo the transaction after the coordinator recovers"
+          ],
+          "answer": 0,
+          "explanation": "After prepare, a participant cannot commit or roll back alone, or the databases could disagree. Nor can it release locks, since it promised the changes can commit at any moment. It can only hold the locks and wait: the blocking caused by the coordinator being a single point. Durable decisions soften this but not the lock cost.",
+          "ref": "Distributed Transactions"
+        },
+        {
+          "id": "c27-02-03",
+          "type": "judge",
+          "prompt": "2PC is slow mainly because it needs two rounds of network requests; merge the two rounds into one and the lock contention problem is solved.",
+          "answer": false,
+          "explanation": "The point is not “two network calls” but that participants must hold their locks after prepare while waiting for the final decision, so lock hold time spans several cross-node round trips. Cutting the number of message rounds does not remove that wait.",
+          "ref": "Distributed Transactions"
+        },
+        {
+          "id": "c27-02-04",
+          "type": "single",
+          "prompt": "You implement a $1 transfer from A to C with TC/C, with A and C in different databases. How should the Try phase run?",
+          "options": [
+            "A receives a NOP and does nothing; C adds $1 in a local transaction first",
+            "A deducts $1 in a local transaction; C receives a NOP and does nothing",
+            "A deducts $1 and C adds $1, as two local transactions at the same time"
+          ],
+          "answer": 1,
+          "explanation": "With debit first, the intermediate state is just money “in transit”: users cannot spend money that does not exist, and it can be recovered. Crediting C first lets C spend the money immediately. Changing both sides at once cannot be made atomic without 2PC.",
+          "ref": "TC/C Failure Modes"
+        },
+        {
+          "id": "c27-02-05",
+          "type": "fill",
+          "prompt": "Complete the key difference between 2PC and TC/C",
+          "text": "After 2PC’s first phase the transaction [[is still open]] and locks are held; after a TC/C Try succeeds, the local transaction [[has already committed]], so undoing it takes [[a reverse operation]].",
+          "distractors": [
+            "already rolled back",
+            "prepare again",
+            "a database rollback"
+          ],
+          "explanation": "2PC is one logical transaction that stays undecided after prepare. Each TC/C phase is an independent local transaction that has already finished, so on failure the only option is to run a new reverse operation as compensation, not a database rollback.",
+          "ref": "Try-Confirm/Cancel (TC/C)"
+        },
+        {
+          "id": "c27-02-06",
+          "type": "judge",
+          "prompt": "TC/C passes through an “unbalanced” state in which A has been debited but C not yet credited. This is acceptable as long as the system can recover from it and users cannot spend through it.",
+          "answer": true,
+          "explanation": "Without 2PC, two databases cannot take effect at the same instant, so a brief imbalance is unavoidable. Debiting first keeps the money “in transit,” where it cannot be spent, and the phase status tables drive recovery. In practice you also need balance checks, overspending protection, and idempotent confirm and cancel.",
+          "ref": "TC/C Failure Modes"
+        },
+        {
+          "id": "c27-02-07",
+          "type": "single",
+          "prompt": "Because of network delay, A’s database receives the Cancel for a transfer first and its Try only afterward. What is the correct handling?",
+          "options": [
+            "Cancel records an out-of-order flag, and the late Try returns failure",
+            "Cancel finds no debit record and errors out; when Try arrives, it debits as usual",
+            "Cancel simply adds $1 back to A, and Try deducts it when it arrives",
+            "After a timeout, treat Try as never having happened and ignore the Cancel"
+          ],
+          "answer": 0,
+          "explanation": "A Cancel that arrives first is an “empty rollback,” and the late Try is a “hanging” operation. The transaction ID plus a persisted out-of-order flag blocks the late Try. Debiting as usual strands the money in a state nobody handles; crediting on an empty rollback creates money; a timeout does not prove the Try never ran.",
+          "ref": "TC/C Failure Modes"
+        },
+        {
+          "id": "c27-02-08",
+          "type": "match",
+          "prompt": "Match each distributed transaction approach with its characteristic",
+          "pairs": [
+            [
+              "2PC",
+              "Holds locks after prepare, awaiting the decision"
+            ],
+            [
+              "TC/C",
+              "Reserves first; compensates committed steps"
+            ],
+            [
+              "Choreography Saga",
+              "Services react to events and run own steps"
+            ],
+            [
+              "Orchestration Saga",
+              "A coordinator directs the services in order"
+            ]
+          ],
+          "explanation": "2PC’s cost is the lock wait after prepare; on failure it aborts uncommitted ones. TC/C reserves with Try and uses Cancel to compensate committed local transactions. Choreography has no center, so its logic is scattered and hard to manage. Orchestration centralizes complexity in a coordinator, which wallets prefer.",
+          "ref": "Distributed Transaction Using Saga"
+        },
+        {
+          "id": "c27-02-09",
+          "type": "multi",
+          "prompt": "Which statements about Saga are correct?",
+          "options": [
+            "Compensation can itself fail, which calls for retries, alerts, and manual handling",
+            "Outside observers never see a partially inconsistent state while it runs",
+            "Each step runs as an independent transaction in its own database",
+            "When a step fails, compensation runs in reverse from the completed steps",
+            "Compensation is the same as a database rollback and restores the data exactly"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "A Saga arranges the operation as a sequence of steps, each an independent local transaction, and compensates in reverse order after a failure. Compensation is a new business action, not database-level time travel, and it can fail. Every step has already committed, so outsiders can see partially inconsistent states while it runs.",
+          "ref": "Distributed Transaction Using Saga"
+        },
+        {
+          "id": "c27-02-10",
+          "type": "single",
+          "prompt": "A common argument says TC/C can run in parallel while Saga is linear, so TC/C is preferable under low-latency requirements. What is a more accurate basis for choosing?",
+          "options": [
+            "TC/C never exposes a partially inconsistent state, so it is safer",
+            "Saga can only be choreographed and cannot be coordinated centrally",
+            "Check step dependencies; Saga can also model parallel independent branches",
+            "Saga always runs step by step, so it is slower than TC/C in every case"
+          ],
+          "answer": 2,
+          "explanation": "Whether steps can run in parallel depends on their dependencies; a Saga can model independent branches as a parallel workflow, so you cannot choose on “Saga must be slow” alone. Both expose intermediate inconsistent states, and both need auditing and replay to recover failed states. Saga also has an orchestrated form.",
+          "ref": "Distributed Transaction Using Saga"
+        }
+      ]
+    },
+    {
+      "id": "c27-03",
+      "title": "Event Sourcing",
+      "summary": "Commands, events, state machines, and replay",
+      "exercises": [
+        {
+          "id": "c27-03-01",
+          "type": "match",
+          "prompt": "Match the four event sourcing concepts with their examples",
+          "pairs": [
+            [
+              "Command",
+              "“Transfer $1 from A to B”; may be rejected"
+            ],
+            [
+              "Event",
+              "“Transferred $1 from A to B”; immutable"
+            ],
+            [
+              "State",
+              "A key-value map from account to balance"
+            ],
+            [
+              "State machine",
+              "Validates commands, applies events, updates it"
+            ]
+          ],
+          "explanation": "A command is an intent to do something and can fail, for example on insufficient balance. An event is a fact that happened after validation. State is the balance accumulated from events. The state machine ties them together, and it must be deterministic.",
+          "ref": "Event Sourcing"
+        },
+        {
+          "id": "c27-03-02",
+          "type": "single",
+          "prompt": "An event sourcing state machine must be deterministic. Which of the following would make replaying the same events produce different results?",
+          "options": [
+            "Calling an external API for the live exchange rate while applying an event",
+            "Recording the transfer ID, accounts, and amount in the event",
+            "Continuing from the snapshot’s last applied sequence number",
+            "Applying changes to balances in event sequence order"
+          ],
+          "answer": 0,
+          "explanation": "A state machine cannot do external I/O or depend on randomness. If replay calls the external API again, it gets today’s answer, and the result changes. Any external input that affects the outcome should be frozen into the event when it is created; the other three options are exactly what makes replay repeatable.",
+          "ref": "Event Sourcing"
+        },
+        {
+          "id": "c27-03-03",
+          "type": "judge",
+          "prompt": "When rebuilding balances, the committed event list is authoritative, rather than regenerating events from the command list, because command handling may involve nondeterministic input.",
+          "answer": true,
+          "explanation": "Command handling may involve external I/O or invalid state, so handling the same command again may not produce the same events. Events are facts fixed after validation. That is why state and snapshots can both be rebuilt from events, and the event list is what must be replicated reliably.",
+          "ref": "Reliable High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-03-04",
+          "type": "order",
+          "prompt": "Put the steps the wallet state machine takes to process one transfer command in order",
+          "items": [
+            "Read the command from the command queue",
+            "Read the balance state from the database",
+            "Validate it; if valid, generate events for both accounts",
+            "Read the events and update the balance state"
+          ],
+          "explanation": "You must fetch the command first to know which account balances to read. Validation depends on the current balance, so the state is read before events are generated, and events are produced only if validation passes. Finally, state is updated from the events, not the command, so replaying events yields the same state.",
+          "ref": "Event Sourcing"
+        },
+        {
+          "id": "c27-03-05",
+          "type": "single",
+          "prompt": "The design requires commands to have a global order, so they go into a FIFO queue such as Kafka. Once the wallet is split into several shards, which statement about ordering is correct?",
+          "options": [
+            "Kafka guarantees order only within a partition, with no global order across shards",
+            "Only commands need to stay ordered; events can be applied in parallel out of order",
+            "Once commands are in a FIFO queue, cross-shard transfers are automatically atomic",
+            "Kafka guarantees global order across all partitions of a topic"
+          ],
+          "answer": 0,
+          "explanation": "Kafka’s ordering guarantee is limited to a partition. A single initial state machine can consume one ordered stream, but with several shards each shard has its own order, and cross-shard transfers still need TC/C or Saga to coordinate. Events must stay ordered too, or replay becomes nondeterministic.",
+          "ref": "Event Sourcing"
+        },
+        {
+          "id": "c27-03-06",
+          "type": "multi",
+          "prompt": "When using event sourcing to answer audit questions, which approaches hold up?",
+          "options": [
+            "After a code change, replay old and new versions and compare per event",
+            "To look up a historical balance, filter events by the time the client reported",
+            "Compare only the sum of all balances, which confirms no account was misposted",
+            "If the replay result matches production, that proves the business rules are correct",
+            "For a past balance, replay from a trusted start to the target sequence"
+          ],
+          "answers": [
+            0,
+            4
+          ],
+          "explanation": "Replaying to a target sequence and comparing versions event by event are the right answers. A matching replay only proves reproducibility. If the wrong account is credited or debited, the total can still add up. Client time can be out of order, so historical state should be bounded by the committed log sequence number.",
+          "ref": "Event Sourcing"
+        },
+        {
+          "id": "c27-03-07",
+          "type": "judge",
+          "prompt": "If an event originally recorded 100 cents as 1,000 cents, replaying all events from the start would reveal the error.",
+          "answer": false,
+          "explanation": "Replay only proves the process is reproducible: the same wrong event replays into the same wrong balance. To catch it, you also need to check invariants such as debits matching credits, and reconcile the ledger against orders and bank or PSP settlement records.",
+          "ref": "P27-02"
+        },
+        {
+          "id": "c27-03-08",
+          "type": "single",
+          "prompt": "Account A’s snapshot at sequence 100 shows 10,000 cents available and 0 frozen. Event 101 reserves 1,500 cents, 102 confirms the debit, and 103 credits a 500-cent refund. What is A’s state as of sequence 101?",
+          "options": [
+            "10,000 cents available, 1,500 cents frozen",
+            "9,000 cents available, 0 cents frozen",
+            "8,500 cents available, 1,500 cents frozen",
+            "8,500 cents available, 0 cents frozen"
+          ],
+          "answer": 2,
+          "explanation": "Replay from sequence 101, the first event after the snapshot: the reservation moves 1,500 cents from available to frozen, giving 8,500 available and 1,500 frozen. After 102 confirms the debit the frozen amount is cleared, and after the 103 refund available becomes 9,000, which is the state as of 103.",
+          "ref": "P27-01"
+        },
+        {
+          "id": "c27-03-09",
+          "type": "judge",
+          "prompt": "When old and new versions replay the same events, even if the final balances are identical, you still need to compare event by event, because an erroneous overdraft may have occurred along the way.",
+          "answer": true,
+          "explanation": "A duplicate debit canceled out by a later compensation can leave the same ending balance, even though the user was wrongly overdrawn in between. So compare the state after every event and find the first divergent event. If the change is a legitimate rule change, the differences need a version and an approval record.",
+          "ref": "P27-03"
+        },
+        {
+          "id": "c27-03-10",
+          "type": "single",
+          "prompt": "After CQRS is introduced, what serves the client’s balance queries?",
+          "options": [
+            "Reading the unprocessed transfer commands directly from the command queue",
+            "Read-only state machines that build their state from the same event list",
+            "Replaying from the first event in full on every query",
+            "The writing state machine, returning the query result while validating a command"
+          ],
+          "answer": 1,
+          "explanation": "CQRS separates writes from queries: the write path only validates commands and produces events, while several read-only state machines subscribe to the same immutable event list and each builds state suited to queries. An unprocessed command is not yet a fact, and a full replay on every query would be too slow.",
+          "ref": "Event Sourcing"
+        }
+      ]
+    },
+    {
+      "id": "c27-04",
+      "title": "Speed and Sharding",
+      "summary": "Local logs, snapshots, Raft, cross-group transfers",
+      "exercises": [
+        {
+          "id": "c27-04-01",
+          "type": "single",
+          "prompt": "Moving commands and events from Kafka to local disk improves performance. Where does the gain mainly come from?",
+          "options": [
+            "Local disks are naturally replicated, which removes replication overhead",
+            "It saves network round trips, and append-only sequential writes suit disks",
+            "Commands no longer queue, so they can be written in parallel out of order",
+            "Local writes survive a power loss even without flushing to disk"
+          ],
+          "answer": 1,
+          "explanation": "Every access to external storage pays network latency, while a local append-only write is sequential I/O, friendly even to HDDs. The cost is a stateful service with a single point of failure, which is why Raft replication comes later. Commands and events must still stay ordered, and durability still requires flushing to disk.",
+          "ref": "High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-04-02",
+          "type": "judge",
+          "prompt": "Once a file is mapped into memory with `mmap`, a write to the mapped region means the data is safely on disk and survives a power loss.",
+          "answer": false,
+          "explanation": "mmap is not a durability switch: a write being visible in memory is not the same as being recoverable after a power loss, which still takes flushing to disk, a clear commit boundary, and a crash recovery protocol. In this chapter its role is to cache recent commands and events, saving the time of reading them from disk again.",
+          "ref": "High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-04-03",
+          "type": "single",
+          "prompt": "The design uses RocksDB to keep balance state locally. What is the main reason?",
+          "options": [
+            "It ships with Raft replication, so nothing else is needed",
+            "A B+ tree updated in place gives the fastest random reads and writes",
+            "An LSM tree is optimized for writes, and caches speed up reads",
+            "It has built-in distributed transaction support across nodes"
+          ],
+          "answer": 2,
+          "explanation": "Balance state is updated with every event, so write volume is the main concern. RocksDB’s log-structured merge tree (LSM) is optimized for writes, with caches helping the read path. It is not an in-place-updating B+ tree, and cross-group transactions and replication are not its job in this chapter.",
+          "ref": "High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-04-04",
+          "type": "fill",
+          "prompt": "Complete the key convention for snapshot recovery",
+          "text": "A snapshot must be bound to its [[last applied sequence]] number, and recovery replays starting from [[the next event]], so nothing is skipped and nothing is deducted twice.",
+          "distractors": [
+            "snapshot creation time",
+            "the first event",
+            "client time"
+          ],
+          "explanation": "A snapshot saves the time of replaying from the very first event, but it must record the sequence number it has applied up to. Continuing from the next event keeps the changes already in the snapshot from being counted again. Aligning by time is unreliable, because the event boundary around a given instant is unclear.",
+          "ref": "High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-04-05",
+          "type": "single",
+          "prompt": "The event list is replicated by a Raft group of 5 nodes. At most how many nodes can fail at once while the group can still commit new events?",
+          "options": [
+            "1 node",
+            "3 nodes",
+            "2 nodes",
+            "4 nodes"
+          ],
+          "answer": 2,
+          "explanation": "Raft needs a majority of nodes alive to elect a leader and commit: the majority of 5 nodes is 3, so it tolerates at most 2 failures. With 3 down, the remaining 2 are not a majority, and the group stops committing so that two diverging logs cannot appear.",
+          "ref": "Reliable High-Performance Event Sourcing"
+        },
+        {
+          "id": "c27-04-06",
+          "type": "judge",
+          "prompt": "Raft guarantees only that the committed event log is consistent within one group. Once accounts are spread over several Raft groups, cross-group transfers still need TC/C or Saga to coordinate.",
+          "answer": true,
+          "explanation": "Raft solves replication and ordering within a group, not transactions between groups. When A and C belong to different Raft groups, a transfer becomes separate events in two groups, and a coordinator must drive it through TC/C or Saga, during which an intermediate state can still appear briefly.",
+          "ref": "Distributed Event Sourcing"
+        },
+        {
+          "id": "c27-04-07",
+          "type": "single",
+          "prompt": "Under CQRS, a client can learn whether a transfer is done only by polling. What dilemma does this bring?",
+          "options": [
+            "Frequent polling causes the same transfer to be debited twice",
+            "Slow polling gives stale results, and fast polling overloads the query service",
+            "The query service must replay events from the start on every poll",
+            "Polling requests crowd the write path and slow command processing"
+          ],
+          "answer": 1,
+          "explanation": "Polling is not real time: a balance change shows up only on the next query, and at high frequency, huge numbers of clients can overwhelm the query service. Polling does not touch the write path or force a replay. So a reverse proxy first polls for users in bulk, and then the read-only state machines push updates instead.",
+          "ref": "Distributed Event Sourcing"
+        },
+        {
+          "id": "c27-04-08",
+          "type": "order",
+          "prompt": "In the final system, how does the first step of a $1 transfer from A to C (A-1) run? Put the steps in order",
+          "items": [
+            "The coordinator creates a phase status table record",
+            "Find the partition for A-1 and send it to its leader",
+            "The leader validates, generates events, and replicates",
+            "A read-only state machine pushes the result back",
+            "The coordinator marks the first step done, then sends C+1"
+          ],
+          "explanation": "The coordinator writes its state before sending the command, so it can recover after a crash. The partition’s Raft leader turns the command into events and replicates them, and the result is pushed back via the read-only state machine. C+1 runs only after the first step is recorded as successful, keeping debit before credit.",
+          "ref": "Distributed Event Sourcing"
+        },
+        {
+          "id": "c27-04-09",
+          "type": "single",
+          "prompt": "A transfer receipt has been pushed to the reverse proxy, but the connection between the proxy and the client happens to drop. How should the client proceed after reconnecting?",
+          "options": [
+            "Generate a new transfer ID and submit the transfer again",
+            "Treat the missing receipt as a timeout failure and start compensation",
+            "Have the proxy send the coordinator another C+1 command",
+            "Query the authoritative result with the original `transaction_id`"
+          ],
+          "answer": 3,
+          "explanation": "A fast push does not mean the ledger is done. The receipt carries the transaction ID and a phase, so after a disconnect the client can still query the authoritative result by that ID. A new ID makes a second transfer, resending C+1 credits twice, and compensating for a missing receipt may undo a transfer that succeeded.",
+          "ref": "Distributed Event Sourcing"
+        },
+        {
+          "id": "c27-04-10",
+          "type": "match",
+          "prompt": "Match each problem met along the design’s evolution with its improvement",
+          "pairs": [
+            [
+              "Cross-DB transfers",
+              "2PC, TC/C, or Saga"
+            ],
+            [
+              "No audit or rebuild",
+              "Event sourcing"
+            ],
+            [
+              "Slow external storage",
+              "Local append-only writes with mmap cache"
+            ],
+            [
+              "Local storage SPOF",
+              "Replicate events with Raft"
+            ],
+            [
+              "Group throughput cap",
+              "Split accounts into several Raft groups"
+            ]
+          ],
+          "explanation": "The evolution: first solve atomicity, then add auditability with event sourcing; for speed, switch to local files, which creates a single point of failure, so Raft replicates the events; one Raft group has limited capacity, so data is finally split into several groups, still coordinated by TC/C or Saga.",
+          "ref": "Step 4: Wrap Up"
+        }
+      ]
+    }
+  ]
+}

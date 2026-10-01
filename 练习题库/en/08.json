@@ -1,0 +1,584 @@
+{
+  "chapter": 8,
+  "title": "URL Shortener",
+  "fullTitle": "Chapter 8: Design a URL Shortener",
+  "intro": [
+    "**Learning goal**: Turn a CRUD feature that stores short codes and URLs into a service that can handle a huge volume of redirect requests.",
+    "**Remember first**: Guarantee uniqueness when you create a link, and check the cache first when you redirect. Base62 is an encoding; a hash can collide.",
+    "**Common mistakes**: Treating the short code as a permission credential; assuming 301 and 302 differ only in the number; assuming a Bloom filter can prove a short code is unique."
+  ],
+  "keyPoints": [
+    "100 million a day for 10 years is 365 billion records, about 365 TB at 1 KB each. Average writes are about 1,157/s; reads are about 10 times that.",
+    "A 301 lets browsers remember the redirect, cutting load. To count every click, use 302 with cache headers; request count is not click count.",
+    "Unique ID + Base62: 7 characters give about 3.5 trillion codes. A unique ID never collides, but short codes from sequential IDs are easy to enumerate.",
+    "The first 7 hex characters of a hash give only about 268 million codes, far too few. Hash schemes must handle collisions; a Bloom filter only pre-filters.",
+    "Creation relies on a unique constraint for concurrency; redirects check the cache, then the database. Keep the web tier stateless; replicate and shard.",
+    "A short code is an address, not a credential. Private content needs auth at the target service; plan for abuse, enumeration, and cache hotspots."
+  ],
+  "refs": {
+    "Turning Scale into CRUD-Sized Numbers": "批注：把规模换成 CRUD 能理解的数字",
+    "Requirements": "需求（Requirements）",
+    "API Endpoints": "API 接口（API Endpoints）",
+    "1. Base 62 Conversion": "1. Base62 进制转换（Base 62 Conversion）",
+    "URL Redirection": "URL 重定向（URL Redirection）",
+    "Decide What to Measure, Then the Status Code": "批注：先定统计目标，再定状态码",
+    "URL Redirecting Flow": "跳转流程（URL Redirecting Flow）",
+    "The Mapping Comes from the Database, Not an “Inverse Hash”": "批注：映射回去靠数据库，不靠“逆哈希”",
+    "A Short Template for the Interview Answer": "批注：最短面试回答模板",
+    "Truncating to 7 Hex Characters Is Not Enough Space": "批注：截取十六进制前 7 位，空间不够",
+    "Comparison": "方案比较（Comparison）",
+    "A Bloom Filter Only Helps Filter": "批注：Bloom Filter 只帮忙筛选",
+    "URL Shortening Flow": "缩短流程（URL Shortening Flow）",
+    "Hash Function": "哈希函数与编码（Hash Function）",
+    "Start with a Small System": "批注：从小系统开始",
+    "Scalability": "可扩展性（Scalability）",
+    "Rate Limiter": "限流（Rate Limiter）",
+    "High Availability and Reliability": "高可用与可靠性（High Availability and Reliability）",
+    "Analytics": "分析（Analytics）"
+  },
+  "lessons": [
+    {
+      "id": "c08-01",
+      "title": "Scale Estimation",
+      "summary": "Converting records, storage, and QPS",
+      "exercises": [
+        {
+          "id": "c08-01-01",
+          "type": "single",
+          "prompt": "A service generates 100 million short URLs per day. At 365 days a year for 10 years, about how many records is that?",
+          "options": [
+            "365 million",
+            "365 billion",
+            "36.5 trillion",
+            "36.5 billion"
+          ],
+          "answer": 1,
+          "explanation": "`100 million × 365 × 10 = 365 billion`. This number sets how large the short code space must be, and the code length is chosen to cover it. 36.5 billion counts only one year, which is off by a factor of 10.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-02",
+          "type": "single",
+          "prompt": "The book estimates that 365 billion records need about 365 TB. What average record size does this imply?",
+          "options": [
+            "About 10 KB",
+            "About 1 KB",
+            "About 100 B",
+            "About 1 MB"
+          ],
+          "answer": 1,
+          "explanation": "365 TB ÷ 365 billion ≈ 1 KB. This is only a rough size for the mapping record itself; indexes, replication, backups, and database overhead are not counted yet.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-03",
+          "type": "judge",
+          "prompt": "The 365 TB estimate already includes the space needed for indexes, replicas, and backups.",
+          "answer": false,
+          "explanation": "365 TB is only the raw data: 365 billion records × about 1 KB each. Indexes, replication, backups, and database overhead all add to it, so real usage is noticeably larger.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-04",
+          "type": "match",
+          "prompt": "Match each estimate with the calculation it comes from",
+          "pairs": [
+            [
+              "365 billion records",
+              "100 million × 365 × 10"
+            ],
+            [
+              "365 TB",
+              "365 billion × about 1 KB each"
+            ],
+            [
+              "About 1,157 req/s",
+              "100 million ÷ 86,400"
+            ],
+            [
+              "About 11,600 req/s",
+              "Write QPS × 10"
+            ]
+          ],
+          "explanation": "The record count is the daily volume times days times years; storage multiplies that by the size per record; average write QPS spreads the daily volume over 86,400 seconds; with a 10:1 read-to-write ratio, average redirect QPS is about 10 times the write QPS.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-05",
+          "type": "judge",
+          "prompt": "About 1,157 writes per second is only an average, so planning write capacity also needs a separate peak assumption.",
+          "answer": true,
+          "explanation": "Traffic is not evenly spread across the day, so sizing for the average leaves you short at peak. Estimate the average first, then add a peak assumption based on the business.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-06",
+          "type": "single",
+          "prompt": "A read-to-write ratio of about 10:1 means what for the design?",
+          "options": [
+            "Optimize link creation first, for example with batch writes",
+            "Optimize redirect reads first, for example by caching mappings",
+            "Reads and writes matter equally, so there is no need to separate the two paths",
+            "Always use 301 to reduce the number of writes"
+          ],
+          "answer": 1,
+          "explanation": "Redirect requests are about 10 times as frequent as creations, so reads are the main load: the redirect path should check the cache first and query the database only on a miss. A 301 affects whether the browser asks for the redirect again, not how many writes happen.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c08-01-07",
+          "type": "single",
+          "prompt": "All else equal, if the retention period drops from 10 years to 5 years, what is the raw storage estimate?",
+          "options": [
+            "About 182.5 TB",
+            "About 365 TB",
+            "About 73 TB",
+            "About 730 TB"
+          ],
+          "answer": 0,
+          "explanation": "The record count scales linearly with the retention period: `100 million × 365 × 5 = 182.5 billion`, and at about 1 KB each that is about 182.5 TB. Every step of an estimate should let you change an input and recompute.",
+          "ref": "Turning Scale into CRUD-Sized Numbers"
+        },
+        {
+          "id": "c08-01-08",
+          "type": "single",
+          "prompt": "For the redirect endpoint `GET api/v1/shortUrl`, what is the server’s core action?",
+          "options": [
+            "Generate a brand-new short code for this one",
+            "Look up the longURL by short code and return a redirect",
+            "Fetch the long URL’s page for the browser and return its content",
+            "Invert the hash of the short code to compute the long URL"
+          ],
+          "answer": 1,
+          "explanation": "The server only looks up the mapping from short code to long URL and returns a redirect, so the browser visits the long URL itself. Hashes are generally not reversible; “mapping back” works through a database lookup.",
+          "ref": "API Endpoints"
+        },
+        {
+          "id": "c08-01-09",
+          "type": "multi",
+          "prompt": "A short code should be as short as possible yet cover 365 billion records. Which statements about this trade-off are correct?",
+          "options": [
+            "Code length affects only looks, not capacity",
+            "The shorter the code, the fewer combinations are available",
+            "With Base62, a 6-character code can hold 365 billion records",
+            "With k symbols per position and n positions, `k^n` must reach at least 365 billion",
+            "The larger the alphabet, the more codes a given length can represent"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "n positions with k possible values each give only `k^n` short codes, and that count cannot be smaller than the number of records. 6 Base62 characters give only `62^6 ≈ 56.8 billion`, which is not enough; you need 7 (about 3.5 trillion). So look for the shortest combination of alphabet size and length.",
+          "ref": "1. Base 62 Conversion"
+        }
+      ]
+    },
+    {
+      "id": "c08-02",
+      "title": "Redirects & Stats",
+      "summary": "301/302, caching, and click counting",
+      "exercises": [
+        {
+          "id": "c08-02-01",
+          "type": "single",
+          "prompt": "A short URL service does not need click counts and wants to cut redirect load as much as possible. Which redirect fits best?",
+          "options": [
+            "302: a temporary redirect, so every click comes back to the service",
+            "Neither: they differ only in the status code number",
+            "Neither: the server should proxy the long URL’s content",
+            "301: browsers can cache it, so later requests may skip the service"
+          ],
+          "answer": 3,
+          "explanation": "A 301 says the resource has moved permanently, so after caching it the browser goes straight to the long URL and the service skips those requests. The cost is that later clicks cannot be counted; 302 suits cases that need counting.",
+          "ref": "URL Redirection"
+        },
+        {
+          "id": "c08-02-02",
+          "type": "judge",
+          "prompt": "As long as you switch to a 302 redirect, the server’s request count accurately reflects every click.",
+          "answer": false,
+          "explanation": "A 302 is not absolutely uncacheable: whether each click reaches the server also depends on cache headers and caching policy. Even if every click does, bots, prefetching, and repeated requests make the request count differ from real clicks.",
+          "ref": "Decide What to Measure, Then the Status Code"
+        },
+        {
+          "id": "c08-02-03",
+          "type": "multi",
+          "prompt": "Why can’t the server treat the number of redirect requests it receives as the number of user clicks?",
+          "options": [
+            "The server checks the cache first and skips the database on a hit",
+            "The same user may send repeated requests",
+            "Requests are spread across several web servers",
+            "Browsers may prefetch links",
+            "Preview bots may fetch links"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "Bots, prefetching, and repeated requests create requests that match no real click; conversely, a browser-cached 301 lets real clicks produce no request at all. A server-side cache hit or spreading requests over several servers changes nothing: the requests still reach the service, and totaling them leaves the count unchanged.",
+          "ref": "Decide What to Measure, Then the Status Code"
+        },
+        {
+          "id": "c08-02-04",
+          "type": "single",
+          "prompt": "A short URL has always returned 301, and then operations repoint it to a new long URL. What most likely happens when a user who clicked it before clicks again?",
+          "options": [
+            "Goes straight to the new address: the service tells the browser to update",
+            "Goes to the old address first, then is redirected to the new one",
+            "Gets an error: the browser notices the code and long URL no longer match",
+            "Still goes to the old address: the browser cached the permanent redirect"
+          ],
+          "answer": 3,
+          "explanation": "A 301 makes the browser treat the redirect as permanent. Once cached, later requests may never reach the service, so it cannot see that the mapping changed. If you need to change targets or count clicks at any time, use 302 with suitable cache headers.",
+          "ref": "URL Redirection"
+        },
+        {
+          "id": "c08-02-05",
+          "type": "order",
+          "prompt": "Put the steps of one short URL redirect in order",
+          "items": [
+            "The user clicks the shortURL",
+            "Look up the short code’s long URL in the cache first",
+            "On a cache miss, query the database",
+            "Return a redirect; the browser visits the longURL"
+          ],
+          "explanation": "Reads dominate writes, so the redirect path checks the cache first and reaches the database only on a miss. The server only returns a redirect; the browser fetches the actual page from the long URL.",
+          "ref": "URL Redirecting Flow"
+        },
+        {
+          "id": "c08-02-06",
+          "type": "judge",
+          "prompt": "A short code maps back to the long URL because the database stores the pair, not because anyone inverts the hash value.",
+          "answer": true,
+          "explanation": "Hashes are generally not reversible, and truncating throws away information, so you cannot compute the long URL from the short value. Every hashValue maps back to its longURL because the pair is stored in the database and looked up.",
+          "ref": "The Mapping Comes from the Database, Not an “Inverse Hash”"
+        },
+        {
+          "id": "c08-02-07",
+          "type": "single",
+          "prompt": "Two users shorten the same long URL separately. Must the system return the same short code to both?",
+          "options": [
+            "Yes: a hash function gives the same output for the same input",
+            "Not necessarily: it is a product decision, and each can get their own code",
+            "Yes: otherwise it breaks “a short URL must be unique”",
+            "Never: the same code would cause a hash collision"
+          ],
+          "answer": 1,
+          "explanation": "Uniqueness requires that one short code maps to only one long URL; it does not forbid one long URL having several short codes. Checking whether the long URL already exists and reusing its code is just one policy; if different users need separate stats, issue each one a code.",
+          "ref": "The Mapping Comes from the Database, Not an “Inverse Hash”"
+        },
+        {
+          "id": "c08-02-08",
+          "type": "fill",
+          "prompt": "Complete the approach for counting clicks one by one",
+          "text": "To observe every redirect request, the status code is usually [[302]], together with correct [[cache headers]].",
+          "distractors": [
+            "301",
+            "cookies",
+            "code length"
+          ],
+          "explanation": "A 302 is a temporary redirect and suits counting, but it does not absolutely forbid caching either; cache headers decide whether browsers and intermediate caches come back to the server each time. Changing only the status code and ignoring cache headers can still miss clicks.",
+          "ref": "Decide What to Measure, Then the Status Code"
+        },
+        {
+          "id": "c08-02-09",
+          "type": "single",
+          "prompt": "Why design “create a short URL” and “redirect” as two different paths?",
+          "options": [
+            "They use different HTTP methods, so they must be separate services",
+            "The two paths access different tables",
+            "Creation goes through the cache; redirects must hit the database directly",
+            "Creation must guarantee unique codes; read-heavy redirects must check the cache first"
+          ],
+          "answer": 3,
+          "explanation": "Creation is a low-frequency write that must produce a unique code, backed by a unique constraint; redirection is a high-frequency read that checks the cache first and queries the database on a miss. Both paths use one mapping table; they are designed separately because their concerns and scaling differ, not their HTTP methods.",
+          "ref": "A Short Template for the Interview Answer"
+        }
+      ]
+    },
+    {
+      "id": "c08-03",
+      "title": "Short Codes",
+      "summary": "Base62, truncated hashes, collisions, enumeration",
+      "exercises": [
+        {
+          "id": "c08-03-01",
+          "type": "single",
+          "prompt": "Encoding with `[0-9, a-z, A-Z]`, how many values can a 7-character short code represent at most?",
+          "options": [
+            "62^7 ≈ 3.5 trillion",
+            "36^7 ≈ 78.4 billion",
+            "10^7 = 10 million",
+            "16^7 ≈ 268 million"
+          ],
+          "answer": 0,
+          "explanation": "10 digits plus 52 upper- and lowercase letters make 62 symbols, and `62^7 = 3,521,614,606,208`, about 3.5 trillion, which covers 365 billion records. Digits plus lowercase letters only give 36^7, about 78.4 billion, which is not enough.",
+          "ref": "1. Base 62 Conversion"
+        },
+        {
+          "id": "c08-03-02",
+          "type": "single",
+          "prompt": "You take the first 7 characters of an MD5 hex digest as the short code. What happens at this problem’s scale?",
+          "options": [
+            "There is enough space; it is just slower to compute than Base62",
+            "There are only about 268 million codes, far fewer than 365 billion records",
+            "There are about 3.5 trillion codes, enough but with occasional collisions",
+            "No collisions, because MD5 gives different outputs for different inputs"
+          ],
+          "answer": 1,
+          "explanation": "Each hex position has only 16 values, so `16^7 ≈ 268 million`, less than a thousandth of 365 billion; codes run out long before the table fills. The 3.5 trillion figure is the 7-character Base62 space, and a truncated hash will certainly collide.",
+          "ref": "Truncating to 7 Hex Characters Is Not Enough Space"
+        },
+        {
+          "id": "c08-03-03",
+          "type": "judge",
+          "prompt": "In the space of 7 truncated hex characters, the birthday problem says the chance of a collision passes 50% after about 20,000 records.",
+          "answer": true,
+          "explanation": "A collision depends on any two records colliding, and the number of pairs grows with the square of the record count. In a space of about 268 million, the collision probability is already past one half at roughly 20,000 records, long before the space fills up.",
+          "ref": "Truncating to 7 Hex Characters Is Not Enough Space"
+        },
+        {
+          "id": "c08-03-04",
+          "type": "single",
+          "prompt": "If you insist on hashing yet want a 7-character code space of about 3.5 trillion, how should you derive the code?",
+          "options": [
+            "Run MD5 again on the first 7 hex characters",
+            "Take the first 9 hex characters for a larger space",
+            "Swap MD5 for SHA-1 and still take the first 7 hex characters",
+            "Take at least 42 bits of the hash, convert to Base62, and keep 7 characters"
+          ],
+          "answer": 3,
+          "explanation": "`62^7` is about 2^41.7, so you need at least 42 bits of hash information converted to Base62 to fill 7 characters. 9 hex characters give only about 68.7 billion and are longer; changing the hash function or hashing again cannot change the size of the 16^7 space.",
+          "ref": "Truncating to 7 Hex Characters Is Not Enough Space"
+        },
+        {
+          "id": "c08-03-05",
+          "type": "judge",
+          "prompt": "Once the space reaches about 3.5 trillion, new writes almost never collide even after 365 billion records are stored.",
+          "answer": false,
+          "explanation": "365 billion is about 10% of a 3.5 trillion space, so each randomly drawn code has roughly a one-in-ten chance of hitting an occupied one, and new writes keep colliding and retrying. Concurrent writes still need a unique constraint as the backstop.",
+          "ref": "Truncating to 7 Hex Characters Is Not Enough Space"
+        },
+        {
+          "id": "c08-03-06",
+          "type": "match",
+          "prompt": "Match each approach or component with its role in short code generation",
+          "pairs": [
+            [
+              "Base62 conversion",
+              "Needs a unique ID; a unique ID never collides"
+            ],
+            [
+              "Hash + collisions",
+              "Fixed length, but must handle collisions"
+            ],
+            [
+              "Bloom filter",
+              "Quickly rules out codes that are definitely free"
+            ],
+            [
+              "DB unique constraint",
+              "Final backstop for concurrent creation"
+            ]
+          ],
+          "explanation": "Both generation schemes have a cost: Base62 depends on an ID generator, and hashing must handle collisions. A Bloom filter can only confirm “definitely not present”; “maybe present” still needs an exact lookup. What truly guarantees uniqueness is an atomic mechanism such as a database unique constraint.",
+          "ref": "Comparison"
+        },
+        {
+          "id": "c08-03-07",
+          "type": "judge",
+          "prompt": "Once a Bloom filter says a candidate short code is “definitely absent”, you can write it directly without relying on a database unique constraint.",
+          "answer": false,
+          "explanation": "Two requests may both see “absent” at the same time and then each write the same short code. Concurrent creation needs an atomic backstop such as a unique constraint; a Bloom filter is only a sieve that speeds up existence checks.",
+          "ref": "A Bloom Filter Only Helps Filter"
+        },
+        {
+          "id": "c08-03-08",
+          "type": "single",
+          "prompt": "You generate short codes by encoding an auto-increment ID as Base62. What is the main new risk?",
+          "options": [
+            "Different IDs may encode to the same short code",
+            "A short code cannot be decoded back to the original ID",
+            "The code length cannot be controlled at all",
+            "Adjacent codes are easy to predict and can be enumerated"
+          ],
+          "answer": 3,
+          "explanation": "With sequential IDs, one short code lets you work out the codes before and after it, so they can be enumerated in bulk. Unique IDs encoded correctly never collide; the length grows with the ID, and you can pad with zeros for a fixed width.",
+          "ref": "Comparison"
+        },
+        {
+          "id": "c08-03-09",
+          "type": "order",
+          "prompt": "Put the “unique ID + Base62” link-creation flow in order",
+          "items": [
+            "Check whether the longURL already exists",
+            "If not, get an ID from the distributed ID generator",
+            "Convert the ID to a Base62 short code",
+            "Save the id, shortURL, and longURL mapping"
+          ],
+          "explanation": "Check for duplicates first to decide whether to reuse an existing code; then issue an ID, encode it, and write it to the database. A unique ID guarantees a unique short code, and the database unique index remains the last line of defense for concurrent creation.",
+          "ref": "URL Shortening Flow"
+        },
+        {
+          "id": "c08-03-10",
+          "type": "fill",
+          "prompt": "Complete the essential difference between the two code schemes",
+          "text": "Base62 is an [[encoding]], so a unique ID gives a unique short code; a truncated hash value can [[collide]], so you must detect and retry.",
+          "distractors": [
+            "encryption",
+            "compression",
+            "sorting"
+          ],
+          "explanation": "Base62 just writes the same number in a different base, so it can be undone one-to-one, and distinct IDs give distinct codes. A hash squeezes arbitrarily long input into a limited space, and truncating it makes collisions even more likely.",
+          "ref": "Hash Function"
+        }
+      ]
+    },
+    {
+      "id": "c08-04",
+      "title": "Scaling and Risks",
+      "summary": "Rate limits, hot keys, tiers, auth boundaries",
+      "exercises": [
+        {
+          "id": "c08-04-01",
+          "type": "single",
+          "prompt": "A team treats the short URL of a private document as an access credential: anyone who knows the code can view the document. What is wrong with that?",
+          "options": [
+            "A short code is only an address; private content still needs auth at the target service",
+            "It should switch to 301 so browsers remember the access permission",
+            "The code is too short; making it 10 characters would make it safe",
+            "Generating codes with MD5 instead would make them unguessable"
+          ],
+          "answer": 0,
+          "explanation": "The code space can be enumerated and links leak when forwarded, and a short URL service does not manage permissions. Private content must be protected by auth at the target service; longer codes or a different generator only make guessing harder, which is not authorization.",
+          "ref": "Start with a Small System"
+        },
+        {
+          "id": "c08-04-02",
+          "type": "multi",
+          "prompt": "For read-heavy redirect traffic, which scaling approaches make sense?",
+          "options": [
+            "Keep mappings only in memory, never in the database",
+            "Recompute the hash on every redirect to find the long URL",
+            "Keep the web tier stateless and add or remove servers with load",
+            "Replicate and shard the database",
+            "Check the cache first on redirects, then the database on a miss"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "A stateless web tier lets you simply add machines, the cache absorbs most redirect reads, and the database scales by replication and sharding. The book deliberately stores the mappings in a relational database; hashes are not reversible, so a redirect can only look up the mapping.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c08-04-03",
+          "type": "single",
+          "prompt": "Someone uses a script to call the create endpoint, submitting huge numbers of distinct long URLs to mass-produce short links. What is the most direct defense?",
+          "options": [
+            "Lengthen the short code to 10 characters",
+            "Rate limit by IP and similar dimensions",
+            "Check whether the longURL already exists before creating",
+            "Add a cache layer to the redirect path"
+          ],
+          "answer": 1,
+          "explanation": "Rate limiting caps the request rate per IP or similar dimension, which blocks the abuse directly. The long URLs are all different, so duplicate checks and reuse do not stop it; a cache speeds up redirect reads; and code length does not affect creation frequency.",
+          "ref": "Rate Limiter"
+        },
+        {
+          "id": "c08-04-04",
+          "type": "judge",
+          "prompt": "A first version can use just a relational database with a unique index, and add a cache once redirect reads are actually what strain the database.",
+          "answer": true,
+          "explanation": "Start small: make uniqueness and correctness hold first, then add components where the real bottleneck is. A cache exists for redirect reads; adding it before the pressure appears just means one more component to maintain.",
+          "ref": "Start with a Small System"
+        },
+        {
+          "id": "c08-04-05",
+          "type": "single",
+          "prompt": "One short URL suddenly goes viral and redirect requests pile onto a single code. Which failure mode needs the most attention?",
+          "options": [
+            "Write overload on the database shard holding that code",
+            "Base62 length overflow, running out of short codes",
+            "The ID generator running out of sequence numbers within one millisecond",
+            "A cache hotspot: reads concentrate on a single key"
+          ],
+          "answer": 3,
+          "explanation": "Reads concentrated on one key are a cache hotspot, and you must keep it from overwhelming a single cache node or falling through to the database. Going viral brings reads, not writes; ID issuing and code length only matter for creation.",
+          "ref": "Start with a Small System"
+        },
+        {
+          "id": "c08-04-06",
+          "type": "judge",
+          "prompt": "The web tier should keep each user’s session state, which makes it easier to scale by adding or removing servers.",
+          "answer": false,
+          "explanation": "It is the opposite: a stateless web tier, where any server can handle any request, is what lets you add or remove servers freely. Data that must be shared belongs in storage tiers such as the database and cache.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c08-04-07",
+          "type": "multi",
+          "prompt": "Someone enumerates Base62 short codes in sequence to bulk-scrape other people’s links. Which measures reduce this risk?",
+          "options": [
+            "Cache the redirect path to raise the hit rate",
+            "Switch to 302 so every redirect comes back to the service",
+            "Make short codes unpredictable so neighbors cannot be guessed",
+            "Have the target service authenticate private content",
+            "Rate limit by IP and similar dimensions to slow enumeration"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "Rate limiting slows enumeration, unpredictable codes make neighboring guesses useless, and auth at the target service means a leaked link still cannot show private content. Enumeration requests ask for new codes, so both 301 and 302 reach the service first; a cache only speeds up redirects and cannot stop enumeration.",
+          "ref": "Comparison"
+        },
+        {
+          "id": "c08-04-08",
+          "type": "fill",
+          "prompt": "Complete how each tier scales",
+          "text": "Keep the web tier [[stateless]] so you can add or remove servers directly; the database tier scales through replication and [[sharding]].",
+          "distractors": [
+            "stateful",
+            "compression",
+            "foreign keys"
+          ],
+          "explanation": "Statelessness lets the load balancer send a request to any web server; replication shares reads and adds fault tolerance, and sharding spreads the 365 billion mappings across many databases.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c08-04-09",
+          "type": "single",
+          "prompt": "A database node goes down. What mainly keeps short URL redirects working with as little interruption as possible?",
+          "options": [
+            "Adding web servers to share the redirect requests",
+            "Database replication, so a replica takes over on failure",
+            "Rate limiting, to reduce requests that hit the database",
+            "A Bloom filter that blocks nonexistent short codes"
+          ],
+          "answer": 1,
+          "explanation": "High availability comes from database replication and fault-tolerant design: a replica takes over from the failed node, and popular mappings in the cache keep being served. Adding web servers cannot fix a database outage; a Bloom filter and rate limiting only reduce load, and data on the failed node still cannot be read.",
+          "ref": "High Availability and Reliability"
+        },
+        {
+          "id": "c08-04-10",
+          "type": "single",
+          "prompt": "To evaluate how well short URL campaigns perform, what data is worth collecting on the redirect path?",
+          "options": [
+            "Periodically crawled and stored page content of the long URLs",
+            "Database queries per second and the cache hit rate",
+            "Click time, source, and similar data, with bots and prefetches filtered out",
+            "The creation time, creator, and long URL of each short code"
+          ],
+          "answer": 2,
+          "explanation": "Analysis cares about click-through rate, source, timestamps, and other user behavior; filter out the noise from bots and prefetches, and remember that once a 301 is cached, some clicks never reach the server at all. Database QPS, cache hit rate, and creation details say nothing about click behavior.",
+          "ref": "Analytics"
+        }
+      ]
+    }
+  ]
+}

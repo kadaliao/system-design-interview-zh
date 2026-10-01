@@ -1,0 +1,525 @@
+{
+  "chapter": 13,
+  "title": "Search Autocomplete",
+  "fullTitle": "Chapter 13: Design a Search Autocomplete System",
+  "intro": [
+    "**Learning goal**: Understand how to turn a query that must sort on every request into a precomputed prefix lookup.",
+    "**Remember first**: collect logs → aggregate frequencies → build the Trie → cache top-k on prefix nodes → return fast online.",
+    "**Common mistakes**: rebuilding the Trie on every keystroke; storing only per-word frequencies yet expecting prefix top-k for free; sharding by an even number of letters while ignoring hotspots."
+  ],
+  "keyPoints": [
+    "Separate query real-time from data real-time: suggestions should return within 100 ms, while rankings can update periodically.",
+    "A naive Trie must traverse a subtree and sort; caching top-k on each prefix node trades storage for query speed.",
+    "Append logs, aggregate into a frequency table, build a new Trie on a schedule; validate, warm up, switch whole versions, keep the old for rollback.",
+    "Remove harmful suggestions instantly with a filter layer on the query path; do physical deletion later in the background.",
+    "Prefix-range sharding hits short-prefix hotspots; pre-aggregate a global top-k, or query all shards in parallel and merge."
+  ],
+  "refs": {
+    "Requirements": "需求（Requirements）",
+    "Two Kinds of Real-Time": "批注：两类“实时”要分开",
+    "Do the Work Once, Then Attach the Answer to the Node": "批注：先做工作，再把答案贴在节点上",
+    "Step 2: High-Level Design": "步骤 2：高层设计（High-Level Design）",
+    "Key Features": "核心特性（Key Features）",
+    "Query Service": "查询服务（Query Service）",
+    "Key Features#2": "核心特性（Key Features）#2",
+    "Query Processing Flow": "查询处理流程（Query Processing Flow）",
+    "Data Gathering Pipeline": "数据采集流水线（Data Gathering Pipeline）",
+    "Updated Design": "改进设计（Updated Design）",
+    "Trie Operations": "Trie 操作（Trie Operations）",
+    "Complete Version Switch": "批注：版本切换要完整",
+    "Scalability": "可扩展性（Scalability）",
+    "Short Prefixes Are Hotspots": "批注：短前缀是热点",
+    "Optimizations": "优化（Optimizations）",
+    "The Front End Matters Too": "批注：前端也影响体验",
+    "Multi-Language Support": "多语言（Multi-Language Support）",
+    "Trending Queries": "热门趋势（Trending Queries）"
+  },
+  "lessons": [
+    {
+      "id": "c13-01",
+      "title": "Scope and Numbers",
+      "summary": "Requirements, request volume, two kinds of real-time",
+      "exercises": [
+        {
+          "id": "c13-01-01",
+          "type": "single",
+          "prompt": "10 million DAU, each user searches 10 times a day, each query averages 20 characters, and every character typed sends one request. What is the average QPS?",
+          "options": [
+            "About 2,300",
+            "About 230,000",
+            "About 23,000",
+            "About 48,000"
+          ],
+          "answer": 2,
+          "explanation": "10 million × 10 × 20 = 2 billion requests/day, ÷ 86,400 s ≈ 23,000 QPS. The 48,000 QPS in the requirements is the peak, about 2 times the average. Every character triggers a request, so request volume is far higher than the number of searches.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c13-01-02",
+          "type": "judge",
+          "prompt": "The requirements’ 48,000 QPS and 0.4 GB of new data per day are both design assumptions; a real estimate also needs the number of searches, characters per query, and the share of new queries.",
+          "answer": true,
+          "explanation": "Both numbers are the chapter’s design assumptions, not derived figures. If user behavior changes (say, each person searches only 3 times a day), QPS and storage growth change with it, so say your assumptions out loud in an interview.",
+          "ref": "Two Kinds of Real-Time"
+        },
+        {
+          "id": "c13-01-03",
+          "type": "fill",
+          "prompt": "Complete the difference between the two kinds of “real-time”",
+          "text": "Seeing suggestions right after typing is [[query real-time]]; having every search immediately change the ranking is [[data real-time]]. This chapter prioritizes the former.",
+          "distractors": [
+            "strong consistency",
+            "hard real-time",
+            "eventual consistency"
+          ],
+          "explanation": "The two kinds of real-time have very different costs. Query real-time comes from precomputation and caching; data real-time means changing the index on every search. This chapter lets rankings update periodically, in exchange for simple, stable online queries.",
+          "ref": "Two Kinds of Real-Time"
+        },
+        {
+          "id": "c13-01-04",
+          "type": "judge",
+          "prompt": "To make suggestions “real-time”, the ranking in the Trie must be updated immediately every time someone searches.",
+          "answer": false,
+          "explanation": "This confuses the two kinds of real-time. Users want results right after they type; they don’t need rankings to change every second. Updating the Trie per search is expensive, and popular suggestions rarely change much from one second to the next.",
+          "ref": "Two Kinds of Real-Time"
+        },
+        {
+          "id": "c13-01-05",
+          "type": "single",
+          "prompt": "Suggestions must return within 100 ms, at most 5 of them, ranked by popularity. Which approach fits best?",
+          "options": [
+            "Prebuild a Trie with top-k in the background, then look it up online",
+            "Scan all historical queries and sort them on every request",
+            "Rewrite the frequencies in the Trie on every search",
+            "Send all query logs to the browser and compute locally"
+          ],
+          "answer": 0,
+          "explanation": "Move heavy work like sorting to the background and compute it ahead of time; online, you only walk to the prefix node and read the result, which keeps latency stable under 100 ms. Scanning on demand or rewriting on every search makes the online path heavy.",
+          "ref": "Do the Work Once, Then Attach the Answer to the Node"
+        },
+        {
+          "id": "c13-01-06",
+          "type": "match",
+          "prompt": "Match each autocomplete component with its role",
+          "pairs": [
+            [
+              "Data gathering service",
+              "Collects queries and aggregates frequencies"
+            ],
+            [
+              "Query service",
+              "Answers user input, returns top-k suggestions"
+            ],
+            [
+              "Frequency table",
+              "Stores how often each query was searched"
+            ],
+            [
+              "Trie",
+              "Layers by character, shares common prefixes"
+            ]
+          ],
+          "explanation": "The system splits into an offline half and an online half: the gathering service aggregates logs into a frequency table and builds the Trie, while the query service only fetches results from the Trie by prefix. Keeping them separate lets each scale on its own.",
+          "ref": "Step 2: High-Level Design"
+        },
+        {
+          "id": "c13-01-07",
+          "type": "multi",
+          "prompt": "Which of these are in scope for this chapter’s autocomplete?",
+          "options": [
+            "Personalized ranking from each user’s history",
+            "Automatic spelling correction",
+            "Ranking by query frequency",
+            "Lowercase English characters only",
+            "Returning at most 5 suggestions"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "The chapter narrows the scope to 5 suggestions, ranked by popularity, lowercase English only, returned within 100 ms. Spelling correction and personalization are common extensions but not part of these requirements; clarify first, then decide whether to build them.",
+          "ref": "Key Features"
+        },
+        {
+          "id": "c13-01-08",
+          "type": "single",
+          "prompt": "The frequency table has tree 50, twitter 35, twitch 29, twilight 25, tweet 15, twin 10, twist 9. The user types tw. Which 5 suggestions should be returned?",
+          "options": [
+            "twitter, twitch, twilight, tweet, twist",
+            "tree, twitter, twitch, twilight, tweet",
+            "tweet, twilight, twin, twist, twitch",
+            "twitter, twitch, twilight, tweet, twin"
+          ],
+          "answer": 3,
+          "explanation": "Look only at queries starting with tw and take the top 5 by frequency: twitter 35, twitch 29, twilight 25, tweet 15, twin 10. tree has the highest frequency but doesn’t start with tw; twist (9) ranks sixth; alphabetical order doesn’t satisfy the popularity requirement.",
+          "ref": "Query Service"
+        }
+      ]
+    },
+    {
+      "id": "c13-02",
+      "title": "Trie Queries",
+      "summary": "Prefix lookup, cached top-k per node, and its cost",
+      "exercises": [
+        {
+          "id": "c13-02-01",
+          "type": "order",
+          "prompt": "Put the steps of a naive Trie prefix top-k lookup in order",
+          "items": [
+            "Walk from the root to the prefix node",
+            "Traverse its subtree and collect all complete queries",
+            "Sort by frequency",
+            "Return the first k"
+          ],
+          "explanation": "The naive approach spends its time in two steps: traversing the subtree and sorting. The shorter the prefix, the bigger the subtree, and the more words to collect and sort. Caching top-k on each node moves exactly those two steps into background precomputation.",
+          "ref": "Key Features#2"
+        },
+        {
+          "id": "c13-02-02",
+          "type": "single",
+          "prompt": "Once every prefix node caches its top-k, what does the cost of one query mainly depend on?",
+          "options": [
+            "The average character length of candidate words",
+            "The prefix length (steps to reach the node)",
+            "The total number of words under the prefix node",
+            "The total number of queries in the frequency table"
+          ],
+          "answer": 1,
+          "explanation": "With caching, you only walk the prefix character by character to the node and read the k ready-made results; no matter how large the subtree, you don’t traverse it. Add a prefix length cap (say, 50 characters) and the cost of a single query has an upper bound.",
+          "ref": "Do the Work Once, Then Attach the Answer to the Node"
+        },
+        {
+          "id": "c13-02-03",
+          "type": "judge",
+          "prompt": "Caching top-k on every node speeds up queries without increasing storage.",
+          "answer": false,
+          "explanation": "Each node now stores an extra candidate list, so storage clearly grows. This is the classic trade of space for time: extra storage saves the online traversal and sorting.",
+          "ref": "Do the Work Once, Then Attach the Answer to the Node"
+        },
+        {
+          "id": "c13-02-04",
+          "type": "single",
+          "prompt": "Why limit the query prefix length to something like 50 characters?",
+          "options": [
+            "To keep extremely long inputs from blowing up lookup and caching costs",
+            "English words are at most 50 letters long",
+            "Queries longer than 50 characters can’t be stored in a Trie",
+            "Browsers can send at most 50 characters"
+          ],
+          "answer": 0,
+          "explanation": "Almost nobody types a very long prefix and waits for suggestions. With a cap, the steps to reach a node have an upper bound, and you don’t build nodes and caches for overlong prefixes. It’s a deliberate engineering limit, not a limit of word length, browsers, or the Trie itself.",
+          "ref": "Key Features#2"
+        },
+        {
+          "id": "c13-02-05",
+          "type": "judge",
+          "prompt": "The frequency of an individual query is usually stored on that query’s end node, while prefix nodes cache an aggregated candidate list.",
+          "answer": true,
+          "explanation": "These are different data. The end node answers “how many times was this word searched”; a prefix node’s top-k answers “which few words starting with this prefix are most popular”, and the latter is aggregated from the former.",
+          "ref": "Do the Work Once, Then Attach the Answer to the Node"
+        },
+        {
+          "id": "c13-02-06",
+          "type": "single",
+          "prompt": "This week bee’s search count rises from 20 to 40; all other words are unchanged. On rebuild, whose cached top-k might change?",
+          "options": [
+            "The bee node and every node in the subtree below it",
+            "The prefix nodes on the path from the root to bee",
+            "Only bee’s end node",
+            "Every node in the whole Trie"
+          ],
+          "answer": 1,
+          "explanation": "bee appears only in the candidate lists of its own prefixes (root, b, be, bee), so those nodes’ top-k may change. Nodes below bee, such as beef, count only words starting with beef, which doesn’t include bee; other branches like ca are unaffected too.",
+          "ref": "Do the Work Once, Then Attach the Answer to the Node"
+        },
+        {
+          "id": "c13-02-07",
+          "type": "fill",
+          "prompt": "Complete the difference between naive and optimized queries",
+          "text": "A naive query traverses the whole [[subtree]] under the prefix node and then sorts; the optimized one reads the cached [[top-k]] list on the node directly.",
+          "distractors": [
+            "parent node",
+            "frequency table",
+            "sibling node"
+          ],
+          "explanation": "The shorter the prefix, the bigger the subtree and the slower the naive approach. The optimized version uses the node’s cache in the “top-k sort” step of query processing, skipping traversal and sorting; only the walk to the node and building the response remain.",
+          "ref": "Query Processing Flow"
+        },
+        {
+          "id": "c13-02-08",
+          "type": "multi",
+          "prompt": "Which statements about a Trie are correct?",
+          "options": [
+            "A Trie can directly find queries that contain an arbitrary substring",
+            "Caching top-k on nodes trades space for time",
+            "Querying ca takes two steps from the root, c then a, to reach the prefix node",
+            "It layers by character, so a common prefix is stored once",
+            "The number of nodes depends only on the number of query words, not their length"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "A Trie is organized by prefix: it excels at “starts with” lookups and doesn’t help with “contains a substring”. The node count equals the number of distinct prefixes, so longer words with less shared prefix mean more nodes.",
+          "ref": "Key Features#2"
+        }
+      ]
+    },
+    {
+      "id": "c13-03",
+      "title": "Build and Update",
+      "summary": "Log aggregation, rebuilds, filtering, version switch",
+      "exercises": [
+        {
+          "id": "c13-03-01",
+          "type": "multi",
+          "prompt": "Why does the chapter replace “update on every query” with periodic batch builds of the Trie?",
+          "options": [
+            "Popular suggestions rarely change much every second",
+            "There may be billions of queries a day, so updating the Trie per query is expensive",
+            "A Trie can’t accept new nodes at all",
+            "After a batch build, query logs no longer need to be kept"
+          ],
+          "answers": [
+            0,
+            1
+          ],
+          "explanation": "On one side is cost: every query would update frequencies and top-k along its path. On the other is benefit: rankings rarely swing every second, and users can’t tell if they update in real time. Logs are still the raw material for the next build, and a Trie can be modified.",
+          "ref": "Data Gathering Pipeline"
+        },
+        {
+          "id": "c13-03-02",
+          "type": "order",
+          "prompt": "Put the improved data gathering and build flow in order",
+          "items": [
+            "Queries are appended to the analytics log",
+            "The aggregator builds a frequency table per time window",
+            "Workers build the new Trie asynchronously",
+            "Validate and warm up the new version",
+            "The query service switches to the new version"
+          ],
+          "explanation": "The log is append-only, aggregation runs in batches per time window, and the build finishes asynchronously in the background. The new version is validated and warmed up before a whole-version switch, and the old version is kept for rollback, so online queries are never affected by the build.",
+          "ref": "Updated Design"
+        },
+        {
+          "id": "c13-03-03",
+          "type": "judge",
+          "prompt": "The analytics log is append-only and has no query index, because it only feeds later batch aggregation and doesn’t serve online queries.",
+          "answer": true,
+          "explanation": "The log’s reader is the aggregator, which scans whole batches by time window and needs no random lookups. Skipping indexes keeps writes cheap; online queries go through the Trie, not the log.",
+          "ref": "Updated Design"
+        },
+        {
+          "id": "c13-03-04",
+          "type": "single",
+          "prompt": "A social platform that stresses instant trends builds autocomplete. How should the aggregation step change?",
+          "options": [
+            "Shorten the aggregation window and update more often",
+            "Keep it weekly; trends don’t matter",
+            "Skip aggregation and sort the raw logs directly",
+            "Rebuild the whole Trie on every search"
+          ],
+          "answer": 0,
+          "explanation": "The chapter notes that a platform like Twitter, which stresses instant trends, can shorten the time window, while other scenarios may be fine with weekly. The window is an adjustable knob; you needn’t go to the extreme of rebuilding on every search.",
+          "ref": "Updated Design"
+        },
+        {
+          "id": "c13-03-05",
+          "type": "match",
+          "prompt": "Match each pipeline component with its role",
+          "pairs": [
+            [
+              "Trie Cache",
+              "Distributed cache; Trie in memory for fast reads"
+            ],
+            [
+              "Document store",
+              "Periodic snapshots of the whole serialized Trie"
+            ],
+            [
+              "KV store",
+              "Each prefix is a key, node data is the value"
+            ],
+            [
+              "Aggregator",
+              "Turns raw logs into a frequency table"
+            ]
+          ],
+          "explanation": "The three stores have different jobs: the in-memory cache serves online reads, the document store keeps snapshots of the whole tree, and the KV store splits the tree into “prefix → node data” so you can fetch by prefix directly. The aggregator sits upstream and produces the raw material for building the Trie.",
+          "ref": "Updated Design"
+        },
+        {
+          "id": "c13-03-06",
+          "type": "single",
+          "prompt": "A suggestion containing hate speech is found, and you want it gone as soon as possible. What is the best approach?",
+          "options": [
+            "Shut down, rebuild the whole Trie, then relaunch",
+            "Wait for next week’s routine build to remove it",
+            "Hide it only on the client; do nothing on the server",
+            "Block it in the filter layer, delete it physically later"
+          ],
+          "answer": 3,
+          "explanation": "The filter layer removes harmful suggestions by rule before returning them, so a rule change takes effect immediately without waiting for a rebuild; physical deletion happens asynchronously in the background. Waiting a week is too slow, and a shutdown rebuild hurts the service.",
+          "ref": "Trie Operations"
+        },
+        {
+          "id": "c13-03-07",
+          "type": "judge",
+          "prompt": "Once the new Trie is built, you can simply overwrite the old Trie’s nodes in place without affecting queries in flight.",
+          "answer": false,
+          "explanation": "While overwriting and serving at the same time, a query can read a half-new, half-old mix. Build the new version first, validate and warm it up, then switch over as a whole, keeping the old version for rollback.",
+          "ref": "Complete Version Switch"
+        },
+        {
+          "id": "c13-03-08",
+          "type": "fill",
+          "prompt": "Complete the fix for sudden trending terms",
+          "text": "Periodic builds mean a new trend appears only in the next version; add a small [[real-time delta layer]], and [[merge]] it with the periodically built Trie before returning.",
+          "distractors": [
+            "filter layer",
+            "replace",
+            "sharding"
+          ],
+          "explanation": "The whole Trie is still rebuilt periodically; only a few sudden trends go into a lightweight real-time layer, and queries merge results from both. You keep the stability of batch processing and still keep up with breaking events.",
+          "ref": "Complete Version Switch"
+        }
+      ]
+    },
+    {
+      "id": "c13-04",
+      "title": "Sharding & Client",
+      "summary": "Prefix shards, hotspots, front end, languages",
+      "exercises": [
+        {
+          "id": "c13-04-01",
+          "type": "single",
+          "prompt": "After splitting by first letter into a-m and n-z on two servers, the first holds far more data and load than the second. Sticking with prefix-range sharding, what is the best adjustment?",
+          "options": [
+            "Give the first server a machine with more memory",
+            "Shard by the length of the query word instead",
+            "Reject some queries that start with a-m",
+            "Keep splitting oversized ranges, such as aa-ag"
+          ],
+          "answer": 3,
+          "explanation": "The first-letter distribution of English words is naturally uneven, so an even split by letter will always be skewed. The chapter’s fix is to keep splitting oversized ranges, with a shard map manager recording the mapping and routing queries. A bigger machine is only vertical scaling and hits a ceiling as data keeps growing.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c13-04-02",
+          "type": "judge",
+          "prompt": "If prefixes are split evenly by letter range across shards, traffic across the shards will also be roughly even.",
+          "answer": false,
+          "explanation": "Even letter ranges don’t mean even traffic: queries starting with s or c far outnumber those starting with x or z, and short prefixes concentrate lots of requests. Monitor the prefix access distribution first, then decide the shard boundaries.",
+          "ref": "Short Prefixes Are Hotspots"
+        },
+        {
+          "id": "c13-04-03",
+          "type": "single",
+          "prompt": "The user has typed only a, and the data starting with a is spread across several sub-shards. How do you return the correct top-k?",
+          "options": [
+            "Take 5 from each shard and return them all concatenated",
+            "Return an empty result and wait for more characters",
+            "Query just one sub-shard and return its result",
+            "Pre-aggregate the global top-k, or query all shards and merge"
+          ],
+          "answer": 3,
+          "explanation": "A single sub-shard knows only its own words, so its top-k is not the global top-k. Either pre-aggregate the global result for short prefixes offline, or query all shards in parallel, merge, and take the top k again by frequency; plain concatenation exceeds 5 and the order is wrong.",
+          "ref": "Short Prefixes Are Hotspots"
+        },
+        {
+          "id": "c13-04-04",
+          "type": "match",
+          "prompt": "Match each optimization with its role",
+          "pairs": [
+            [
+              "Shard map manager",
+              "Maps prefixes to shards and routes queries"
+            ],
+            [
+              "AJAX requests",
+              "Fetches suggestions while typing, no page reload"
+            ],
+            [
+              "Browser cache",
+              "Reuses results for common prefixes locally"
+            ],
+            [
+              "Filter layer",
+              "Removes harmful suggestions before returning"
+            ],
+            [
+              "Per-country Tries",
+              "Fit each region’s language and popular queries"
+            ]
+          ],
+          "explanation": "The shard map manager answers “which server to ask”; AJAX and the browser cache improve the front-end experience; the filter layer guards content safety; and per-country Tries serve multiple languages and regional differences.",
+          "ref": "Optimizations"
+        },
+        {
+          "id": "c13-04-05",
+          "type": "single",
+          "prompt": "The user types c, ca, cat quickly, but the response for ca arrives later than the one for cat. What happens if you don’t handle it?",
+          "options": [
+            "The server handles them in arrival order, so responses never arrive out of order",
+            "The suggestions jump back to ca’s results, so stale responses should be discarded",
+            "The server automatically rejects the stale ca request",
+            "Nothing, the browser sorts responses into the order they were sent"
+          ],
+          "answer": 1,
+          "explanation": "Async requests go out concurrently, each with its own processing and network time, so the return order isn’t guaranteed to match the send order; the late ca response would overwrite cat’s results. Have responses carry the prefix or a request ID, and let the client show only the one that matches the current input.",
+          "ref": "The Front End Matters Too"
+        },
+        {
+          "id": "c13-04-06",
+          "type": "judge",
+          "prompt": "When the browser caches results for common prefixes, it needs a sensible TTL; otherwise old suggestions can still appear after the server’s filter rules are updated.",
+          "answer": true,
+          "explanation": "A suggestion newly blocked by the filter layer may still sit in a user’s browser cache. The TTL limits how long stale results can live, a trade-off between the benefit of browser caching and how quickly server rules take effect.",
+          "ref": "The Front End Matters Too"
+        },
+        {
+          "id": "c13-04-07",
+          "type": "multi",
+          "prompt": "To extend autocomplete to multiple languages, which pieces of work are needed?",
+          "options": [
+            "Normalize text and follow each language’s product rules",
+            "Remove the top-k cache on each node",
+            "Represent non-English characters in Unicode",
+            "Build different Tries per country or region",
+            "Build a separate Trie for each user"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Unicode handles character representation and per-region Tries fit different languages and trending terms, but you also need normalization and each language’s product rules; changing the encoding alone is far from enough. The top-k cache is language-independent, and a Trie per user is unaffordable.",
+          "ref": "Multi-Language Support"
+        },
+        {
+          "id": "c13-04-08",
+          "type": "fill",
+          "prompt": "Complete how prefix sharding works",
+          "text": "The Trie is split across servers by [[prefix range]], for example a-m and n-z; a query first consults the shard map, then is [[routed]] to the right shard.",
+          "distractors": [
+            "user ID",
+            "hash value",
+            "broadcast"
+          ],
+          "explanation": "With prefix-range sharding, all data for a prefix lands on one shard, so a query touches just one shard (short prefixes are the exception). The shard map manager stores the mapping, and uneven ranges can be split further.",
+          "ref": "Scalability"
+        },
+        {
+          "id": "c13-04-09",
+          "type": "judge",
+          "prompt": "A sudden trend can only show up after the next periodic Trie build.",
+          "answer": false,
+          "explanation": "The chapter suggests updating the relevant nodes dynamically, or weighting recent queries more heavily, to react to live events; you can also add a small real-time delta layer for trending terms and merge it with the periodically built Trie.",
+          "ref": "Trending Queries"
+        }
+      ]
+    }
+  ]
+}

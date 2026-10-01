@@ -1,0 +1,553 @@
+{
+  "chapter": 23,
+  "title": "Distributed Email Service",
+  "fullTitle": "Chapter 23: Distributed Email Service",
+  "intro": [
+    "Think of a mailbox as each person’s own data library: the raw emails must be stored reliably, the inbox is a query view, and the search index is another copy that can be rebuilt. **“Accepted for sending” does not mean “delivered.” SMTP moves mail between servers; HTTP and IMAP let users read it.**"
+  ],
+  "keyPoints": [
+    "SMTP moves mail between servers; HTTP and IMAP let users read it. Accepted, accepted remotely, in the inbox, and read are different successes.",
+    "Persist before replying “accepted”; reject or quarantine invalid mail. Retry outbound 4xx with backoff, record 5xx as failed; diagnose any backlog.",
+    "Partition metadata by user_id and sort by timeuuid. Attachment bytes go in object storage; the database keeps only the reference, size, and checksum.",
+    "Read/unread query tables make reads simple, but every state change must then update several views, idempotently and tolerating out-of-order events.",
+    "The search index is a rebuildable async view. If new mail isn’t searchable, check the index queue watermark; a drained queue isn’t proof.",
+    "Deliverability relies on IP warm-up, traffic separation, and SPF/DKIM, but none guarantees the inbox. Replication is not a backup."
+  ],
+  "refs": {
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Email Knowledge 101": "邮件基础（Email knowledge 101）",
+    "Traditional Mail Servers": "传统邮件服务器（Traditional mail servers）",
+    "Distributed Mail Servers": "分布式邮件服务器（Distributed mail servers）",
+    "Metadata Database": "元数据数据库（Metadata database）",
+    "Email Deliverability": "邮件送达能力（Email deliverability）",
+    "Search": "搜索（Search）",
+    "Scalability and Availability": "可扩展性与可用性（Scalability and availability）"
+  },
+  "lessons": [
+    {
+      "id": "c23-01",
+      "title": "Needs & Protocols",
+      "summary": "Scale estimates and what each protocol does",
+      "exercises": [
+        {
+          "id": "c23-01-01",
+          "type": "single",
+          "prompt": "With 1 billion users each sending 10 emails a day, roughly how many emails are sent per second on average?",
+          "options": [
+            "About 10,000",
+            "About 1,000",
+            "About 100,000",
+            "About 1 million"
+          ],
+          "answer": 2,
+          "explanation": "10 billion emails a day ÷ 86,400 ≈ 116,000 per second, so the order of magnitude is about 100,000. 10,000 is one order of magnitude too low, and 1 million is one too high.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c23-01-02",
+          "type": "fill",
+          "prompt": "Complete the yearly storage estimate (1 billion users, each receiving 40 emails a day)",
+          "text": "Each email has 50 KB of metadata, about [[730 PB]] a year; 20% of emails carry a 500 KB average attachment, about [[1,460 PB]] a year.",
+          "distractors": [
+            "73 PB",
+            "146 PB",
+            "2,190 PB"
+          ],
+          "explanation": "40 billion emails a day × 50 KB = 2 PB a day, about 730 PB a year. Attachments: 40 billion × 20% × 500 KB = 4 PB a day, about 1,460 PB a year. Together that is about 2,190 PB, before replicas, indexes, and encoding overhead.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c23-01-03",
+          "type": "judge",
+          "prompt": "In this chapter’s estimate, the 50 KB of “metadata” per email actually includes the message body, not just a few hundred bytes of headers.",
+          "answer": true,
+          "explanation": "Here “metadata” includes the body, unlike the few hundred bytes a header alone takes. So the metadata DB holds the subject, body, sender, recipients, and so on, and only attachments go to object storage.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c23-01-04",
+          "type": "match",
+          "prompt": "Match each protocol or record with its role in an email system",
+          "pairs": [
+            [
+              "SMTP",
+              "Servers send and exchange email"
+            ],
+            [
+              "POP",
+              "Downloads remote mail to the local device"
+            ],
+            [
+              "IMAP",
+              "Mail stays on the server, synced across devices"
+            ],
+            [
+              "HTTP",
+              "Web clients call the mailbox service API"
+            ],
+            [
+              "MX record",
+              "Tells senders a domain’s receiving server"
+            ]
+          ],
+          "explanation": "SMTP carries mail between servers. POP and IMAP are for users fetching mail; IMAP treats the server as the source of truth, so it suits multiple devices. Here, web clients call an API over HTTP. A sender looks up the target domain’s MX record to learn which server to hand the mail to.",
+          "ref": "Email Knowledge 101"
+        },
+        {
+          "id": "c23-01-05",
+          "type": "judge",
+          "prompt": "The requirements say clients access mailboxes over HTTP, so mail exchange with external email systems should switch to HTTP too.",
+          "answer": false,
+          "explanation": "HTTP replaces only the “user reads mail” interface. Servers still use SMTP between themselves, especially when exchanging mail with other providers, and native clients can still use IMAP or POP.",
+          "ref": "Email Knowledge 101"
+        },
+        {
+          "id": "c23-01-06",
+          "type": "judge",
+          "prompt": "After fetching mail over POP, whether the server keeps or deletes the messages depends on the client’s actions and settings.",
+          "answer": true,
+          "explanation": "POP is often described as deleting server mail after download, but that is not mandatory: the client’s actions and settings decide. IMAP, however, naturally treats the server as the source of truth, which suits multi-device sync better.",
+          "ref": "Email Knowledge 101"
+        },
+        {
+          "id": "c23-01-07",
+          "type": "single",
+          "prompt": "A user uploads a 3 MB attachment, which is Base64-encoded into the email. About how large is it on the wire?",
+          "options": [
+            "About 6 MB; encoding doubles the size",
+            "About 4 MB, plus MIME headers and line breaks",
+            "Still 3 MB; encoding doesn’t change the size",
+            "About 2.25 MB; encoding compresses the data"
+          ],
+          "answer": 1,
+          "explanation": "Base64 turns every 3 bytes into 4 characters, so size grows to about 4/3: 3 MB becomes about 4 MB, plus MIME headers and line breaks. So don’t compare the uploaded file size directly with a provider’s attachment limit as if it were the email size.",
+          "ref": "Email Knowledge 101"
+        },
+        {
+          "id": "c23-01-08",
+          "type": "order",
+          "prompt": "Alice sends an email from Outlook to Bob on Gmail. Put the traditional flow in order",
+          "items": [
+            "Alice hands the mail to her sender’s server over SMTP",
+            "The sender’s server looks up gmail.com’s MX",
+            "The sender’s server relays it to Gmail over SMTP",
+            "Bob fetches it from Gmail over IMAP/POP"
+          ],
+          "explanation": "The sender first hands the mail to her own mail server. That server looks up the target domain’s MX record to find the receiving server, then relays the mail over SMTP. The recipient finally fetches it from his own server over IMAP/POP.",
+          "ref": "Traditional Mail Servers"
+        },
+        {
+          "id": "c23-01-09",
+          "type": "single",
+          "prompt": "A traditional single mail server stores each email as a file in a local directory. As the user base grows, which problem shows up first?",
+          "options": [
+            "A single server can only offer POP, not IMAP",
+            "SMTP itself can’t carry that many users",
+            "Local directories can’t separate users’ mail",
+            "Disk I/O becomes a bottleneck and single failures hurt"
+          ],
+          "answer": 3,
+          "explanation": "Single-machine storage works for a few users. As it grows, disk I/O can’t keep up, and a disk failure or outage hurts reliability and availability, which a distributed design solves. SMTP isn’t the bottleneck (servers still use it), directories already separate users, and one machine can serve IMAP.",
+          "ref": "Traditional Mail Servers"
+        }
+      ]
+    },
+    {
+      "id": "c23-02",
+      "title": "Send & Receive",
+      "summary": "Outbound queue, inbound storage, success semantics",
+      "exercises": [
+        {
+          "id": "c23-02-01",
+          "type": "order",
+          "prompt": "Put the distributed email service’s sending flow in order",
+          "items": [
+            "The load balancer entry point limits excessive sending",
+            "Web servers run basic checks such as size",
+            "Mail that passes goes into the outbound queue",
+            "An outbound SMTP worker checks spam and viruses, delivers"
+          ],
+          "explanation": "The entry point first blocks abusive sending, and web servers run basic checks such as size. Valid mail goes into the outbound queue (attachments are passed as object storage references) and failures go to an error queue. Outbound workers pull asynchronously, check spam and viruses, then deliver to the target server.",
+          "ref": "Distributed Mail Servers"
+        },
+        {
+          "id": "c23-02-02",
+          "type": "single",
+          "prompt": "The outbound queue keeps backing up, and you find the destination mail server is rate limiting you. What is the better action?",
+          "options": [
+            "Retry with exponential backoff; don’t blindly add workers",
+            "Double the outbound workers right away",
+            "Switch to pushing directly to their server over HTTP",
+            "Drop the backlogged emails to avoid overloading the system"
+          ],
+          "answer": 0,
+          "explanation": "The cause of a backlog decides the action. If the other side is rate limiting, more workers just send harder and get limited harder, so retry with exponential backoff; scaling out helps only when consumers are short. Dropping mail breaks “never lose an email,” and servers don’t switch to HTTP between themselves.",
+          "ref": "Distributed Mail Servers"
+        },
+        {
+          "id": "c23-02-03",
+          "type": "judge",
+          "prompt": "When the recipient is in the same domain as the sender, the mail takes a short internal path and can skip the spam check.",
+          "answer": false,
+          "explanation": "Same-domain delivery can skip external SMTP and save a hop, but spam must still be checked first: spam and phishing can come from accounts in your own domain too.",
+          "ref": "Distributed Mail Servers"
+        },
+        {
+          "id": "c23-02-04",
+          "type": "single",
+          "prompt": "In an SMTP session, the server replies 250 after `RCPT TO`. What does that mean?",
+          "options": [
+            "The email is already in the recipient’s inbox",
+            "The full email has been received and the server owns delivery",
+            "The recipient has already opened the email",
+            "This one recipient is accepted; the body hasn’t been sent yet"
+          ],
+          "answer": 3,
+          "explanation": "A 250 depends on the stage it comes in. After RCPT TO, a 250 only accepts that recipient. A 354 after DATA merely permits the body to be sent. Only the success reply after the complete DATA ends means the other side has taken over responsibility for delivery. Inbox placement and reading come even later.",
+          "ref": "Q23-01"
+        },
+        {
+          "id": "c23-02-05",
+          "type": "multi",
+          "prompt": "A relay SMTP server replies 250 after the complete DATA ends. Which conclusions can you draw?",
+          "options": [
+            "The relay has taken over responsibility for further delivery or hand-off",
+            "The other side won’t classify it as spam",
+            "On a later temporary failure, it should retry or send a failure notice",
+            "The recipient has read the email",
+            "The email is already in the recipient’s inbox"
+          ],
+          "answers": [
+            0,
+            2
+          ],
+          "explanation": "A 250 after complete DATA means the server has taken over delivery. Under RFC 5321 it must not drop the mail casually; it should retry or generate a bounce. It doesn’t prove the mail reached the inbox, let alone was read: the destination system can still file it as spam or quarantine it after accepting.",
+          "ref": "Q23-01"
+        },
+        {
+          "id": "c23-02-06",
+          "type": "fill",
+          "prompt": "Complete how outbound delivery handles the two kinds of failure replies",
+          "text": "On a temporary [[4xx]] reply, retry with backoff; on a permanent [[5xx]] reply, record the rejection reason and stop, without resending forever.",
+          "distractors": [
+            "1xx",
+            "2xx",
+            "3xx"
+          ],
+          "explanation": "4xx means a temporary problem (the other side is busy or rate limiting), so a later attempt may succeed. 5xx is a permanent rejection (for example, the recipient doesn’t exist), so retrying is pointless; produce a traceable failure result. With several recipients, some may succeed and others fail, so track each separately.",
+          "ref": "Q23-01"
+        },
+        {
+          "id": "c23-02-07",
+          "type": "single",
+          "prompt": "When may the receiving SMTP server reply “accepted” to the sender?",
+          "options": [
+            "After the email has a durable copy that meets the reliability target",
+            "After the real-time notification has been pushed to the user’s client",
+            "Right after the email is placed in this machine’s in-memory queue",
+            "After the email has been written to the search index"
+          ],
+          "answer": 0,
+          "explanation": "Replying success means taking on the duty not to lose the email, so it must already be persisted before you promise; if it’s only in memory, a crash loses it. Real-time notification and search indexing are later asynchronous views that may fail for a while and must not block the acknowledgement.",
+          "ref": "Distributed Mail Servers"
+        },
+        {
+          "id": "c23-02-08",
+          "type": "judge",
+          "prompt": "If the real-time push service fails temporarily, users should still be able to read the new email from the durable mailbox through the HTTP API.",
+          "answer": true,
+          "explanation": "The WebSocket push is just a notification channel that speeds up “seeing the new email.” The email is already stored durably, so an offline user, or one whose push failed, can still read it through the API after coming online. A failed notification must never lose mail.",
+          "ref": "Distributed Mail Servers"
+        },
+        {
+          "id": "c23-02-09",
+          "type": "judge",
+          "prompt": "For a malformed email that can’t be processed, the SMTP server may reply “accepted” first and then quietly discard it in the background.",
+          "answer": false,
+          "explanation": "Rejecting and accepting-then-discarding are different things. Replying “accepted” takes on responsibility for delivery, and silently discarding afterward makes the sender think it was delivered. Invalid mail should be rejected outright under SMTP semantics, or put in quarantine.",
+          "ref": "Distributed Mail Servers"
+        }
+      ]
+    },
+    {
+      "id": "c23-03",
+      "title": "Metadata Storage",
+      "summary": "Partition key, attachment split, read/unread tables",
+      "exercises": [
+        {
+          "id": "c23-03-01",
+          "type": "multi",
+          "prompt": "In an interview you don’t need to design a new database on the spot, but which properties should you say the metadata store needs?",
+          "options": [
+            "A single column can hold a few MB of data",
+            "Keeps accepting writes during a network partition, favoring availability",
+            "Strong consistency",
+            "Supports JOINs between any two users’ mailboxes",
+            "Easy incremental backup"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "The properties: a single column holding a few MB, strong consistency, less disk I/O, high availability, and easy incremental backup. This design favors consistency: in a partition, better to make affected users unavailable than accept conflicting writes. Queries stay within one user, so no cross-user JOIN.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-03-02",
+          "type": "single",
+          "prompt": "The metadata DB uses `user_id` as its partition key. What is the main reason?",
+          "options": [
+            "Fetching, marking as read, and searching mostly involve a single user",
+            "user_id keeps emails sorted by time within a partition",
+            "user_id guarantees perfectly even data with no hotspots",
+            "One mass-mailed email is stored once for all recipients"
+          ],
+          "answer": 0,
+          "explanation": "Mailbox operations are almost always scoped to one user, so partitioning by user_id puts a user’s data on one shard and queries needn’t cross shards. Time ordering within a partition comes from the clustering key timeuuid. When one email goes to many people, each person’s read and folder state is independent.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-03-03",
+          "type": "fill",
+          "prompt": "Complete the division of labor between the two parts of the primary key",
+          "text": "The [[partition key]] decides which shard the data goes to; the [[clustering key]] decides the order within a shard, for example arranging emails by timeuuid.",
+          "distractors": [
+            "foreign key",
+            "secondary index",
+            "unique key"
+          ],
+          "explanation": "Primary key = partition key + clustering key. Using user_id as the partition key keeps a user’s data together; using a timeuuid email_id as the clustering key orders emails within the partition by creation time, which makes paging through lists easy.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-03-04",
+          "type": "judge",
+          "prompt": "The attachments table can use the file name directly as an attachment’s globally unique key.",
+          "answer": false,
+          "explanation": "Two emails can both carry `report.pdf`, so file names will collide. The real key must include the user, email, and attachment ID; the display file name is stored as an ordinary field.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-03-05",
+          "type": "single",
+          "prompt": "Take 1,000 emails under this chapter’s assumptions: 50 KB of body/metadata each, 20% carrying a 500 KB average attachment. About what share of total bytes are attachments?",
+          "options": [
+            "About half",
+            "About one tenth",
+            "About one fifth",
+            "About two thirds"
+          ],
+          "answer": 3,
+          "explanation": "Metadata totals 1,000 × 50 KB = 50 MB. Attachments are 200 × 500 KB = 100 MB, which is 100/150 ≈ 2/3. Attachments appear in only a fifth of emails yet make up most of the bytes, which is a key reason to split them off into object storage.",
+          "ref": "Q23-02"
+        },
+        {
+          "id": "c23-03-06",
+          "type": "single",
+          "prompt": "Attachment bytes go in object storage, and the database keeps only the attachment ID, object key, size, and checksum. What is the main benefit?",
+          "options": [
+            "Object storage automatically verifies mailbox access permissions",
+            "Once in object storage, downloads cost nothing",
+            "Large, whole-read attachments no longer slow down frequent small-field queries",
+            "Attachments no longer need extra backup and redundancy"
+          ],
+          "answer": 2,
+          "explanation": "Attachments are large, rarely modified, and read whole; email lists need small fields queried often. Splitting them lets capacity, queries, and lifecycle be optimized separately, and listing an inbox doesn’t move multi-MB attachments. Object storage still costs requests and traffic, and downloads need a permission check.",
+          "ref": "Q23-02"
+        },
+        {
+          "id": "c23-03-07",
+          "type": "single",
+          "prompt": "In Cassandra you need to list a folder’s unread emails, but is_read is not a key. What does this chapter do?",
+          "options": [
+            "Query unread emails only from the Redis cache",
+            "Fetch the whole folder and filter in memory",
+            "Denormalize into separate read and unread query tables",
+            "Store the read state in object storage instead"
+          ],
+          "answer": 2,
+          "explanation": "Cassandra isn’t suited to unbounded filtering on non-key fields, and fetching a whole folder to filter it is infeasible at scale. Model tables by query: read and unread tables, looked up by key. The cost is keeping them in sync on every state change. A cache holds only hot data; object storage can’t serve such queries.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-03-08",
+          "type": "multi",
+          "prompt": "Email M changes from unread to read. With read/unread query tables, which writes does the server still have to own?",
+          "options": [
+            "Remove it from the unread view and write it to the read view",
+            "Update dependent data such as unread counters",
+            "Change only is_read on the main record and let the frontend adjust the views",
+            "Make sure a duplicate event doesn’t decrement the unread count again",
+            "Clear and rebuild all of this user’s search indexes"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "Denormalization turns one complex query into a set of writes on every state change: remove from unread, add to read, update counters and search filter fields, all idempotently. A frontend shuffling its list is only temporary display and can’t replace server-side maintenance; rebuilding every index is disproportionate.",
+          "ref": "Q23-04"
+        },
+        {
+          "id": "c23-03-09",
+          "type": "judge",
+          "prompt": "Version 9 has already moved the email to the trash, so a late version 8 “read” event must not put it back in the read inbox.",
+          "answer": true,
+          "explanation": "Projection consumers must handle out-of-order events: record the applied version or event ID and drop older versions when they arrive, or defer to the authoritative state. Otherwise a late event would “resurrect” a deleted or moved email in the wrong view.",
+          "ref": "Q23-04"
+        },
+        {
+          "id": "c23-03-10",
+          "type": "judge",
+          "prompt": "Because the metadata lives in a NoSQL store like Cassandra, updating the main record and the read/unread query tables is automatically atomic.",
+          "answer": false,
+          "explanation": "Don’t assume cross-table or cross-partition updates are automatically atomic just because you use NoSQL. Either maintain them in one transaction where supported, or atomically save the authoritative state plus a pending event and let a retryable projection consumer update the views, with reconciliation to repair partial updates.",
+          "ref": "Q23-04"
+        }
+      ]
+    },
+    {
+      "id": "c23-04",
+      "title": "Delivery & Search",
+      "summary": "Sender reputation, search index, multi-DC",
+      "exercises": [
+        {
+          "id": "c23-04-01",
+          "type": "multi",
+          "prompt": "Which practices help improve deliverability for a self-hosted sending server?",
+          "options": [
+            "Configure sender authentication such as SPF and DKIM",
+            "Don’t ban spamming accounts yet, to avoid hurting normal users",
+            "Warm up a new IP gradually, ramping volume slowly",
+            "Send marketing and important transactional email separately",
+            "Send full volume from a new IP on day one to build reputation"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Anti-spam systems distrust new servers, so warm up IPs gradually, separate marketing from transactional traffic, and use SPF/DKIM against spoofing. Spamming accounts must be banned quickly or they drag down the whole sending reputation; full volume from a new IP on day one is the surest way to be flagged as spam.",
+          "ref": "Email Deliverability"
+        },
+        {
+          "id": "c23-04-02",
+          "type": "judge",
+          "prompt": "Using a dedicated sending IP and warming it up guarantees that email reaches the recipient’s inbox.",
+          "answer": false,
+          "explanation": "A dedicated IP and warm-up only help build reputation, and there’s no fixed time that guarantees results. Landing in the inbox also depends on domain reputation, unsubscribe and bounce handling, DMARC alignment, and the receiving platform’s own rules.",
+          "ref": "Email Deliverability"
+        },
+        {
+          "id": "c23-04-03",
+          "type": "match",
+          "prompt": "Match each search-related item with its characteristic",
+          "pairs": [
+            [
+              "Internet search",
+              "Whole web, usually ranked by relevance"
+            ],
+            [
+              "Mailbox search",
+              "Own mailbox only, often sorted by time"
+            ],
+            [
+              "ES cluster",
+              "Ready to use, but a separate service to run"
+            ],
+            [
+              "Custom search engine",
+              "Integrates with metadata storage, but costly"
+            ],
+            [
+              "LSM tree",
+              "Favors sequential writes; merges level by level"
+            ]
+          ],
+          "explanation": "Mailbox search has a small scope, sorts by time, and needs freshness, unlike internet search. Elasticsearch works out of the box but is an extra service to run. A custom engine can be tuned for mailboxes and integrated with storage, but costs heavy engineering; the hard part is write-heavy optimization, which LSM trees target.",
+          "ref": "Search"
+        },
+        {
+          "id": "c23-04-04",
+          "type": "single",
+          "prompt": "A user reports that an email they just received can’t be found by search. You’ve confirmed the original is in the authoritative mailbox store. What should you check first?",
+          "options": [
+            "The outbound queue length, and scale out SMTP workers",
+            "Whether the sender domain’s MX record is correct",
+            "The consumption progress of this email’s event in the index update queue",
+            "The number of WebSocket connections on the real-time push service"
+          ],
+          "answer": 2,
+          "explanation": "The email has already arrived, so the problem is on the asynchronous indexing path “email change → Kafka indexing task → Elasticsearch.” Check consumption progress using the partition and offset of that email’s event. The outbound queue, MX records, and push are not on the path of this search failure.",
+          "ref": "Q23-03"
+        },
+        {
+          "id": "c23-04-05",
+          "type": "single",
+          "prompt": "The email’s index event is at offset 4312 in partition P, P’s log end is at 4315, and the index consumer has only processed up to 4280. What does this show?",
+          "options": [
+            "The producer never emitted this event",
+            "Consumption is behind by 35 on every partition",
+            "The event is already indexed; the problem is in the query conditions",
+            "The event is still queued; check backlog, consumer errors, and hotspots"
+          ],
+          "answer": 3,
+          "explanation": "4280 < 4312 ≤ 4315, so the event has been emitted but not yet consumed. Check this partition’s backlog growth, consumer errors, retries and dead letters, and hotspots. Compare watermarks per partition; one partition’s numbers can’t tell you about the whole system.",
+          "ref": "Q23-03"
+        },
+        {
+          "id": "c23-04-06",
+          "type": "judge",
+          "prompt": "Even if the index consumer has committed offset 4312, you still can’t conclude that the email is searchable.",
+          "answer": true,
+          "explanation": "“Fetched and committed progress,” “written to ES,” and “searchable after refresh” are different watermarks: a bulk request can partially fail, and committing the offset too early hides missed indexing; after an ES write, a refresh is usually needed before it is visible. Then check routing, aliases, and query conditions.",
+          "ref": "Q23-03"
+        },
+        {
+          "id": "c23-04-07",
+          "type": "fill",
+          "prompt": "Complete the LSM tree’s write path",
+          "text": "A write is first appended to the [[WAL]] for crash recovery, then applied to the memtable; once the memtable reaches a threshold it is [[flushed to disk]] and merged level by level.",
+          "distractors": [
+            "inverted index",
+            "snapshot",
+            "rollback segment"
+          ],
+          "explanation": "Data isn’t first persisted only when memory fills up. The write goes to the WAL first, so data not yet flushed survives a crash. Flushed files are merged level by level: this favors sequential writes but causes write amplification, and a read may have to merge several levels.",
+          "ref": "Search"
+        },
+        {
+          "id": "c23-04-08",
+          "type": "judge",
+          "prompt": "Organizing an on-disk index as an LSM tree doesn’t replace the inverted index; full-text search still needs an inverted structure.",
+          "answer": true,
+          "explanation": "An LSM tree is a write-heavy storage organization that answers “how do we write to disk efficiently.” Full-text search must go from a term to the documents containing it, which is what an inverted index does. The two can be combined, but an LSM tree is not a full-text search algorithm by itself.",
+          "ref": "Search"
+        },
+        {
+          "id": "c23-04-09",
+          "type": "single",
+          "prompt": "This design favors consistency. During a failover or network partition, which behavior best matches that trade-off?",
+          "options": [
+            "Every query for every user must stop",
+            "Sync and updates for affected users may be temporarily unavailable",
+            "Automatically fall back to eventual consistency to keep accepting writes",
+            "Keep accepting writes and merge conflicts afterward"
+          ],
+          "answer": 1,
+          "explanation": "Choosing consistency means writes affected by the partition wait or are rejected: better temporarily unavailable than producing conflicting data. But this affects only the relevant users, not the whole system. Accepting writes and merging conflicts later is the availability-first approach.",
+          "ref": "Metadata Database"
+        },
+        {
+          "id": "c23-04-10",
+          "type": "judge",
+          "prompt": "Emails are replicated across data centers, so accidentally deleted mail can always be recovered from a replica, and no separate backup is needed.",
+          "answer": false,
+          "explanation": "Replication is not a backup: an accidental delete is replicated to every copy too. A backup must restore to the state before the deletion, and restores must be verified. Strong consistency and replication don’t automatically mean nothing is lost; you still need durable storage and backups.",
+          "ref": "Scalability and Availability"
+        }
+      ]
+    }
+  ]
+}

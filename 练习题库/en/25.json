@@ -1,0 +1,593 @@
+{
+  "chapter": 25,
+  "title": "Real-Time Gaming Leaderboard",
+  "fullTitle": "Chapter 25: Real-Time Gaming Leaderboard",
+  "intro": [
+    "You can write `ORDER BY score DESC LIMIT 10`, and that answers the top-of-the-board query. But “what is my rank?” and “who are the four players above and below me?” are two other kinds of queries. **An ordered index solves sorting, and rank counting solves positioning; once you shard, a local rank is not the global rank.**"
+  ],
+  "keyPoints": [
+    "Only a trusted game server may submit scores, after verifying the match and with a unique event ID for dedup; HTTPS and login don't prove a score is real.",
+    "A Redis sorted set uses a hash table to look up scores by member and a skip list for score order; adding points and finding a position are both O(log N).",
+    "ZREVRANK returns a zero-based position and doesn't tie equal scores; competition rank = the number of players with a strictly higher score + 1.",
+    "Redis Cluster assigns slots by key and never splits a big ZSET; split the key in the application, and don't share a hash tag across shards.",
+    "Hash sharding: each shard's top K merge into the global top K, but a personal rank needs a fan-out count. Range sharding must handle cross-range moves.",
+    "Replicas and persistence can still lose points; rebuild by idempotently replaying durable match events. Percentiles need product's approval."
+  ],
+  "refs": {
+    "Back-of-the-Envelope Estimates": "粗略估算",
+    "Functional Requirements": "功能需求",
+    "API Design": "API 设计",
+    "High-Level Architecture": "高层架构（High-level architecture）",
+    "Redis Solution": "Redis 方案（Redis solution）",
+    "Relational Database Solution": "关系数据库方案（Relational database solution）",
+    "Scaling Redis": "扩展 Redis（Scaling Redis）",
+    "To Use a Cloud Provider or Not": "是否使用云服务（To use a cloud provider or not）",
+    "Step 4: Wrap Up": "第 4 步：回顾（Wrap Up）",
+    "Alternative: NoSQL": "替代方案：NoSQL"
+  },
+  "lessons": [
+    {
+      "id": "c25-01",
+      "title": "Needs & Scoring",
+      "summary": "Estimate update volume; who may add points",
+      "exercises": [
+        {
+          "id": "c25-01-01",
+          "type": "single",
+          "prompt": "With 5 million DAU, about `10^5` seconds in a day, and an average of 10 games per player, what is the average update QPS, using the simplified upper bound that each game may trigger one update?",
+          "options": [
+            "500",
+            "5,000",
+            "2,500",
+            "50"
+          ],
+          "answer": 0,
+          "explanation": "Arrivals are about `5,000,000 / 100,000 = 50/s`; at 10 games per player, average updates are `50×10 = 500 QPS`. 2,500 is the peak (5 times the average); 50 is only the arrival rate.",
+          "ref": "Back-of-the-Envelope Estimates"
+        },
+        {
+          "id": "c25-01-02",
+          "type": "fill",
+          "prompt": "Complete the leaderboard's peak and read estimates",
+          "text": "Average arrivals are about 50/s; a peak at 5 times that is [[250/s]]; with 10 games per player, peak updates are about [[2,500 QPS]]; one top-ten view per player per day gives average reads of about [[50 QPS]].",
+          "distractors": [
+            "25,000 QPS",
+            "500 QPS",
+            "500/s"
+          ],
+          "explanation": "Peak is `50×5 = 250/s`, and peak updates are `250×10 = 2,500 QPS`; 500 QPS is the average update rate, not the peak. With one top-ten view per player per day, average reads equal the arrival rate, 50 QPS. At this order of magnitude, a single Redis instance can handle the load.",
+          "ref": "Back-of-the-Envelope Estimates"
+        },
+        {
+          "id": "c25-01-03",
+          "type": "judge",
+          "prompt": "5 million DAU divided by the seconds in a day is about 50/s, so roughly 50 players are online at any moment.",
+          "answer": false,
+          "explanation": "DAU divided by seconds gives an arrival or activity rate, not online concurrency. Concurrency also depends on session length: if each player plays 30 minutes straight, far more than 50 are online at the same time.",
+          "ref": "Back-of-the-Envelope Estimates"
+        },
+        {
+          "id": "c25-01-04",
+          "type": "multi",
+          "prompt": "Which of the following are functional requirements of this leaderboard (optional ones included)?",
+          "options": [
+            "Show an all-time total leaderboard across every past season",
+            "Filter the leaderboard by friend relationships",
+            "Show the rank of a given user",
+            "Show the top ten players",
+            "Show the players four positions above and below that user"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "The requirements are the top ten, a given user's rank, and, if time allows, the four players above and below. The board restarts every month and old boards are archived, so no cross-season total is required; a friends board is an extension beyond the requirements.",
+          "ref": "Functional Requirements"
+        },
+        {
+          "id": "c25-01-05",
+          "type": "judge",
+          "prompt": "Even if HTTPS is used all the way from client to server, it cannot stop a player from submitting a forged high score.",
+          "answer": true,
+          "explanation": "HTTPS only protects data in transit from eavesdropping and tampering; it cannot stop the sender from making things up. Players control their own clients and can send `score: 999999` over a perfectly encrypted connection. The score must be computed by an authoritative game server from the match result.",
+          "ref": "Q25-01"
+        },
+        {
+          "id": "c25-01-06",
+          "type": "single",
+          "prompt": "`POST /v1/scores` adds points to a player. Who should be allowed to call it?",
+          "options": [
+            "Any client connected over HTTPS",
+            "Any logged-in player client",
+            "Only trusted game servers",
+            "Any client that signs requests with a built-in key"
+          ],
+          "answer": 2,
+          "explanation": "Login proves who is submitting, not how the score was earned; a signing key shipped with the client can be extracted, or the signing logic called directly. Only a game server that has verified the match result should call the scoring endpoint.",
+          "ref": "API Design"
+        },
+        {
+          "id": "c25-01-07",
+          "type": "order",
+          "prompt": "Put the steps of a player's win becoming a leaderboard score in order",
+          "items": [
+            "The client tells the game service that the player won",
+            "The game service verifies the win is valid",
+            "The game service calls the leaderboard service",
+            "The leaderboard service updates the score in storage"
+          ],
+          "explanation": "The key step is the game service verifying the win: only verified wins reach the leaderboard, and a client's claim of victory doesn't count. If the server runs the game logic authoritatively, it already knows the outcome, so the client notification step can be dropped.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c25-01-08",
+          "type": "single",
+          "prompt": "A win's scoring event was resent three times after a timeout. To make sure the player gets only 1 point, what is the key practice?",
+          "options": [
+            "Give events a unique ID and deduplicate by it",
+            "Put a message queue in between",
+            "Enable Redis AOF persistence",
+            "Send the scoring request over HTTPS instead"
+          ],
+          "answer": 0,
+          "explanation": "`ZINCRBY` is not idempotent: each replay adds again. Give each match result a unique event ID and check whether it was already processed before applying it. A message queue can also redeliver, so it can't replace dedup; HTTPS and persistence are unrelated to duplicates.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c25-01-09",
+          "type": "single",
+          "prompt": "Should there be a message queue between the game service and the leaderboard service? Following this chapter's approach, which answer fits best?",
+          "options": [
+            "No, a queue would scramble the score ordering",
+            "Yes, or retries will add points twice",
+            "Yes, or scores can't update in real time",
+            "Optional at first; add it once other services need the events"
+          ],
+          "answer": 3,
+          "explanation": "A queue's value is letting several downstream consumers (analytics, push) consume the same match result without coupling. This design has no such need, so the first version can connect directly. A queue doesn't handle ordering and doesn't deduplicate; it can even redeliver.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c25-01-10",
+          "type": "single",
+          "prompt": "The requirement is a new contest and a new leaderboard every month. Implemented in Redis, what is the most natural organization?",
+          "options": [
+            "Encode the month into the high bits of the score",
+            "Create a new Redis instance every month",
+            "Share one key across all months and delete members one by one at month start",
+            "Create a new key each month and archive the old month's key to historical storage"
+          ],
+          "answer": 3,
+          "explanation": "With keys like `leaderboard_feb_2021`, a new month starts from an empty board and the old board is archived as a whole. Sharing one key means clearing tens of millions of members at month start and losing history. The API and database unique keys should also include the month or season.",
+          "ref": "Redis Solution"
+        }
+      ]
+    },
+    {
+      "id": "c25-02",
+      "title": "Sorted Sets",
+      "summary": "Top ten, rank, and neighbors with a sorted set",
+      "exercises": [
+        {
+          "id": "c25-02-01",
+          "type": "single",
+          "prompt": "A relational database has an index on `score`, so `ORDER BY score DESC LIMIT 10` is fast. Why is finding the rank of a player in the middle of the board still expensive?",
+          "options": [
+            "It must count every row with a higher score, close to a full scan with many players",
+            "The score index has to be rebuilt for every query",
+            "Frequent score updates invalidate the index, forcing a full table scan",
+            "The player table has no primary key, so the player can't be located"
+          ],
+          "answer": 0,
+          "explanation": "The top ten needs only 10 index rows; a middle player's rank is the number of players ahead of them, so counting scans millions of rows and the cost grows linearly with the player count. Indexes are updated with each write and don't become invalid. A Redis sorted set gives a position in `O(log N)`.",
+          "ref": "Relational Database Solution"
+        },
+        {
+          "id": "c25-02-02",
+          "type": "judge",
+          "prompt": "Computing rank with `COUNT(*) WHERE score >= my_score`, with scores 100, 100, and 90, both 100-point players get rank 1.",
+          "answer": false,
+          "explanation": "`>=` counts yourself and everyone tied with you, so both 100-point players get 2. The usual tied competition rank is the number of players with a strictly higher score + 1, which gives 1, 1, 3.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-03",
+          "type": "fill",
+          "prompt": "Complete the formula for tied competition rank",
+          "text": "Competition rank = the number of players whose score is [[strictly higher than]] mine, [[plus 1]].",
+          "distractors": [
+            "not lower than",
+            "minus 1",
+            "equal to"
+          ],
+          "explanation": "With scores 100, 100, 90: 0 players are above the 100s, so both are rank 1; 2 players are above the 90, so it is rank 3. Using “not lower than” would count yourself and the ties. In Redis, `ZCOUNT key (score +inf` counts the players with a strictly higher score.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-04",
+          "type": "single",
+          "prompt": "For large collections, a Redis sorted set uses both a hash table and a skip list. What is the hash table for?",
+          "options": [
+            "Persisting data to disk",
+            "Keeping members ordered by score",
+            "Sharding the set across nodes",
+            "Looking up a member's score directly"
+          ],
+          "answer": 3,
+          "explanation": "The two structures split the work: the hash table finds a member's score quickly, while the skip list keeps the order by score and supports range reads and position lookups. Persistence and sharding are not jobs of the sorted set's internal structures.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-05",
+          "type": "single",
+          "prompt": "Why is a skip list so much faster to search than a plain sorted linked list?",
+          "options": [
+            "It puts all nodes in an array so binary search works",
+            "It adds layers of sparse indexes on top of the list, so many nodes are skipped",
+            "It keeps only the top ten, so the data is tiny",
+            "It buckets nodes by hash value so they can be located directly"
+          ],
+          "answer": 1,
+          "explanation": "A skip list stacks progressively sparser index layers on a sorted linked list and homes in on the target from the top layer down. In the 64-node example, the linked list walks 62 nodes while the skip list takes about 11; insertion and lookup are typically `O(log N)`.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-06",
+          "type": "match",
+          "prompt": "Match each Redis command with its use in a leaderboard",
+          "pairs": [
+            [
+              "ZINCRBY",
+              "Add to a score; a missing player starts at zero"
+            ],
+            [
+              "ZREVRANGE",
+              "Read by position range, high score to low"
+            ],
+            [
+              "ZREVRANK",
+              "Get a player's zero-based position, high to low"
+            ],
+            [
+              "ZCOUNT",
+              "Count the members within a score range"
+            ],
+            [
+              "ZCARD",
+              "Count the total members in the set"
+            ]
+          ],
+          "explanation": "Use `ZREVRANGE key 0 9` for the top ten and `ZREVRANK` for a player's own position. To count the members of one shard, use `ZCARD`; `INFO keyspace` is wrong for this because it counts keys, not members.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-07",
+          "type": "single",
+          "prompt": "You want to show a player and the four players above and below. If `ZREVRANK` returns 2 (that is, position 3), which command should you run?",
+          "options": [
+            "`ZREVRANGE key 0 8`",
+            "`ZREVRANGE key -2 6`",
+            "`ZREVRANGE key 2 10`",
+            "`ZREVRANGE key 0 6`"
+          ],
+          "answer": 3,
+          "explanation": "Both ends of the range are inclusive. Only positions 0 and 1 are ahead of this player, so the start is clamped to 0, not -2 (negative indexes count from the end in Redis); the end is `2+4 = 6`. In the chapter's example, position 361 maps to `357 365`.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-08",
+          "type": "judge",
+          "prompt": "When A and B both have 100 points, `ZREVRANK` still gives them different positions; it does not treat them as tied automatically.",
+          "answer": true,
+          "explanation": "With equal scores, a sorted set orders members by the lexicographic order of the member string, and `ZREVRANK` returns the zero-based position after sorting, such as 0 and 1. The tied rank the problem asks for has to be computed separately; you can't just add 1 to the position.",
+          "ref": "Q25-02"
+        },
+        {
+          "id": "c25-02-09",
+          "type": "single",
+          "prompt": "Using a payload-only model: 25 million players, each with a 24-byte ID and a 2-byte score, roughly how large is the leaderboard data?",
+          "options": [
+            "About 65 MB",
+            "About 6.5 GB",
+            "About 650 MB",
+            "About 65 GB"
+          ],
+          "answer": 2,
+          "explanation": "`26 bytes × 25 million ≈ 650 MB`. 65 GB is the figure after scaling up 100 times. Note this is only the payload; actual Redis memory use is much higher.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-02-10",
+          "type": "judge",
+          "prompt": "650 MB is only a payload estimate; actual Redis memory must also account for double-precision scores, member objects, skip list nodes, and memory fragmentation.",
+          "answer": true,
+          "explanation": "Redis scores are double-precision floats, not 2 bytes; member objects, the dictionary, skip list nodes, allocator fragmentation, replicas, and persistence all use memory. Doubling is only a rough margin; run a load test with realistic ID lengths and distributions.",
+          "ref": "Redis Solution"
+        }
+      ]
+    },
+    {
+      "id": "c25-03",
+      "title": "Scaling & Sharding",
+      "summary": "Splitting keys, and merging Top K across shards",
+      "exercises": [
+        {
+          "id": "c25-03-01",
+          "type": "single",
+          "prompt": "DAU grows from 5 million to 500 million. Using the chapter's model (a current peak of 2,500 updates/s), what is the peak update QPS?",
+          "options": [
+            "5,000",
+            "250,000",
+            "25,000",
+            "2.5 million"
+          ],
+          "answer": 1,
+          "explanation": "5 million to 500 million is 100 times, not 10 times. `2,500 × 100 = 250,000 QPS` and memory `650 MB × 100 = 65 GB`, which match the chapter's figures. 25,000 is the result of wrongly using 10 times.",
+          "ref": "Scaling Redis"
+        },
+        {
+          "id": "c25-03-02",
+          "type": "judge",
+          "prompt": "After enabling Redis Cluster, a large ZSET with 100 million members is automatically split across multiple nodes.",
+          "answer": false,
+          "explanation": "Redis Cluster assigns hash slots by key. A key lands in exactly one slot, handled by one primary. Adding nodes only moves whole keys; it never slices a key's members into pieces. Splitting a logical board into several keys is the application's job.",
+          "ref": "Q25-03"
+        },
+        {
+          "id": "c25-03-03",
+          "type": "fill",
+          "prompt": "Complete Redis Cluster's slot rule",
+          "text": "Redis Cluster has [[16,384]] hash slots and computes the slot from the [[key]], so all members of one ZSET live in the same slot.",
+          "distractors": [
+            "1,024",
+            "member",
+            "score"
+          ],
+          "explanation": "Ordinary keys are located with `CRC16(key) mod 16384`, and the unit of assignment is the whole key. If a logical board is a single key, all its writes and memory concentrate on one primary.",
+          "ref": "Q25-03"
+        },
+        {
+          "id": "c25-03-04",
+          "type": "single",
+          "prompt": "A monthly board is split into 16 keys, `board:{2026-09}:s00` through `s15`. After launch, writes still concentrate on one node. Why?",
+          "options": [
+            "They share a hash tag, so they all land in the same slot",
+            "There aren't enough hash slots for 16 keys",
+            "16 shards is too few; at least 100 are needed",
+            "ZSET keys can't be spread across multiple slots"
+          ],
+          "answer": 0,
+          "explanation": "Cluster hashes only the part inside the braces (the hash tag), so sharing `{2026-09}` deliberately sends them all to one slot. Shard keys should not share a tag, e.g. `board:2026-09:s00`; keys share a tag only when they need atomic operations within the same shard.",
+          "ref": "Q25-03"
+        },
+        {
+          "id": "c25-03-05",
+          "type": "single",
+          "prompt": "With range sharding by score, the top range [900, 1000] currently has only 6 players. How do you return the global top ten?",
+          "options": [
+            "Return only those 6 players",
+            "Split [900, 1000] finer and reshard",
+            "Fetch the top 4 from the next range down to fill up",
+            "Show only the top six"
+          ],
+          "answer": 2,
+          "explanation": "Under range sharding, players in a higher range always rank ahead of those in lower ranges, so read the top shard first and, if it has fewer than ten, continue down the ranges in order. This is one hidden cost of range sharding, but it is still cheaper than fanning out to all shards.",
+          "ref": "Scaling Redis"
+        },
+        {
+          "id": "c25-03-06",
+          "type": "single",
+          "prompt": "With range sharding by score, a player ranks 3rd (counting from 1) within the [500, 600) shard, high to low, and all higher ranges hold 1,200 players in total. What is the player's global position?",
+          "options": [
+            "3rd",
+            "1,197th",
+            "1,200th",
+            "1,203rd"
+          ],
+          "answer": 3,
+          "explanation": "Global position = players in higher shards + position within the shard = `1,200 + 3`. The number of players in higher ranges comes from summing `ZCARD` over each shard; the sum needs a consistent snapshot, or you accept a briefly approximate result.",
+          "ref": "Scaling Redis"
+        },
+        {
+          "id": "c25-03-07",
+          "type": "multi",
+          "prompt": "With range sharding by score, which extra problems must you handle?",
+          "options": [
+            "Crossing a range boundary means migrating the member and updating routing",
+            "Fill from the next shard when the top range has fewer than ten players",
+            "Summing higher-range counts needs a consistent snapshot or an approximation",
+            "One logical board is still concentrated in a single key",
+            "The global top ten must fan out to every shard"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "Range sharding lets the top ten read only high shards and a personal position count only higher shards, at the cost of cross-range migration, boundary filling, and count consistency. Fanning out to all shards for the top ten is the cost of hash sharding; concentration in one key is the problem of not sharding.",
+          "ref": "Scaling Redis"
+        },
+        {
+          "id": "c25-03-08",
+          "type": "judge",
+          "prompt": "With hash sharding, if all shards use the same ordering rule, taking each shard's top 10 and merging them is enough to pick the global top 10 players.",
+          "answer": true,
+          "explanation": "Suppose someone is in the global top 10 but ranks below 10th in their own shard. Then 10 players in that shard are ahead of them, so they are at best 11th globally, a contradiction. So the global top 10 lies within the union of each shard's top 10. This requires one ordering rule and each player in exactly one shard.",
+          "ref": "Q25-04"
+        },
+        {
+          "id": "c25-03-09",
+          "type": "single",
+          "prompt": "12 players all have 100 points and are in the same shard. Product requires that the top ten include all tied players. What happens if each shard returns only its top 10 and you merge?",
+          "options": [
+            "The result is complete; all 12 are returned",
+            "Two tied players are missed; widen the fetch using the 10th score",
+            "The 12 players are double counted during the merge",
+            "Redis automatically returns all 12 tied players"
+          ],
+          "answer": 1,
+          "explanation": "A local top 10 only guarantees picking 10 players; it doesn't guarantee including every player tied at the 10th-place boundary. With ties the result may exceed 10 players: find the score at the global 10th position first, then fetch everyone at or above it from each shard.",
+          "ref": "Q25-04"
+        },
+        {
+          "id": "c25-03-10",
+          "type": "match",
+          "prompt": "Match each leaderboard storage approach with its main cost",
+          "pairs": [
+            [
+              "Relational DB + index",
+              "Ranking a middle player means counting many rows"
+            ],
+            [
+              "Single ZSET",
+              "Memory and writes limited to one node"
+            ],
+            [
+              "Score-range shards",
+              "Crossing a range means migrating members"
+            ],
+            [
+              "Hash-split keys",
+              "Global top K needs a merge across all shards"
+            ]
+          ],
+          "explanation": "A relational database returns the top ten fast but must count every row ahead of a middle player; a single ZSET ranks quickly but the whole key sits on one node. After splitting, range sharding must handle players migrating across ranges, while hash sharding must take the top K from every shard and merge.",
+          "ref": "Scaling Redis"
+        }
+      ]
+    },
+    {
+      "id": "c25-04",
+      "title": "Options & Recovery",
+      "summary": "Lambda, DynamoDB, and rebuilding after failure",
+      "exercises": [
+        {
+          "id": "c25-04-01",
+          "type": "single",
+          "prompt": "After moving the leaderboard to API Gateway + AWS Lambda, what does the team still have to plan?",
+          "options": [
+            "Manually adding or removing servers with traffic",
+            "Function concurrency limits and Redis connection counts",
+            "Buying and racking physical servers",
+            "Operating system patching"
+          ],
+          "answer": 1,
+          "explanation": "A serverless platform manages servers and scaling, removing hardware and OS operations. But cold starts, concurrency limits, connections from function instances to Redis, network latency, and cost still need planning, and real-time targets must be tested end to end.",
+          "ref": "To Use a Cloud Provider or Not"
+        },
+        {
+          "id": "c25-04-02",
+          "type": "single",
+          "prompt": "The chapter suggests reserving about twice the memory for a write-heavy Redis. What is this mainly meant to cover?",
+          "options": [
+            "Primary and replica running on the same machine",
+            "Scores doubling in size when changed from integers to doubles",
+            "Extra memory from fork copy-on-write when taking a snapshot",
+            "Every skip list level holding a full copy of the data"
+          ],
+          "answer": 2,
+          "explanation": "After a snapshot forks a child process, the parent must copy each page it modifies, so the more writes and the longer the snapshot, the more extra memory. Two times is only a rule of thumb; check the write rate and fragmentation, and measure with `redis-benchmark` under a real workload.",
+          "ref": "Scaling Redis"
+        },
+        {
+          "id": "c25-04-03",
+          "type": "judge",
+          "prompt": "If Redis has replicas and persistence enabled, it is guaranteed not to lose a single point of score during a failure.",
+          "answer": false,
+          "explanation": "Both replication and persistence have timing windows, so a failure may lose the most recent score updates. The reliable approach is to keep match events durably in a database as the source of truth; the Redis board is just a view that can be rebuilt.",
+          "ref": "Redis Solution"
+        },
+        {
+          "id": "c25-04-04",
+          "type": "multi",
+          "prompt": "After a large-scale Redis failure, what is needed to reliably rebuild the monthly board to the correct state?",
+          "options": [
+            "Idempotent replay by unique event ID, so duplicate events don't add points twice",
+            "Having player clients resubmit their own scores",
+            "A watermark recording how far processing has reached",
+            "Relying only on automatic Redis replica failover",
+            "Durably stored match result events"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "Recovery needs a concrete data source: a match-event table plus a processed watermark, replayed idempotently by unique event ID, then totals reconciled. “Replay the MySQL WAL” is too vague: the redo log, binlog, and a match-event table are different things. Having clients resubmit goes back to untrusted input.",
+          "ref": "Step 4: Wrap Up"
+        },
+        {
+          "id": "c25-04-05",
+          "type": "single",
+          "prompt": "A DynamoDB leaderboard table uses the month as the partition key, so all writes for the current month land on one partition. What fix does this chapter give?",
+          "options": [
+            "Remove the GSI to reduce writes to the current month's partition",
+            "Put the username in the sort key",
+            "Append a `user_id % N` suffix to the month key",
+            "Make the score the partition key"
+          ],
+          "answer": 2,
+          "explanation": "Write sharding appends a number suffix to the hot partition key, spreading one month's writes across N partitions; a string ID can be hashed first, then taken modulo. The cost is scatter-gather over N shards when querying. Removing the GSI doesn't help: the base table is still partitioned by month.",
+          "ref": "Alternative: NoSQL"
+        },
+        {
+          "id": "c25-04-06",
+          "type": "judge",
+          "prompt": "With DynamoDB write sharding, more shards spread writes more, but also mean more shards to scatter-gather when querying the top ten.",
+          "answer": true,
+          "explanation": "The shard count trades write throughput against read fan-out: one more shard spreads writes more evenly but adds one more query to merge when reading the top ten. Choose the count by benchmarking; more is not always better.",
+          "ref": "Alternative: NoSQL"
+        },
+        {
+          "id": "c25-04-07",
+          "type": "fill",
+          "prompt": "Complete the key design of a DynamoDB leaderboard",
+          "text": "The DynamoDB board uses the month plus a shard suffix as the partition key and [[score]] as the sort key; to keep keys unique on ties, append the [[user ID]].",
+          "distractors": [
+            "match ID",
+            "shard number",
+            "month"
+          ],
+          "explanation": "The sort key keeps each partition readable in score order; with the score alone, tied players' keys would collide, so the user ID makes them unique. The month is already used in the partition key. Updating a score moves the index entry, and GSI propagation delay must be counted against the real-time target.",
+          "ref": "Alternative: NoSQL"
+        },
+        {
+          "id": "c25-04-08",
+          "type": "judge",
+          "prompt": "When the player base is too large to compute exact ranks in real time, you can simply switch to showing a periodically computed score percentile, without checking with product.",
+          "answer": false,
+          "explanation": "A percentile changes the product's meaning: the requirement is a real-time exact rank, and a periodically computed approximate percentile is a different feature. It is fine to discuss switching to percentiles with product, but not to swap it in quietly on the technical side.",
+          "ref": "Alternative: NoSQL"
+        },
+        {
+          "id": "c25-04-09",
+          "type": "single",
+          "prompt": "Scores are B=100, A=100, C=90. If the product uses dense ranking (ties share a rank, with no skipped numbers), what rank is C?",
+          "options": [
+            "1st",
+            "3rd",
+            "Depends on the lexicographic order of member names",
+            "2nd"
+          ],
+          "answer": 3,
+          "explanation": "Dense ranking counts the distinct score levels strictly above: C has only the 100 level above it, so C is rank 2. Competition ranking counts players, giving C rank 3, and the zero-based Redis position plus 1 is also 3. Lexicographic order only decides the display order among ties; it doesn't affect rank.",
+          "ref": "Q25-02"
+        },
+        {
+          "id": "c25-04-10",
+          "type": "order",
+          "prompt": "Put the steps of a reliable score update in order",
+          "items": [
+            "The game server confirms the match result is valid",
+            "Generate a scoring event with a unique event ID",
+            "Leaderboard service checks if the event ID was processed",
+            "Run `ZINCRBY` to add to the player's score"
+          ],
+          "explanation": "The authoritative server confirms the result first, then the result gets a unique ID; the leaderboard service deduplicates by ID before adding points, and the dedup check and the score update are best done in one atomic script. That way a timeout resend or a queue redelivery adds points only once.",
+          "ref": "Q25-01"
+        }
+      ]
+    }
+  ]
+}

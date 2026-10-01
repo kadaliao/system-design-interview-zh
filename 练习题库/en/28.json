@@ -1,0 +1,613 @@
+{
+  "chapter": 28,
+  "title": "Stock Exchange",
+  "fullTitle": "Chapter 28: Stock Exchange",
+  "intro": [
+    "**How to read this chapter**: A CRUD system often coordinates state with multiple threads and database locks. A matching system cares about something else: everyone sees the same sequence of events and computes the same result from it. Get price priority, then time priority, straight first; after that, the sequenced log, the in-memory order book, and failure replay will make sense."
+  ],
+  "keyPoints": [
+    "Trading is on the critical path and needs ultra-low latency; market data and reporting are side paths, and reporting prizes accuracy and compliance.",
+    "Matching uses price priority, then time priority; each fill is the smaller of both remaining quantities, and a new order’s remainder rests in the book.",
+    "The book is organized by price level: a hash map finds the level, a doubly linked list queues arrivals, and orderMap with that list makes cancel O(1).",
+    "The sequencer fixes one input order, and deterministic matching turns the same order into the same result, the basis of replay, hot standby, and audit.",
+    "Low latency comes from a one-machine mmap bus, core-pinned loops, and logging moved off the path; deterministic results don’t guarantee stable latency.",
+    "Failover needs an election, fencing of the old primary, and replay of committed log only; halt trading rather than let two primaries publish trades."
+  ],
+  "refs": {
+    "Back-of-the-envelope estimation": "粗略估算（Back-of-the-envelope estimation）",
+    "Business Knowledge 101": "业务基础（Business Knowledge 101）",
+    "High-level design": "高层设计（High-level design）",
+    "Trading flow": "交易流（Trading flow）",
+    "Market data flow": "行情流（Market data flow）",
+    "Reporting flow": "报告流（Reporting flow）",
+    "Create order": "创建订单（Create order）",
+    "Products, Orders, and Executions": "产品、订单与成交",
+    "Order book": "订单簿（Order book）",
+    "Candlestick chart": "蜡烛图（Candlestick chart）",
+    "Performance": "性能（Performance）",
+    "Event sourcing": "事件溯源（Event sourcing）",
+    "High availability": "高可用（High availability）",
+    "Fault tolerance": "容错（Fault tolerance）",
+    "Matching algorithms": "撮合算法（Matching algorithms）",
+    "Determinism": "确定性（Determinism）",
+    "Market data publisher optimizations": "行情发布器优化（Market data publisher optimizations）",
+    "Distribution fairness of market data and multicast": "行情分发公平性与组播（Distribution fairness of market data and multicast）",
+    "Network Security": "网络安全（Network Security）"
+  },
+  "lessons": [
+    {
+      "id": "c28-01",
+      "title": "Business and Flows",
+      "summary": "Estimates, market data basics, and the three flows",
+      "exercises": [
+        {
+          "id": "c28-01-01",
+          "type": "single",
+          "prompt": "There are 1 billion orders a day, concentrated in the 09:30–16:00 trading session, and peak load is estimated at 5 times the average. What are the average and peak QPS, roughly?",
+          "options": [
+            "About 43,000 and about 86,000",
+            "About 43,000 and about 215,000",
+            "About 11,600 and about 58,000",
+            "About 35,000 and about 174,000"
+          ],
+          "answer": 1,
+          "explanation": "Orders arrive within a 6.5-hour session: 1 billion ÷ 6.5 ÷ 3600 ≈ 43,000, and 5 times that is about 215,000. Spreading over 24 hours gives about 11,600 and using 8 hours gives about 35,000; both underestimate, and volume at the open is even higher.",
+          "ref": "Back-of-the-envelope estimation"
+        },
+        {
+          "id": "c28-01-02",
+          "type": "judge",
+          "prompt": "With 1 billion orders a day, the matching engine produces about 1 billion executions a day.",
+          "answer": false,
+          "explanation": "Order count is not trade count: an order may not fill, may fill partially, or may match several counterparties, and each trade generates a report for both buyer and seller. Cancels are commands that must be sequenced too. Estimate inbound commands, execution reports, and market data fan-out separately.",
+          "ref": "Back-of-the-envelope estimation"
+        },
+        {
+          "id": "c28-01-03",
+          "type": "single",
+          "prompt": "The bids are at 100.00, 100.02, and 100.05, and the asks are at 100.08, 100.10, and 100.12. What are the best bid and best ask?",
+          "options": [
+            "100.05 and 100.12",
+            "100.00 and 100.12",
+            "100.05 and 100.08",
+            "100.00 and 100.08"
+          ],
+          "answer": 2,
+          "explanation": "Among buyers, the highest bid is the easiest to fill, so the best bid is 100.05. Among sellers, the lowest ask is the easiest to fill, so the best ask is 100.08. The 0.03 difference is the bid-ask spread.",
+          "ref": "Business Knowledge 101"
+        },
+        {
+          "id": "c28-01-04",
+          "type": "match",
+          "prompt": "Match each market data product with what it shows",
+          "pairs": [
+            [
+              "L1 market data",
+              "Best bid and ask with sizes"
+            ],
+            [
+              "L2 market data",
+              "Aggregate size at several price levels"
+            ],
+            [
+              "L3 market data",
+              "Per-order detail and queue changes"
+            ],
+            [
+              "Candlestick chart",
+              "Open, close, high, and low for a period"
+            ]
+          ],
+          "explanation": "L1 shows only the top level; L2 shows more levels, usually aggregated by price; L3 goes finer, typically with per-order information and queue changes. Don’t equate “several levels” with L3. A candlestick chart describes price movement over a period of time.",
+          "ref": "Business Knowledge 101"
+        },
+        {
+          "id": "c28-01-05",
+          "type": "judge",
+          "prompt": "A buy limit order only trades at or below its limit price, so it may rest in the book without ever filling, or fill only partially.",
+          "answer": true,
+          "explanation": "A limit order fills at its price or better. If the asks that satisfy the price don’t add up to enough quantity, the remainder waits in the book and may never fill, or fill only partly. This design supports limit orders only; market orders are out of scope.",
+          "ref": "Business Knowledge 101"
+        },
+        {
+          "id": "c28-01-06",
+          "type": "order",
+          "prompt": "Put the processing of one order in the trading flow in order",
+          "items": [
+            "The broker sends the order to the exchange",
+            "The gateway validates, rate limits, and authenticates",
+            "The order manager runs risk and funds checks",
+            "The sequencer orders it for the matching engine",
+            "Execution reports return to the broker via the gateway"
+          ],
+          "explanation": "The gateway first blocks invalid or over-limit requests. The order manager applies the risk manager’s rules and confirms the wallet has enough funds. After sequencing, the matching engine matches, generates a report for each of buyer and seller, and sends them back along the same path. The whole chain is on the critical path.",
+          "ref": "High-level design"
+        },
+        {
+          "id": "c28-01-07",
+          "type": "single",
+          "prompt": "Of the three flows, only the trading flow is on the critical path. What does that imply for the design of the reporting flow?",
+          "options": [
+            "Latency isn’t the top goal; accuracy and compliance matter more",
+            "A few executions can be dropped to reduce load",
+            "Only orders need to be stored, not executions",
+            "New orders should be rejected if a report write fails"
+          ],
+          "answer": 0,
+          "explanation": "The reporter handles trade history, tax, compliance, and settlement. It is off the critical path, so it may be a little late but must not be wrong or lose data. Letting a failed write block order entry would drag it back onto the critical path. Report fields such as `filled_quantity` need execution data.",
+          "ref": "Reporting flow"
+        },
+        {
+          "id": "c28-01-08",
+          "type": "multi",
+          "prompt": "The sequencer stamps inbound orders and outbound execution reports with sequence IDs. Which goals does this directly support?",
+          "options": [
+            "An increasing number alone proves every network path is fair",
+            "It gives all replicas one input order, so results are deterministic",
+            "Gap-free numbers alone prove the matching results are correct",
+            "It exposes duplicates, gaps, and reordering, for recovery and replay",
+            "It guarantees exactly-once without persisting the processed position"
+          ],
+          "answers": [
+            1,
+            3
+          ],
+          "explanation": "Sequence numbers define one order, so deterministic replicas get the same result, and recovery can replay by number and spot duplicates and gaps. Exactly-once also needs a persisted position, deduplication, and coordinated output commits; fairness needs a defined ordering boundary; numbers don’t verify matching logic.",
+          "ref": "Trading flow"
+        },
+        {
+          "id": "c28-01-09",
+          "type": "single",
+          "prompt": "The client gateway is on the critical path. Which design fits that role best?",
+          "options": [
+            "Stay lightweight: only validation, rate limiting, authentication, and essentials",
+            "Cache the order book and return matching results to clients directly",
+            "Have all clients share one gateway for easy management",
+            "Also do risk and funds checks to lighten the order manager’s load"
+          ],
+          "answer": 0,
+          "explanation": "Every extra job in the gateway adds waiting time to every order, so it does only the checks needed for access. Risk and funds checks belong to the order manager, and matching results come only from the matching engine. Different clients can use different gateways, such as a broker’s colo engine in the data center.",
+          "ref": "Trading flow"
+        },
+        {
+          "id": "c28-01-10",
+          "type": "fill",
+          "prompt": "Complete the division of labor between the market data and reporting flows",
+          "text": "The matching engine’s execution stream goes to the [[market data publisher]] to build candlestick charts; the [[reporter]] collects the necessary fields of orders and executions and writes them to a database.",
+          "distractors": [
+            "order manager",
+            "sequencer",
+            "client gateway"
+          ],
+          "explanation": "Market data flow: matching results → market data publisher → data service → brokers. Reporting flow: the reporter aggregates order and execution fields into the database. Both run on side paths; the order manager, sequencer, and gateway are all on the trading critical path.",
+          "ref": "High-level design"
+        }
+      ]
+    },
+    {
+      "id": "c28-02",
+      "title": "Order Book",
+      "summary": "Price-time priority and order book data structures",
+      "exercises": [
+        {
+          "id": "c28-02-01",
+          "type": "single",
+          "prompt": "The 100 ask level holds S1 (30 shares, arrived first) and S2 (50 shares, arrived later), and the 101 level holds S3 (40 shares). A buy limit order for 80 shares at 101 arrives. How does it fill?",
+          "options": [
+            "S3 fills 40 shares, then S1 fills 40 shares",
+            "S1, S2, and S3 split the 80 shares in proportion to size",
+            "S1 fills 30 shares, then S2 fills 50 shares, and S3 is untouched",
+            "It trades with the larger S2 for 50 shares first, then S3 for 30"
+          ],
+          "answer": 2,
+          "explanation": "Price priority: a buy limit at 101 first takes the lowest ask level, 100. Time priority at the same price: S1, which arrived first, fills 30 shares, then the remaining 50 shares fill against S2. The buy order is complete and the 101 level is untouched. Each fill is the smaller of both remaining quantities.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-02",
+          "type": "single",
+          "prompt": "What is the main benefit of using a doubly linked list rather than a plain list for the orders at one price level?",
+          "options": [
+            "Orders at the same price sort themselves by size",
+            "Total size for any price range becomes an O(1) query",
+            "Once you hold a node, a cancel unlinks it in O(1)",
+            "A new order can jump to the head of the queue and fill first"
+          ],
+          "answer": 2,
+          "explanation": "Appending and taking from the head are O(1) with a singly linked queue that keeps a tail pointer too. The hard part is cancel, since the order may sit mid-queue; with a doubly linked list, a node is deleted by updating its neighbors. Sorting by size or jumping the queue breaks time priority, and range sums are unrelated.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-03",
+          "type": "fill",
+          "prompt": "Complete the two steps of an O(1) cancel",
+          "text": "First find the order by order ID using [[orderMap]], then use the order’s own [[neighbor node references]] to unlink it from its price-level queue.",
+          "distractors": [
+            "limitMap",
+            "bestBid",
+            "array index"
+          ],
+          "explanation": "`orderMap` locates the order directly, with no need to scan the level’s queue. Because the order holds references to its neighbors, doubly linked list deletion is O(1). `limitMap` finds only the price level, and you would still have to search the queue for this order.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-04",
+          "type": "judge",
+          "prompt": "If the order book is indexed by price in a hash map, querying the total size across any price range is also O(1).",
+          "answer": false,
+          "explanation": "A hash map locates one level in O(1) on average but is unordered: a range sum adds levels one by one or needs an extra sorted structure, so cost grows with the number of levels. The chapter’s O(1) means one linked-list operation once the level and node are found; best price and price ordering need extra structures too.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-05",
+          "type": "match",
+          "prompt": "Match each order book member with its role",
+          "pairs": [
+            [
+              "limitMap",
+              "Finds a price level by price"
+            ],
+            [
+              "orderMap",
+              "Finds an order by order ID"
+            ],
+            [
+              "bestOffer",
+              "Direct access to the best ask level"
+            ],
+            [
+              "totalVolume",
+              "Level total, no summing per order"
+            ],
+            [
+              "orders",
+              "Same-price orders queue by arrival"
+            ]
+          ],
+          "explanation": "`limitMap` indexes price to level, `orderMap` serves cancels, `bestOffer` caches the lowest ask level so it needn’t be searched each time, `totalVolume` lets a level’s size be read without traversal, and `orders` is a doubly linked list that gives FIFO at the same price.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-06",
+          "type": "single",
+          "prompt": "A large buy order consumes every resting order at the best ask level, continues into the next level, and then fills completely. How does the order book change afterward?",
+          "options": [
+            "The best ask moves up and the spread widens",
+            "The best bid rises with it",
+            "The best ask falls and the spread narrows",
+            "The book is unchanged; only execution reports are generated"
+          ],
+          "answer": 0,
+          "explanation": "The original best level is gone, so the next higher level becomes the best ask. The buy order filled completely and left no remainder resting on the bid side, so the best bid is unchanged and the spread therefore widens. The outcome depends on order direction and remaining depth, so not every large order behaves this way.",
+          "ref": "Order book"
+        },
+        {
+          "id": "c28-02-07",
+          "type": "single",
+          "prompt": "In 1 minute, many sell orders at 105 are posted but none fills, and all trade prices stay between 100 and 101. What should the high of this trade-based candlestick be?",
+          "options": [
+            "105",
+            "101",
+            "It can’t be computed because resting orders didn’t trade"
+          ],
+          "answer": 1,
+          "explanation": "A typical trade candlestick computes OHLCV from executions, so the high is the highest trade price in the interval, 101. Resting and canceled orders are not trades; the orders at 105 affect only book depth. A quote-based chart would have to be defined separately in the product.",
+          "ref": "Candlestick chart"
+        },
+        {
+          "id": "c28-02-08",
+          "type": "judge",
+          "prompt": "The matching engine’s trade stream alone cannot rebuild the full order book, because new unfilled orders and cancels also change the depth of each level.",
+          "answer": true,
+          "explanation": "The trade stream reflects only what was consumed. New resting orders add depth and cancels remove it, and neither shows up in trades. Rebuilding the book takes the complete ordered stream of book events, or a snapshot plus increments. The trade stream is enough to build trade-based candlesticks.",
+          "ref": "Market data flow"
+        },
+        {
+          "id": "c28-02-09",
+          "type": "multi",
+          "prompt": "When taking the create-order API to production, which additions are necessary?",
+          "options": [
+            "Use the client’s local time directly for `creationTime`",
+            "Match at the market price when `orderType` is market",
+            "Express partial fills unambiguously through status or quantity",
+            "Release frozen funds gradually as orders fill or cancel",
+            "Fix a tick size and scaling factor for the integer `price`"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "An integer price must say how much money 1 unit stands for. Frozen funds are held until the order ends, and the matching portion is released on a fill or cancel. Status has only new/canceled/filled, so partial fills must be expressible without ambiguity. This design supports limit orders only, and creation time is system time.",
+          "ref": "Create order"
+        },
+        {
+          "id": "c28-02-10",
+          "type": "judge",
+          "prompt": "To make sure no report data is lost, each order should first be written synchronously to the reporting database and sent to matching only after the write succeeds.",
+          "answer": false,
+          "explanation": "Orders and executions on the critical path are processed in memory and recovered from the ordered record kept by the sequencer. The reporter is off the critical path and writes data to the database separately. A synchronous write would add database latency to every order, and it isn’t a necessary way to prevent loss.",
+          "ref": "Products, Orders, and Executions"
+        }
+      ]
+    },
+    {
+      "id": "c28-03",
+      "title": "Low Latency and HA",
+      "summary": "Single-machine hot path, event sourcing, failover",
+      "exercises": [
+        {
+          "id": "c28-03-01",
+          "type": "multi",
+          "prompt": "To bring matching latency down from tens of milliseconds to tens of microseconds, which approaches does this chapter use?",
+          "options": [
+            "Move non-essential diagnostic logging off the critical path",
+            "Put critical components on one server and communicate through an mmap event store",
+            "Pin the application loop to a fixed CPU to reduce context switches",
+            "Start a new thread per request and guard the order book with locks",
+            "Delete the trade records used for replay and audit to cut disk writes"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "Cut latency by reducing tasks on the critical path and shortening each task’s network, disk, and compute time. Same-machine mmap skips network hops, and a core-pinned single loop cuts switching and lock contention. The authoritative trade record can’t be deleted, and multithreaded locking creates contention.",
+          "ref": "Performance"
+        },
+        {
+          "id": "c28-03-02",
+          "type": "judge",
+          "prompt": "Once the application loop is pinned to a fixed CPU core, the operating system will never preempt it, so tail latency is guaranteed.",
+          "answer": false,
+          "explanation": "Pinning reduces thread migration between cores and context switches; it doesn’t guarantee the OS never preempts, and interrupts and other processes can still cause jitter. A single thread avoids lock contention only if it owns the state exclusively. Tail latency still needs continuous monitoring of P99 and P99.99.",
+          "ref": "Performance"
+        },
+        {
+          "id": "c28-03-03",
+          "type": "fill",
+          "prompt": "Complete the roles of event sourcing and the sequencer",
+          "text": "Event sourcing stores not just the [[current state]] but immutable [[state transitions]]; the sequencer acts as the [[single writer]], ordering events first and then writing them to the event store.",
+          "distractors": [
+            "multiple writers",
+            "wall-clock time"
+          ],
+          "explanation": "Storing state transitions lets you replay the book from any starting point. The sequencer is the only writer and orders by sequence number, not wall-clock time, so every component sees one order. With several writers each appending, the order wouldn’t be unique, and replay and hot standby couldn’t promise the same result.",
+          "ref": "Event sourcing"
+        },
+        {
+          "id": "c28-03-04",
+          "type": "judge",
+          "prompt": "A hot standby of a stateful component also processes the same inbound events and stays in sync, but does not publish outbound events.",
+          "answer": true,
+          "explanation": "A hot standby follows the same input order and maintains the same order book as the primary, so failover needn’t rebuild from scratch and recovery is faster. Only the primary publishes trades externally; if the standby published too, the same trade would appear twice.",
+          "ref": "High availability"
+        },
+        {
+          "id": "c28-03-05",
+          "type": "single",
+          "prompt": "The matching system’s target availability is 99.99%. Roughly how much downtime budget does that allow per day?",
+          "options": [
+            "About 0.864 seconds",
+            "About 8.64 minutes",
+            "About 8.64 seconds",
+            "About 86.4 seconds"
+          ],
+          "answer": 2,
+          "explanation": "A day has 86,400 seconds × 0.01% ≈ 8.64 seconds. With a budget this tight, having a person notice and restart is too slow, so critical services such as the matching engine need standby replicas, with automatic failure detection and fast failover.",
+          "ref": "High availability"
+        },
+        {
+          "id": "c28-03-06",
+          "type": "single",
+          "prompt": "The primary matching node misses a few heartbeats because of network flapping, and a standby prepares to take over. What is the most important guarantee before the switch?",
+          "options": [
+            "The heartbeat timeout proves the old primary is down, so switch directly",
+            "Whoever has the highest local sequence number takes over at once; faster is better",
+            "Fence off the old primary by term so it can no longer publish trades",
+            "Let both primaries match at once and have downstream pick a result"
+          ],
+          "answer": 2,
+          "explanation": "A heartbeat timeout only triggers suspicion; network delay can make a healthy old primary look dead. Receivers must reject old-term writes and publishes, or two nodes will publish trades at once. The highest local sequence number may include an uncommitted tail, so it can’t show who is most current.",
+          "ref": "High availability"
+        },
+        {
+          "id": "c28-03-07",
+          "type": "order",
+          "prompt": "Put a safe matching failover in order",
+          "items": [
+            "The gateway pauses trading and keeps request IDs",
+            "Elect the new primary by term",
+            "Fence off the old primary and reject old-term writes",
+            "New primary replays committed events, checks the book",
+            "Align the outbound publish position, then resume inbound"
+          ],
+          "explanation": "Stop sending orders to the uncertain old primary first. The election produces a new term, which is what fences off the old one. The new primary recovers only from the committed log and verifies it. Finally it attaches to the outbound published position so no report is duplicated or missed, and order entry reopens.",
+          "ref": "P28-01"
+        },
+        {
+          "id": "c28-03-08",
+          "type": "single",
+          "prompt": "The RTO target is 5 seconds. A drill finds the standby is 1 million events behind and can apply only 200,000 per second. Which judgment is correct?",
+          "options": [
+            "A 5-second RTO means up to 5 seconds of trades may be lost",
+            "Catch-up alone uses up the 5 s budget; speed it up or shorten snapshots",
+            "If leader election finishes within 1 second, the RTO is met",
+            "To hit the target, skip order book verification after replay"
+          ],
+          "answer": 1,
+          "explanation": "1 million ÷ 200,000 per second = 5 seconds, so catch-up alone spends the whole budget, before failure detection, election, and verification. Raise the hot standby’s apply speed or shorten the snapshot interval; don’t lower the verification standard. RTO covers how long you are down; how much data you can lose is answered by RPO.",
+          "ref": "P28-03"
+        },
+        {
+          "id": "c28-03-09",
+          "type": "judge",
+          "prompt": "An exchange can’t accept losing confirmed trades. If the backup frequency is raised high enough, zero loss is achievable.",
+          "answer": false,
+          "explanation": "Backup frequency only sets part of the recovery point objective (RPO); trades confirmed between two backups can still be lost. Zero loss needs the replication and persistence commit conditions met before confirming to the client, plus a disaster-recovery copy in another failure domain. Raft also relies on a majority persisting.",
+          "ref": "Fault tolerance"
+        },
+        {
+          "id": "c28-03-10",
+          "type": "multi",
+          "prompt": "While the primary matching node recovers, which functions can run in a degraded mode?",
+          "options": [
+            "Skip risk checks and reopen order entry first",
+            "Pause advanced charts and historical analytics",
+            "Delete orders directly through a side path and confirm the cancel",
+            "Reduce the depth levels or push frequency of market data",
+            "Show quotes from a lagging replica as executable prices"
+          ],
+          "answers": [
+            1,
+            3
+          ],
+          "explanation": "Safe degradation shrinks product capability and keeps trading semantics: charts, analytics, and some depth can go first. Skipping risk checks admits violating orders. A cancel must enter the same ordered command stream and race with matching. Quotes from a lagging replica must be marked delayed, never treated as executable.",
+          "ref": "P28-04"
+        }
+      ]
+    },
+    {
+      "id": "c28-04",
+      "title": "Matching and Feeds",
+      "summary": "Matching details, determinism, fair distribution",
+      "exercises": [
+        {
+          "id": "c28-04-01",
+          "type": "single",
+          "prompt": "The chapter’s `match` only iterates the single level `limitMap.get(order.price)`. A buy limit order at 101 arrives. What goes wrong?",
+          "options": [
+            "It fills at a price above 101, breaking the limit",
+            "It misses better ask levels below 101",
+            "Cancels can no longer be O(1) with orderMap",
+            "Within one price, later orders fill first"
+          ],
+          "answer": 1,
+          "explanation": "A buy limit order should start at the lowest ask and consume each level priced ≤ 101 in turn. Checking only the limit level skips the cheaper asks at 100, so the buyer overpays, which also violates price priority. It does not cross the limit, and same-price FIFO and cancel complexity are unaffected.",
+          "ref": "Matching algorithms"
+        },
+        {
+          "id": "c28-04-02",
+          "type": "judge",
+          "prompt": "When matching, taking `min(counterparty quantity, order.quantity)` for each fill is enough; you needn’t track how much the new order has already filled.",
+          "answer": false,
+          "explanation": "Each fill should be the smaller of both sides’ **remaining** quantities. Comparing against the original quantity would let a partially filled new order match again at full size and overfill. And a counterparty order that isn’t completely filled must not simply be removed.",
+          "ref": "Matching algorithms"
+        },
+        {
+          "id": "c28-04-03",
+          "type": "order",
+          "prompt": "Put the steps for processing a new limit order in order, following the correct matching logic",
+          "items": [
+            "Take the best opposing level; confirm it meets the limit",
+            "Take the order at the head of that level",
+            "Fill the smaller remaining quantity; update both orders",
+            "Remove filled orders and empty levels",
+            "Rest the new order’s remainder in the book per the rules"
+          ],
+          "explanation": "Pick the opposing level by price priority and confirm it doesn’t cross the limit, then take the head by time priority. Each fill is the smaller remaining quantity; update, then remove empty orders and levels. Repeat until the limit fails or the new order is filled; only then does the remainder rest in the book.",
+          "ref": "Matching algorithms"
+        },
+        {
+          "id": "c28-04-04",
+          "type": "single",
+          "prompt": "A user’s cancel request arrives just as the matching engine is about to use that resting order to fill another new order. What is the correct handling?",
+          "options": [
+            "The cancel takes a side path and deletes the order, taking priority over matching",
+            "Cancel and new order share one command stream; sequence numbers decide",
+            "Compare the wall-clock times at which the gateway received each request",
+            "Execute both and have the reporter reconcile and correct it afterward"
+          ],
+          "answer": 1,
+          "explanation": "A cancel is sequenced like any command; the lower number wins. If matching comes first and the resting order fills, the cancel finds nothing in `orderMap` and returns “already filled”; if the cancel comes first, the new order matches others. Side-path deletes or wall-clock ordering make primary, standby, and replay disagree.",
+          "ref": "Matching algorithms"
+        },
+        {
+          "id": "c28-04-05",
+          "type": "judge",
+          "prompt": "Given the same initial state, the same ordered input, and the same rule version, replay should produce exactly the same trades; the actual wall-clock moment should not change the result.",
+          "answer": true,
+          "explanation": "This is functional determinism, the foundation of hot standby sync, failure replay, and audit. If rules such as trading hours or order expiry depend on time, that time must be written into the ordered events as explicit input, not read from the machine’s clock during matching.",
+          "ref": "Determinism"
+        },
+        {
+          "id": "c28-04-06",
+          "type": "single",
+          "prompt": "The team has guaranteed that the same ordered input gives the same result, yet P99.99 latency still spikes occasionally. Which direction should you investigate first?",
+          "options": [
+            "Gaps in sequencer numbers causing different results",
+            "Multicast market data causing inconsistent trade results",
+            "A bug in the price-priority implementation",
+            "Pauses and jitter from runtime garbage collection and similar"
+          ],
+          "answer": 3,
+          "explanation": "Functional determinism means identical results; latency stability means timing variation stays controlled. They differ. Garbage collection in runtimes such as Java can cause latency spikes. Faults in sequencer numbers, multicast, or price rules affect correctness, and the results here are already consistent.",
+          "ref": "Determinism"
+        },
+        {
+          "id": "c28-04-07",
+          "type": "match",
+          "prompt": "Match each optimization with the problem it addresses",
+          "pairs": [
+            [
+              "Ring buffer",
+              "Preallocated memory, no frequent allocation"
+            ],
+            [
+              "Padding",
+              "Separates hot fields to cut false sharing"
+            ],
+            [
+              "Reliable UDP multicast",
+              "Reduces the skew of one-by-one unicast"
+            ],
+            [
+              "Colocation",
+              "Brokers sit near matching, cutting latency"
+            ],
+            [
+              "Rate limiting",
+              "Eases DDoS impact"
+            ]
+          ],
+          "explanation": "A ring buffer joins its ends and allocates memory ahead of time. Padding keeps the sequence number off a cache line shared with other hot data. Multicast sends once to a subscriber group, reducing unicast skew. Colocation shortens the broker-to-matching distance. Rate limiting plus allow and block lists defends against DDoS.",
+          "ref": "Market data publisher optimizations"
+        },
+        {
+          "id": "c28-04-08",
+          "type": "judge",
+          "prompt": "Multicast reduces the skew caused by one-by-one unicast, but it can’t guarantee every subscriber physically receives market data at the same instant.",
+          "answer": true,
+          "explanation": "Path length, device queues, and loss retransmission all create arrival-time differences, and the internet generally doesn’t support end-to-end multicast, so it is usually used in controlled networks. Fairness also requires defining the distribution boundary, sequence numbers, timestamps, and rules for filling gaps.",
+          "ref": "Distribution fairness of market data and multicast"
+        },
+        {
+          "id": "c28-04-09",
+          "type": "single",
+          "prompt": "The book suggests changing `data?from=123&to=456` into a more cacheable URL such as `data/recent` to ease DDoS. What actually does the work?",
+          "options": [
+            "URLs with query parameters can’t be cached in HTTP",
+            "A shorter URL lets the server parse requests faster",
+            "The cache key, TTL, parameter normalization, and cardinality control",
+            "Hiding query parameters keeps attackers from guessing the API"
+          ],
+          "answer": 2,
+          "explanation": "URLs with parameters can be cached too; what matters is the cache key, the TTL, parameter normalization, and a bounded number of combinations. If `from` and `to` take any value, the hit rate is very low and attack traffic goes straight through to the origin. Changing the path shape or hiding parameters won’t stop DDoS.",
+          "ref": "Network Security"
+        },
+        {
+          "id": "c28-04-10",
+          "type": "fill",
+          "prompt": "Complete the three data transmission modes",
+          "text": "Unicast goes from one source to [[one destination]]; broadcast goes to [[the whole subnet]]; multicast goes to [[subscribed hosts]] and, on networks that support it, can cross subnets.",
+          "distractors": [
+            "the whole internet",
+            "the same process"
+          ],
+          "explanation": "Unicast must send once per subscriber, so who is sent to first and last creates skew; broadcast is limited to a subnet; multicast sends once and reaches the hosts subscribed to the group, so it is used to pursue fair market data distribution. UDP multicast can lose packets and needs retransmission added.",
+          "ref": "Distribution fairness of market data and multicast"
+        }
+      ]
+    }
+  ]
+}

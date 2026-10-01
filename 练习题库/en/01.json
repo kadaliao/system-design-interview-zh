@@ -1,0 +1,572 @@
+{
+  "chapter": 1,
+  "title": "Scaling from Zero to Millions of Users",
+  "fullTitle": "Chapter 1: Scaling from Zero to Millions of Users",
+  "intro": [
+    "**How to read this chapter**: Think of a system as a restaurant that keeps getting busier. First one cook gets the food out (a single server); then you separate the cashier, kitchen, and delivery (tiers); only later do you bring in branches, a central kitchen, and an order queue (multiple data centers, message queues). With each layer you add, first say which bottleneck it solves and what new failure it introduces."
+  ],
+  "keyPoints": [
+    "Scaling is iterative: observe, find the bottleneck, add one layer of capability, then verify. Don't scale a layer that isn't the bottleneck.",
+    "Vertical scaling is simple but capped and still a single point. Horizontal scaling offers more capacity, but move sessions out of the web nodes first.",
+    "Read replicas share reads, not write locks. Replication lags, so get read-your-writes from the primary or a version number; don't bet on fast replicas.",
+    "A cache trades possibly stale reads for speed: update the database first, then delete the cache entry, and retry or compensate if the delete fails.",
+    "Queues redeliver, so consumers must be idempotent: commit the dedup record and the business change in one transaction, then ack.",
+    "The shard key decides data placement. Adding shards won't split a celebrity hotspot; handle reads, writes, and fan-out separately."
+  ],
+  "refs": {
+    "Introduction": "引言（Introduction）",
+    "Section 1: Single Server Setup": "第 1 节：单服务器架构（Single Server Setup）",
+    "Request Flow": "请求流程（Request Flow）",
+    "Section 2: Database Separation": "第 2 节：拆分数据库（Database Separation）",
+    "Database Choices": "数据库选择（Database Choices）",
+    "Section 3: Vertical vs. Horizontal Scaling": "第 3 节：纵向扩展与横向扩展（Vertical vs Horizontal Scaling）",
+    "Failure Handling": "故障处理（Failure Handling）",
+    "Section 5: Database Replication": "第 5 节：数据库复制（Database Replication）",
+    "Section 6: Caching": "第 6 节：缓存（Caching）",
+    "Caching Considerations": "缓存注意事项（Caching Considerations）",
+    "CDN Considerations": "CDN 注意事项（CDN Considerations）",
+    "Section 8: Stateless Web Tier": "第 8 节：无状态 Web 层（Stateless Web Tier）",
+    "Section 9: Multi-Data Center Setup": "第 9 节：多数据中心（Multi-Data Center Setup）",
+    "Section 10: Message Queue": "第 10 节：消息队列（Message Queue）",
+    "Section 11: Logging, Metrics, and Automation": "第 11 节：日志、指标与自动化（Logging, Metrics, and Automation）",
+    "Horizontal Scaling / Sharding": "横向扩展：分片（Horizontal Scaling / Sharding）"
+  },
+  "lessons": [
+    {
+      "id": "c01-01",
+      "title": "Single to Tiered",
+      "summary": "One server first: when to split the DB, how to scale",
+      "exercises": [
+        {
+          "id": "c01-01-01",
+          "type": "single",
+          "prompt": "A system has been getting slower since launch, and the team is about to scale it. Following this chapter's approach, what should they do first?",
+          "options": [
+            "Upgrade to the biggest server available and see what happens",
+            "Split everything into microservices to prepare for the future",
+            "Shard the database right away and be done with it",
+            "Check the metrics and find the resource that runs out first"
+          ],
+          "answer": 3,
+          "explanation": "Scaling is an iteration: observe, find the bottleneck, add one layer of capability, then verify. Sharding or splitting services while the CPU is still idle just brings the complexity forward, and buying a bigger machine without knowing the bottleneck may leave the problem in place.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c01-01-02",
+          "type": "judge",
+          "prompt": "On a single server, the web app and the database each use their own resources, so as long as the machine stays up, one being busy won't slow down the other.",
+          "answer": false,
+          "explanation": "On one machine, the CPU, memory, disk, and database all compete: a slow query that saturates the disk slows the API too, and deploying the app can even restart the database. The machine going down takes the whole site with it, but that is only one of the failure modes.",
+          "ref": "Section 1: Single Server Setup"
+        },
+        {
+          "id": "c01-01-03",
+          "type": "order",
+          "prompt": "Put the steps of handling one request on a single-server setup in order",
+          "items": [
+            "The user visits the domain api.mysite.com",
+            "DNS resolves the domain to an IP address",
+            "The client sends an HTTP request to that IP",
+            "The web server returns HTML or JSON"
+          ],
+          "explanation": "DNS first turns the domain into an IP address, so the client knows which machine to send the HTTP request to. After processing, the server returns HTML to web pages and JSON to mobile apps.",
+          "ref": "Request Flow"
+        },
+        {
+          "id": "c01-01-04",
+          "type": "single",
+          "prompt": "As users grow, you move the database off the web server onto a dedicated server. What is the main benefit?",
+          "options": [
+            "It clears the way to switch to NoSQL",
+            "The web tier and database tier can scale independently",
+            "The same SQL queries automatically run faster",
+            "The database is no longer a single point of failure"
+          ],
+          "answer": 1,
+          "explanation": "Once separated, the two tiers no longer fight over one machine, and each can scale to match its own bottleneck. The database is still a single point of failure and the network adds a hop, so check connection pools, timeouts, backups, and a rollback plan before migrating.",
+          "ref": "Section 2: Database Separation"
+        },
+        {
+          "id": "c01-01-05",
+          "type": "single",
+          "prompt": "Deducting inventory for an order needs an atomic multi-table transaction, and the team knows MySQL well. Someone proposes switching to NoSQL for lower latency. Following this chapter, what is the most sensible response?",
+          "options": [
+            "Keep MySQL for transactions and dual-write inventory to NoSQL",
+            "List query and transaction needs first; for strong transactions SQL is often safer",
+            "Load-test the inventory table; if NoSQL is faster, switch everything",
+            "The data is still small, so either choice is fine; don't agonize"
+          ],
+          "answer": 1,
+          "explanation": "Pick a database starting from queries: access keys, transactions and JOINs, consistency needs, and what the team can operate. Stock deduction needs multi-table atomic transactions, where mature SQL is usually safer. Benchmarks alone miss that need, and dual-writing two stores breaks atomicity and adds sync and ops work.",
+          "ref": "Database Choices"
+        },
+        {
+          "id": "c01-01-06",
+          "type": "multi",
+          "prompt": "In which situations might a non-relational database be a better fit?",
+          "options": [
+            "You need multi-table JOINs with atomic transactions",
+            "The data has no fixed structure and no relationships to maintain",
+            "The application needs extremely low latency",
+            "You need to store massive amounts of data",
+            "The team only has experience operating MySQL"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "Ultra-low latency, schema-less data, and massive storage are classic NoSQL use cases. Multi-table JOINs and transactions are exactly what SQL does best, and moving to NoSQL when the team only knows how to run MySQL just adds risk.",
+          "ref": "Database Choices"
+        },
+        {
+          "id": "c01-01-07",
+          "type": "match",
+          "prompt": "Match each scaling move with its main cost",
+          "pairs": [
+            [
+              "Separate the database",
+              "Extra network hop; connection pools to manage"
+            ],
+            [
+              "Vertical scaling",
+              "A bigger machine, but with a hardware ceiling"
+            ],
+            [
+              "Horizontal scaling",
+              "Needs a load balancer and shared sessions"
+            ],
+            [
+              "Switch to NoSQL",
+              "May lose transactions and multi-table JOINs"
+            ]
+          ],
+          "explanation": "Every new capability brings a new cost. Separating the database adds network overhead; vertical scaling (a bigger pot) is simple but capped and still a single point; horizontal scaling (many pots cooking together) must solve routing and sessions; before switching to NoSQL, confirm you don't need transactions or JOINs.",
+          "ref": "Section 3: Vertical vs. Horizontal Scaling"
+        },
+        {
+          "id": "c01-01-08",
+          "type": "fill",
+          "prompt": "Complete the scaling template for interviews",
+          "text": "When the bottleneck is single-machine capacity, use [[vertical scaling]] first for a bigger machine as a quick fix, then [[horizontal scaling]] for a server pool that removes the single point and allows failover.",
+          "distractors": [
+            "caching",
+            "CDN",
+            "message queue"
+          ],
+          "explanation": "A bigger machine is the smallest change and works fastest, but it has a hardware ceiling and is still a single point. A pool of servers behind a load balancer removes the single point and lets traffic fail over.",
+          "ref": "Section 3: Vertical vs. Horizontal Scaling"
+        },
+        {
+          "id": "c01-01-09",
+          "type": "judge",
+          "prompt": "For an internal tool or low-traffic MVP, starting with one server that runs the web app, database, and cache together is a reasonable choice.",
+          "answer": true,
+          "explanation": "When you need to validate the business quickly, one machine is enough. What matters is recording total request time and database time as a baseline. Split by bottleneck once some resource actually runs out first, instead of starting with a distributed architecture.",
+          "ref": "Section 1: Single Server Setup"
+        }
+      ]
+    },
+    {
+      "id": "c01-02",
+      "title": "Load and Replicas",
+      "summary": "Spreading traffic, read/write split, replication lag",
+      "exercises": [
+        {
+          "id": "c01-02-01",
+          "type": "single",
+          "prompt": "At peak, an API slows down, and traces show the time is all spent waiting on locks in one database. What is the most likely result of adding 10 more web servers behind the load balancer?",
+          "options": [
+            "The load balancer becomes the new bottleneck",
+            "Latency drops to about a tenth",
+            "The lock waits get spread across the web servers",
+            "Little improvement, and possibly a longer lock queue"
+          ],
+          "answer": 3,
+          "explanation": "A load balancer only distributes requests; the lock wait happens inside the shared database. More web servers start more concurrent transactions, which can lengthen the lock queue. First find the lock holder and the transaction duration, then shorten transactions and add indexes instead of adding web servers.",
+          "ref": "Q01-01"
+        },
+        {
+          "id": "c01-02-02",
+          "type": "single",
+          "prompt": "Every order updates the same inventory row, and each transaction holds the lock on that row for 50 ms, one after another. At best, how many updates per second can that row complete?",
+          "options": [
+            "About 20",
+            "About 200",
+            "Depends on the number of web servers",
+            "About 50"
+          ],
+          "answer": 0,
+          "explanation": "With serial lock holding, the ceiling is about 1 / 0.05 = 20 per second, and real systems lose some to other overhead. Whether there are 2 or 20 web servers in front, the database holds only this one inventory row.",
+          "ref": "Q01-01"
+        },
+        {
+          "id": "c01-02-03",
+          "type": "judge",
+          "prompt": "When every order updates the same inventory row, adding a few read replicas to the database noticeably eases lock waits on the primary.",
+          "answer": false,
+          "explanation": "Read replicas only share reads. Writes must still go to the primary, so write locks on the same row still run one after another. Fix hot writes by shortening transactions, using atomic conditional updates, or splitting inventory along business lines.",
+          "ref": "Q01-01"
+        },
+        {
+          "id": "c01-02-04",
+          "type": "multi",
+          "prompt": "In a primary-replica setup, which of these failure-handling practices are reasonable?",
+          "options": [
+            "Switch to ring replication, and failover can no longer lose data",
+            "When the only replica goes down, send reads to the primary for now",
+            "With several replicas, route reads to healthy ones and build a new replica",
+            "When the primary goes down, let all replicas accept writes at once",
+            "When the primary goes down, promote one replica to be the new primary"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "Reads can fall back to the primary temporarily or move to other replicas, and when the primary fails, you promote one replica. Letting several replicas accept writes causes conflicts, and multi-primary or ring replication doesn't automatically remove data loss, conflict, or split-brain risk.",
+          "ref": "Failure Handling"
+        },
+        {
+          "id": "c01-02-05",
+          "type": "judge",
+          "prompt": "After the primary goes down, the replica that gets promoted may not be fully up to date, so confirm the replication position before switching and fill in missing data with a recovery script.",
+          "answer": true,
+          "explanation": "In production the chosen replica may lag behind the old primary and need a recovery script to catch up. You also need a quorum mechanism and must fence off the old primary; otherwise, if it comes back and keeps accepting writes, you get a split brain.",
+          "ref": "Failure Handling"
+        },
+        {
+          "id": "c01-02-06",
+          "type": "single",
+          "prompt": "A user changes their nickname and refreshes right away, but still sees the old one. The team's fix is “for 1 second after a write, send reads to the primary.” What is the main problem with this fix?",
+          "options": [
+            "All reads now go to the primary for good, leaving the replicas idle",
+            "The primary only handles writes and cannot serve reads",
+            "No problem; replication lag is usually far below 1 second",
+            "Replication lag can exceed 1 second, so it isn't a strict guarantee"
+          ],
+          "answer": 3,
+          "explanation": "Lag is usually small but can exceed 1 second at peak or during failures, and the user would still see the old value; don't bet on replicas being fast enough. A stricter approach returns a version number with the write response, requires the replica to reach it on read, and otherwise waits or reads from the primary.",
+          "ref": "Q01-03"
+        },
+        {
+          "id": "c01-02-07",
+          "type": "order",
+          "prompt": "Use version numbers to guarantee read-your-writes: put the reads that follow a nickname change in order",
+          "items": [
+            "Write to the primary; version goes from 41 to 42",
+            "The write response returns version 42 to the client",
+            "A later read request carries min_version=42",
+            "The read router checks whether a replica has reached 42",
+            "If the replica is still at 41, wait or read the primary"
+          ],
+          "explanation": "Write down the version, check it on read, and wait or switch paths if the replica isn't there yet. The version token must be issued by a trusted service; a position claimed by the client can't simply be believed. That way, even when replication lag exceeds expectations, the user never reads a value from before their own write.",
+          "ref": "Q01-03"
+        },
+        {
+          "id": "c01-02-08",
+          "type": "fill",
+          "prompt": "Complete the consistency problem that replication causes",
+          "text": "Reading from a replica right after writing to the primary may miss the new data; this is [[replication lag]]. When you need [[read-your-writes]], read the primary for a short window or carry a version number.",
+          "distractors": [
+            "cache avalanche",
+            "split brain",
+            "load balancing"
+          ],
+          "explanation": "A replica takes time to catch up with the primary, and reads during that window return old values. Read-your-writes only guarantees that users see their own writes; it doesn't mean every user sees the latest global state.",
+          "ref": "Section 5: Database Replication"
+        },
+        {
+          "id": "c01-02-09",
+          "type": "judge",
+          "prompt": "Even if a read request is correctly routed to the primary, the user still sees the old nickname when the request first hits a cache holding an old version.",
+          "answer": true,
+          "explanation": "Read-your-writes depends on the whole read path. Routing only covers the database leg; if the cache still holds the version-41 nickname, the request returns the old value at the cache layer. So after a write, the related cache entries must be invalidated too.",
+          "ref": "Q01-03"
+        }
+      ]
+    },
+    {
+      "id": "c01-03",
+      "title": "Caching and CDN",
+      "summary": "Cache reads and writes, hit rate, CDN, stateless web",
+      "exercises": [
+        {
+          "id": "c01-03-01",
+          "type": "single",
+          "prompt": "On a write you update the database first, then delete the cache entry. This time the database commit succeeded but the cache deletion failed. What should you do?",
+          "options": [
+            "Roll back the database update that was just committed",
+            "Retry the deletion, or compensate asynchronously through a message",
+            "Ignore it; the next read will correct it automatically",
+            "Change this key to never expire"
+          ],
+          "answer": 1,
+          "explanation": "The database has committed and is the source of truth, so rolling back makes no sense. A failed deletion leaves the old value in the cache, and the next read will hit it rather than correct it, so retry or compensate with a message.",
+          "ref": "Section 6: Caching"
+        },
+        {
+          "id": "c01-03-02",
+          "type": "single",
+          "prompt": "There are 10,000 cacheable reads per second, and the hit rate drops from 98% to 80%. Roughly how many times more origin requests does the database now take?",
+          "options": [
+            "About 1.2 times",
+            "Basically unchanged",
+            "About 10 times",
+            "About 18 times"
+          ],
+          "answer": 2,
+          "explanation": "Only misses go to the database: from 10,000×2%=200 per second to 10,000×20%=2,000 per second, which is 10 times, not just 18% more. The hit rate looks like it fell only a little, yet database load grew by an order of magnitude.",
+          "ref": "Q01-02"
+        },
+        {
+          "id": "c01-03-03",
+          "type": "multi",
+          "prompt": "The cache hit rate suddenly drops. Which of the following are worth checking first to find the cause?",
+          "options": [
+            "The overall hit rate with all endpoints mixed together",
+            "Timeout and error rates of cache requests",
+            "The cumulative hit rate since the process started",
+            "Eviction counts, and whether memory has hit its limit",
+            "Expiration counts, and whether TTLs cluster at the same moment"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "Many evictions with full memory mean too little capacity; clustered expirations may come from a uniform TTL or a deployment flush; cache timeouts counted as misses also drag the rate down. Cumulative values dilute recent changes and a blended ratio hides who is missing, so compare per-endpoint increments in the same window.",
+          "ref": "Q01-02"
+        },
+        {
+          "id": "c01-03-04",
+          "type": "judge",
+          "prompt": "If the application treats a cache query timeout as a miss, a falling hit rate doesn't necessarily mean the data isn't in the cache.",
+          "answer": true,
+          "explanation": "Applications often log “cache timed out, fell back to the database” as a miss. Then look at cache latency, error rate, and connection-pool waits to tell “not found” from “couldn't be reached.” A single percentage can't explain the cause.",
+          "ref": "Q01-02"
+        },
+        {
+          "id": "c01-03-05",
+          "type": "judge",
+          "prompt": "For an endpoint whose data changes on every read and whose hit rate is very low, adding a cache still reliably reduces database load.",
+          "answer": false,
+          "explanation": "Caches suit data that is read often and changed rarely. Data that changes every time almost always misses and still goes to the database, with an extra layer to maintain and a risk of stale reads. A cache trades “slow” for “possibly stale”; it is not free speed.",
+          "ref": "Caching Considerations"
+        },
+        {
+          "id": "c01-03-06",
+          "type": "match",
+          "prompt": "Match each cache design point with the problem it addresses",
+          "pairs": [
+            [
+              "Expiration policy",
+              "Drops entries at expiry to free memory"
+            ],
+            [
+              "Eviction policy",
+              "Frees space when full; LRU is common"
+            ],
+            [
+              "Consistency",
+              "Database and cache aren't written atomically"
+            ],
+            [
+              "Multiple cache nodes",
+              "Avoids a single point of failure at the cache"
+            ]
+          ],
+          "explanation": "Expiration handles “leave when time is up,” eviction handles “who leaves first when full.” Writing the database and cache separately inevitably leaves an inconsistency window, and a single cache server is a potential single point of failure, so deploy several across data centers.",
+          "ref": "Caching Considerations"
+        },
+        {
+          "id": "c01-03-07",
+          "type": "single",
+          "prompt": "After a front-end release, some users still get the old app.js from the CDN. What is the most reliable and least laborious way to prevent this long term?",
+          "options": [
+            "Set the CDN expiry as long as possible",
+            "Turn off the CDN and send every request to the origin",
+            "Manually purge every node on each release",
+            "Put a content hash in the file name so an update changes the URL"
+          ],
+          "answer": 3,
+          "explanation": "With a content hash in the file name (such as app.8f3c.js), the URL changes whenever the content does, so stale cache entries are never hit. A longer expiry keeps old files around longer, manual purges are easy to miss, and turning off the CDN loses nearby acceleration.",
+          "ref": "CDN Considerations"
+        },
+        {
+          "id": "c01-03-08",
+          "type": "judge",
+          "prompt": "When the CDN has a temporary outage, clients should be able to detect the problem and request resources directly from the origin server.",
+          "answer": true,
+          "explanation": "A CDN is only an acceleration layer; the origin still holds the original files. If clients can fall back to the origin, a CDN failure just makes pages slower instead of making resources completely unreachable.",
+          "ref": "CDN Considerations"
+        },
+        {
+          "id": "c01-03-09",
+          "type": "single",
+          "prompt": "You want web servers to scale in and out automatically with traffic. What is the best way to store users' login state?",
+          "options": [
+            "Only in the load balancer's memory",
+            "A copy in each web server's local memory, synced periodically",
+            "In shared storage, so web nodes are stateless",
+            "Enable sticky sessions to pin users to one machine long term"
+          ],
+          "answer": 2,
+          "explanation": "Once sessions live in shared storage, any web server can handle any user's request, so scaling and failover are unaffected. Sticky sessions are only a temporary workaround and reduce failover flexibility.",
+          "ref": "Section 8: Stateless Web Tier"
+        },
+        {
+          "id": "c01-03-10",
+          "type": "judge",
+          "prompt": "A “stateless” web tier means the whole system no longer stores any session data.",
+          "answer": false,
+          "explanation": "Stateless means request handling doesn't depend on the local memory of one web machine. Session data still exists; it has just moved to shared storage, tokens, or a user database, and those stores are themselves state.",
+          "ref": "Section 8: Stateless Web Tier"
+        }
+      ]
+    },
+    {
+      "id": "c01-04",
+      "title": "Queues and Shards",
+      "summary": "Multi-data center, queues, monitoring, and sharding",
+      "exercises": [
+        {
+          "id": "c01-04-01",
+          "type": "single",
+          "prompt": "You are deploying across two data centers. Which statement is most accurate?",
+          "options": [
+            "Making cross-region replication synchronous removes the latency problem",
+            "First decide between writes in one region or in several, then design replication",
+            "GeoDNS sends users to the nearest site, so data sync is handled too",
+            "Letting both sites accept writes is easiest; the database resolves conflicts itself"
+          ],
+          "answer": 1,
+          "explanation": "GeoDNS only routes users to the nearest site; data sync needs its own design. Multi-region writes must resolve conflicts, and synchronous cross-region replication adds a round trip to every write. So decide first: one write region with read-only copies elsewhere, or writes everywhere.",
+          "ref": "Section 9: Multi-Data Center Setup"
+        },
+        {
+          "id": "c01-04-02",
+          "type": "judge",
+          "prompt": "As long as you use a message queue, messages won't be lost after a process restart or power failure, even if they exist only in memory.",
+          "answer": false,
+          "explanation": "Keeping messages only in memory doesn't guarantee they survive a restart or power loss. When you need durability, the queue must rely on disk logs, replication, and acknowledgements, so check the specific configuration when choosing one.",
+          "ref": "Section 10: Message Queue"
+        },
+        {
+          "id": "c01-04-03",
+          "type": "multi",
+          "prompt": "Which of these tasks suit asynchronous processing through a message queue?",
+          "options": [
+            "Generating image thumbnails",
+            "Reading the price when opening a product detail page",
+            "Sending notification emails",
+            "Exporting reports",
+            "Verifying the password at login and returning the result"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Tasks that can finish later, need traffic smoothing, or should be decoupled from the main request suit a queue. Login checks and reading prices on a detail page are synchronous paths where the user is waiting for the result, so queueing them only makes the user wait for nothing.",
+          "ref": "Q01-05"
+        },
+        {
+          "id": "c01-04-04",
+          "type": "single",
+          "prompt": "A consumer takes messages from a queue and processes them. Which situation causes the same message to be **executed twice**?",
+          "options": [
+            "Acking first, then the process crashes",
+            "The backlog grows so long that messages expire and are dropped",
+            "The business change is committed, then the process crashes before sending the ack"
+          ],
+          "answer": 2,
+          "explanation": "When the queue gets no ack, it redelivers a message that was already processed; this is the classic window for duplicate execution. Acking first and then crashing, or messages expiring, cause message loss rather than duplicates.",
+          "ref": "Q01-05"
+        },
+        {
+          "id": "c01-04-05",
+          "type": "single",
+          "prompt": "Event E7 means “award 10 points for an order,” and the queue may redeliver it. Which approach guarantees the points are added only once?",
+          "options": [
+            "In one transaction, insert E7 (unique constraint) and add the points",
+            "Ack the message on receipt, then add the points",
+            "Add the points first, then record E7 as processed separately",
+            "Record E7 as processed first, then add the points separately"
+          ],
+          "answer": 0,
+          "explanation": "Registering the event and changing the account in one transaction means a redelivered E7 hits the unique constraint and adds no points. Doing them separately leaves a crash window: record first and the points are lost forever, add first and they may be added twice. Acking first can lose the message.",
+          "ref": "Q01-05"
+        },
+        {
+          "id": "c01-04-06",
+          "type": "single",
+          "prompt": "Sharded by user_id: 1,000 ordinary users at 100 QPS each, plus one celebrity alone at 100,000 QPS. What is the effect of going from 10 shards to 100?",
+          "options": [
+            "The celebrity's traffic is spread across 100 shards",
+            "Ordinary users are spread thinner, but the celebrity's traffic still lands on one shard",
+            "Every shard's load drops to a tenth",
+            "Consistent hashing automatically splits up the celebrity hotspot"
+          ],
+          "answer": 1,
+          "explanation": "The same shard key always lands on the same shard; more baskets won't split one big watermelon. Split by hotspot type: caches absorb repeated reads, a push-pull mix handles fan-out, and independent writes can use a bucket suffix.",
+          "ref": "Q01-04"
+        },
+        {
+          "id": "c01-04-07",
+          "type": "match",
+          "prompt": "Match each type of celebrity hotspot with a suitable remedy",
+          "pairs": [
+            [
+              "Repeated profile reads",
+              "CDN and multiple caches share the reads"
+            ],
+            [
+              "Celebrity post fan-out",
+              "Push for ordinary users, pull for celebrities"
+            ],
+            [
+              "Huge writes, one user",
+              "Add a bucket suffix to split into sub-shards"
+            ],
+            [
+              "Same-balance updates",
+              "Serialize; random bucketing isn't safe"
+            ]
+          ],
+          "explanation": "Read hotspots can be replicated, fan-out hotspots can switch to a push-pull mix, and independent writes can be bucketed. But a single balance must keep atomic semantics: copying stale values or random bucketing breaks correctness, so you can only serialize or redefine the business operation.",
+          "ref": "Q01-04"
+        },
+        {
+          "id": "c01-04-08",
+          "type": "judge",
+          "prompt": "Moving the celebrity to a dedicated shard isolates the impact on other users, but it doesn't remove that shard's own capacity limit.",
+          "answer": true,
+          "explanation": "A dedicated shard fixes the collateral damage to others, but all of the celebrity's traffic still lands on that one shard. If it can't cope, you still need caching, a push-pull mix, or bucketing to split the workload.",
+          "ref": "Q01-04"
+        },
+        {
+          "id": "c01-04-09",
+          "type": "fill",
+          "prompt": "Complete the key ideas of sharding",
+          "text": "A shard key should spread data [[evenly]]; when distribution is uneven and some shards fill first, you must [[reshard]]; when cross-shard JOINs are hard, [[denormalization]] keeps the fields a query needs together.",
+          "distractors": [
+            "normalization",
+            "add read replicas",
+            "store centrally"
+          ],
+          "explanation": "The shard key decides where data lands, and a poor choice creates hotspots. When shards fill up, reshard and migrate data; consistent hashing narrows the migration. Replicas copy the same data and can't fix a full shard. Cross-shard JOINs are costly, so denormalization duplicates fields together; normalization does the opposite.",
+          "ref": "Horizontal Scaling / Sharding"
+        },
+        {
+          "id": "c01-04-10",
+          "type": "judge",
+          "prompt": "If health checks are always green and the error rate is zero, you can conclude the system has no performance bottleneck.",
+          "answer": false,
+          "explanation": "“The service is up” doesn't mean “the service meets its targets.” To locate a bottleneck you need at least request volume, P50/P95/P99 latency, database connections, cache hit rate, and queue backlog; without those numbers you can't tell which layer is slow.",
+          "ref": "Section 11: Logging, Metrics, and Automation"
+        }
+      ]
+    }
+  ]
+}

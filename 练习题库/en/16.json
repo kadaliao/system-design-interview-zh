@@ -1,0 +1,554 @@
+{
+  "chapter": 16,
+  "title": "Proximity Service",
+  "fullTitle": "Chapter 16: Proximity Service",
+  "intro": [
+    "**How to read this chapter**: Split “find restaurants near me” into two steps: use a spatial index to pull a small batch of candidates, then compute the real distance. A CRUD engineer’s first instinct is to scan the business table. What this chapter teaches is to lay data out by location so a query reads less of it. Remember: **find the cell, fetch the businesses, then filter by distance.**"
+  ],
+  "keyPoints": [
+    "Nearby search has two steps: a spatial index recalls a few candidates, then real spherical distance filters and ranks them. Never guess from cells.",
+    "Business locations rarely change and reads dominate. The LBS is stateless and read-only, replicas scale reads, and updates can apply in a daily batch.",
+    "A longer geohash prefix means a smaller cell, but nearby points may not share one. Query the home cell and neighbors; expand if the circle isn’t covered.",
+    "A quadtree splits cells by density (here, at most 100 businesses per leaf). It suits k-NN, but takes minutes to build at startup and is hard to update.",
+    "Use the geohash, not GPS coordinates, as the cache key. A cell caches business IDs and business_id caches details, so same-cell users share candidates.",
+    "S2 numbers spherical cells along a Hilbert curve. Multi-level cells can cover any region, which suits geofencing."
+  ],
+  "refs": {
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Data Model": "数据模型",
+    "High-Level Architecture": "高层架构",
+    "Search Nearby Businesses": "搜索附近商家",
+    "Option 1: Two-Dimensional Search (Naive)": "方案一：二维搜索（朴素方案）",
+    "Option 2: Evenly Divided Grid": "方案二：均匀网格（Evenly Divided Grid）",
+    "Option 3: Geohash": "方案三：Geohash",
+    "Option 4: Quadtree": "方案四：四叉树（Quadtree）",
+    "Operational Considerations": "运维注意事项",
+    "Option 5: Google S2": "方案五：Google S2",
+    "Choosing the Right Index": "选择适合的索引",
+    "Scaling the Geospatial Index": "扩展地理空间索引",
+    "Caching Strategy": "缓存策略",
+    "Steps to Retrieve Nearby Businesses": "检索附近商家的步骤",
+    "Key Optimizations": "关键优化",
+    "Handling Updates": "处理更新"
+  },
+  "lessons": [
+    {
+      "id": "c16-01",
+      "title": "Needs and Design",
+      "summary": "Estimation, read-heavy load, service roles",
+      "exercises": [
+        {
+          "id": "c16-01-01",
+          "type": "single",
+          "prompt": "With 100 million DAU, each searching 5 times a day, what is the average search QPS?",
+          "options": [
+            "About 580",
+            "About 58,000",
+            "About 5,800",
+            "About 1,200"
+          ],
+          "answer": 2,
+          "explanation": "100 million × 5 ÷ 86,400 ≈ 5,787, which the chapter rounds roughly to 5,000. This is an all-day average. Peaks in popular areas need a separate estimate and can’t be used for capacity directly.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c16-01-02",
+          "type": "judge",
+          "prompt": "The estimate of about 5,000 QPS already includes peak traffic in popular areas, so provisioning capacity for it is enough.",
+          "answer": false,
+          "explanation": "5,000 is the all-day average (about 5,787 exactly). The non-functional requirements call for surviving peak traffic in popular areas, so the peak needs its own estimate and some headroom.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c16-01-03",
+          "type": "single",
+          "prompt": "Nearby businesses and nearby friends both look things up by location. Why does this chapter focus on scaling reads?",
+          "options": [
+            "Business search must be strongly consistent, so reads go to the primary",
+            "Business locations rarely change and reads far outnumber writes, so write load is light",
+            "There are more businesses (200 million) than users (100 million)",
+            "The LBS also handles creating, updating, and deleting businesses"
+          ],
+          "answer": 1,
+          "explanation": "A business address barely moves and updates needn’t be real time, yet users search all day. In the nearby-friends case, locations keep changing, so writes and pushes dominate. The LBS is read-only. Creates, updates, and deletes belong to the business service.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c16-01-04",
+          "type": "multi",
+          "prompt": "The chapter stores business data in a relational database such as MySQL. Which of these are sound reasons?",
+          "options": [
+            "Business data is structured",
+            "The system is read-heavy, so a relational database is required",
+            "It has mature indexing and primary-replica replication",
+            "Business updates need transactions",
+            "An ordinary relational index can handle nearby search efficiently"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Structured data, transactions, and mature indexes with replication together make the case. Being read-heavy doesn’t by itself point to MySQL, and nearby search still depends on the spatial index covered later.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c16-01-05",
+          "type": "match",
+          "prompt": "Match each role in the high-level architecture with its responsibility",
+          "pairs": [
+            [
+              "LBS",
+              "Stateless, location queries only"
+            ],
+            [
+              "Business service",
+              "Business CRUD and detail lookups"
+            ],
+            [
+              "Load balancer",
+              "Routes requests to the right service"
+            ],
+            [
+              "Primary",
+              "Takes writes, then replicates them"
+            ],
+            [
+              "Read replica",
+              "Copies the primary, may lag slightly"
+            ]
+          ],
+          "explanation": "In the service tier, the LBS is read-only and stateless, while the business service handles creates, updates, deletes, and details. In the data tier, writes land on the primary and replicate out, and the LBS reads from replicas. Replica lag is acceptable because business changes needn’t take effect in real time.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c16-01-06",
+          "type": "single",
+          "prompt": "A business just changed its address on the primary, but the LBS still reads the old address from a replica. Under this chapter’s requirements, is that acceptable?",
+          "options": [
+            "No, the LBS must switch to reading from the primary",
+            "Yes, because the LBS writes the new address back to the replica",
+            "No, replication to all replicas should be synchronous",
+            "Yes, business updates don’t have to take effect in real time"
+          ],
+          "answer": 3,
+          "explanation": "The functional requirements say business creates, updates, and deletes needn’t take effect in real time, so a briefly stale replica is fine. Reading from the primary or replicating synchronously would give up read scalability, and the LBS never handles write requests.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c16-01-07",
+          "type": "judge",
+          "prompt": "The LBS only handles location queries and no writes, so it can be stateless and add or remove instances with traffic.",
+          "answer": true,
+          "explanation": "The LBS holds no session or write state that would need migrating. Any instance can answer any query, so the load balancer can route freely and you simply add machines at peak. Write requests all go to the business service.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c16-01-08",
+          "type": "fill",
+          "prompt": "Complete the parameters of the nearby-search API",
+          "text": "`GET /v1/search/nearby` takes the user’s latitude, longitude, and [[radius]], which defaults to [[5,000 meters]].",
+          "distractors": [
+            "500 meters",
+            "business_id",
+            "geohash"
+          ],
+          "explanation": "radius is the search radius, 5,000 meters by default. In the final flow’s example the user sets it to 500 meters, and the LBS picks a longer geohash accordingly.",
+          "ref": "Search Nearby Businesses"
+        }
+      ]
+    },
+    {
+      "id": "c16-02",
+      "title": "Geohash",
+      "summary": "2D search, grids, and geohash boundaries",
+      "exercises": [
+        {
+          "id": "c16-02-01",
+          "type": "single",
+          "prompt": "You index longitude and latitude separately, then query nearby businesses with two `BETWEEN` conditions. Why is this still slow?",
+          "options": [
+            "SQL doesn’t allow BETWEEN on two columns in one query",
+            "Coordinates are decimals, so the database can’t index them",
+            "Each index covers one dimension, and two large result sets must still be intersected",
+            "The business table is too small, so indexes only slow queries down"
+          ],
+          "answer": 2,
+          "explanation": "The latitude condition matches a whole horizontal band and the longitude condition a whole vertical band. Each contains many businesses, and only their intersection is the small patch you want. An ordinary one-dimensional index can’t restrict both dimensions efficiently, which is the problem spatial indexes solve.",
+          "ref": "Option 1: Two-Dimensional Search (Naive)"
+        },
+        {
+          "id": "c16-02-02",
+          "type": "judge",
+          "prompt": "Once the radius is correctly converted to degrees of latitude and longitude, the `BETWEEN` rectangle results can be returned to the user directly.",
+          "answer": false,
+          "explanation": "The rectangle only recalls candidates. Its four corners lie outside the circle, and the distance covered by one degree of longitude varies with latitude. After fetching candidates you must still filter out businesses beyond the radius by spherical distance.",
+          "ref": "Option 1: Two-Dimensional Search (Naive)"
+        },
+        {
+          "id": "c16-02-03",
+          "type": "single",
+          "prompt": "What is the main problem with indexing the world as fixed-size cells?",
+          "options": [
+            "A limited number of cells can’t encode the whole world",
+            "You can’t work out which fixed cells are neighbors",
+            "Each cell needs its own database table",
+            "Businesses are unevenly spread: city cells are packed, rural cells nearly empty"
+          ],
+          "answer": 3,
+          "explanation": "Fixed cells can’t suit both dense cities and sparse countryside. With large cells, downtown packs businesses into one cell. With small cells, the suburbs are full of empty ones. This is also why quadtrees split cells by density.",
+          "ref": "Option 2: Evenly Divided Grid"
+        },
+        {
+          "id": "c16-02-04",
+          "type": "single",
+          "prompt": "The user raises the search radius from 500 meters to 5 km. How should the geohash length the LBS uses change?",
+          "options": [
+            "No change, geohash length is unrelated to radius",
+            "Longer, using finer cells for more precision",
+            "Shorter, using larger cells to cover a larger area",
+            "Jump straight to the maximum precision of 12"
+          ],
+          "answer": 2,
+          "explanation": "A shorter geohash means larger cells. In the chapter’s example, 500 meters uses length 6. With a bigger radius and still-fine cells, the home cell plus its neighbors can’t cover the circle. Use the radius reference table to pick a length that covers the query area.",
+          "ref": "Option 3: Geohash"
+        },
+        {
+          "id": "c16-02-05",
+          "type": "judge",
+          "prompt": "If two places share no geohash prefix at all, they must be far apart.",
+          "answer": false,
+          "explanation": "The relationship runs one way. A long shared prefix means both are in the same small cell, but being close doesn’t guarantee a shared prefix. Two points only a few meters apart on opposite sides of the equator may share no prefix at all.",
+          "ref": "Option 3: Geohash"
+        },
+        {
+          "id": "c16-02-06",
+          "type": "judge",
+          "prompt": "The longer the prefix two geohashes share, the smaller the grid area they both fall in.",
+          "answer": true,
+          "explanation": "A geohash is a hierarchical grid: each extra character subdivides the previous cell. So the longer the shared prefix, the smaller the cell both locations fall in. The reverse doesn’t hold, so don’t treat it as a distance formula.",
+          "ref": "Option 3: Geohash"
+        },
+        {
+          "id": "c16-02-07",
+          "type": "single",
+          "prompt": "After computing the user’s geohash cell, the LBS also queries the 8 surrounding cells. What is the main reason?",
+          "options": [
+            "Near a cell edge, closer businesses may sit in a neighboring cell",
+            "Businesses in neighboring cells usually have higher ratings",
+            "Querying more cells improves the Redis cache hit rate",
+            "Geohash encoding has errors that multi-cell voting corrects"
+          ],
+          "answer": 0,
+          "explanation": "Cell boundaries are arbitrary. A user standing at an edge may have a restaurant a few dozen meters away in the next cell. Querying the home cell plus 8 neighbors covers an area centered on the user, then you filter by real distance.",
+          "ref": "Option 3: Geohash"
+        },
+        {
+          "id": "c16-02-08",
+          "type": "multi",
+          "prompt": "Which statements about the geohash boundary problem are correct?",
+          "options": [
+            "Choosing a 12-character encoding eliminates the boundary problem",
+            "The boundary problem means geohash can’t be used for nearby search",
+            "Queries must include the adjacent cells",
+            "Two points with a long shared prefix can still fall in different fine cells",
+            "Two close points on opposite sides of the equator may share no prefix"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "The boundary problem comes from the grid itself. A longer encoding only makes cells finer, and the boundaries remain. The fix is to query adjacent cells too, then filter precisely. Geohash is still a common choice for nearby search.",
+          "ref": "Option 3: Geohash"
+        },
+        {
+          "id": "c16-02-09",
+          "type": "fill",
+          "prompt": "Complete the two steps of geohash nearby search",
+          "text": "First take the businesses in the home cell and its [[8]] neighbors as candidates, then filter out those beyond the radius by [[spherical distance]] and sort.",
+          "distractors": [
+            "4",
+            "shared prefix",
+            "alphabetical order"
+          ],
+          "explanation": "The nine cells do the recall, and distance makes the final call. Cells only say a business may be nearby, and the corners of the combined square stick out past the query circle. Filter by real distance rather than guessing from prefix length.",
+          "ref": "Option 3: Geohash"
+        }
+      ]
+    },
+    {
+      "id": "c16-03",
+      "title": "Quadtree and S2",
+      "summary": "Density splits, k-NN, operations, choosing",
+      "exercises": [
+        {
+          "id": "c16-03-01",
+          "type": "single",
+          "prompt": "A quadtree’s leaf threshold is 100. What happens to a region with 450 businesses?",
+          "options": [
+            "It keeps splitting into four quadrants until each leaf has at most 100",
+            "It stays one leaf and is only flagged as a hotspot",
+            "The extra 350 are moved into neighboring leaves",
+            "That region switches to its own geohash index"
+          ],
+          "answer": 0,
+          "explanation": "The build starts at the root and subdivides recursively. Every internal node has exactly four children, and splitting stops once each leaf holds at most the threshold x (100 here). The denser the businesses, the deeper the tree and the smaller the cells.",
+          "ref": "Option 4: Quadtree"
+        },
+        {
+          "id": "c16-03-02",
+          "type": "judge",
+          "prompt": "Quadtree cell sizes vary with business density: leaf areas are small downtown and large in the suburbs.",
+          "answer": true,
+          "explanation": "A cell splits only when its business count exceeds the threshold, so dense areas are cut fine and sparse areas get one big cell. That is how it adapts to density differences better than fixed-precision geohash.",
+          "ref": "Option 4: Quadtree"
+        },
+        {
+          "id": "c16-03-03",
+          "type": "single",
+          "prompt": "A user wants the 3 nearest gas stations with no radius limit, and in the suburbs they may be far away. Which index fits best?",
+          "options": [
+            "One-dimensional indexes on the table’s latitude and longitude",
+            "A quadtree, searching outward from the user’s region for the nearest k",
+            "Fixed-precision geohash, querying only nine cells",
+            "An even grid, since fixed cells are easy to compute"
+          ],
+          "answer": 1,
+          "explanation": "k-nearest neighbors asks for the closest k, and the distance isn’t known up front. A quadtree splits by density, so you can search outward from the user’s region until you have k. A fixed-precision nine-cell query may find none in the suburbs.",
+          "ref": "Option 4: Quadtree"
+        },
+        {
+          "id": "c16-03-04",
+          "type": "single",
+          "prompt": "Each LBS server spends several minutes building the quadtree in memory at startup. What happens if you restart every LBS at once to release a new version?",
+          "options": [
+            "They can’t take traffic while building, so many servers are unavailable at once",
+            "The old and new quadtrees conflict and corrupt data",
+            "Only the first query is slightly slower",
+            "The quadtree is copied from other servers, so the impact is small"
+          ],
+          "answer": 0,
+          "explanation": "A server can’t take traffic until the build finishes. Restarting all of them at once leaves most LBS instances unable to serve for several minutes. So roll out new versions in batches and always keep enough instances available.",
+          "ref": "Operational Considerations"
+        },
+        {
+          "id": "c16-03-05",
+          "type": "multi",
+          "prompt": "Which statements about updating the quadtree after businesses change are correct?",
+          "options": [
+            "A quadtree supports no updates at all, so you must switch to geohash",
+            "You can modify the tree in place, but that needs locking or similar concurrency control",
+            "Under this chapter’s requirements, business updates can be processed in a daily batch",
+            "Modifying the tree in place is simpler than rebuilding, so it should be the first choice",
+            "The simplest way is to rebuild the tree step by step, invalidating caches"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "Rebuilding is simple but invalidates caches, while in-place changes must handle concurrency and are complex to implement. Business updates aren’t required to be real time here, so a daily batch works. This is also why hard updates count as a quadtree drawback.",
+          "ref": "Operational Considerations"
+        },
+        {
+          "id": "c16-03-06",
+          "type": "judge",
+          "prompt": "The chapter estimates the quadtree index at only a few GB, so you can size memory to that number at launch without measuring.",
+          "answer": false,
+          "explanation": "An estimate isn’t a guarantee. Memory must also cover IDs, coordinates, node pointers, and language object overhead, and build time depends on tree depth and data distribution. Measure with real data before launch.",
+          "ref": "Operational Considerations"
+        },
+        {
+          "id": "c16-03-07",
+          "type": "single",
+          "prompt": "To build a geofencing feature such as “push a coupon when the user enters a shopping district,” which option fits best?",
+          "options": [
+            "A latitude/longitude BETWEEN rectangle query",
+            "An even grid, checking fixed cells",
+            "S2, using multi-level cells to fit any region",
+            "A fixed-precision geohash nine-cell query"
+          ],
+          "answer": 2,
+          "explanation": "S2 can combine cells of different sizes to cover a region of any shape, and lets you set a minimum level, a maximum level, and a maximum cell count, which suits geofencing naturally. Fixed square cells struggle to fit irregular boundaries.",
+          "ref": "Option 5: Google S2"
+        },
+        {
+          "id": "c16-03-08",
+          "type": "judge",
+          "prompt": "Two points that are close in space can still have S2 cell IDs that are far apart.",
+          "answer": true,
+          "explanation": "On a Hilbert curve, nearby IDs are usually close in space, but the reverse fails. If two points straddle a high-level cell boundary, the curve may pass one side early and the other much later, so their IDs differ a lot. Don’t use the ID difference as geographic distance.",
+          "ref": "Option 5: Google S2"
+        },
+        {
+          "id": "c16-03-09",
+          "type": "match",
+          "prompt": "Match each indexing option with its characteristic",
+          "pairs": [
+            [
+              "Geohash",
+              "String code, longer prefix, smaller cell"
+            ],
+            [
+              "Quadtree",
+              "Density-adaptive cells, suits k-NN"
+            ],
+            [
+              "Google S2",
+              "Strong at spherical region coverage, geofencing"
+            ],
+            [
+              "Even grid",
+              "No levels, one cell size worldwide"
+            ],
+            [
+              "2D range query",
+              "Two 1D indexes, slow on large data"
+            ]
+          ],
+          "explanation": "An even grid has only one cell size. Geohash is a hierarchical grid, and a longer code means finer cells. To choose: nearby search with a fixed radius suits geohash, strong density differences or k-NN suit a quadtree, and complex region coverage or geofencing suits S2.",
+          "ref": "Choosing the Right Index"
+        },
+        {
+          "id": "c16-03-10",
+          "type": "fill",
+          "prompt": "Complete how a quadtree is built",
+          "text": "A quadtree splits cells recursively by [[business density]] and stops once a leaf holds no more than the threshold. It excels at [[k-nearest neighbors]] queries.",
+          "distractors": [
+            "fixed precision",
+            "fixed radius",
+            "geofencing"
+          ],
+          "explanation": "A cell keeps splitting only while its business count exceeds the threshold (100 here), so cell size follows density and the search can fan out from near to far to find the nearest k. Fixed precision and fixed radius are geohash traits, and geofencing is S2’s strength.",
+          "ref": "Option 4: Quadtree"
+        }
+      ]
+    },
+    {
+      "id": "c16-04",
+      "title": "Scaling and Lookup",
+      "summary": "Sharding, replicas, cache keys, a full lookup",
+      "exercises": [
+        {
+          "id": "c16-04-01",
+          "type": "single",
+          "prompt": "The business table is sharded by `business_id`, but the geohash index table should get read replicas first, not shards. Why?",
+          "options": [
+            "The geohash table is the most important data, and sharding risks losing it",
+            "The geohash table must sit on the same shard as the business table",
+            "Once sharded by geohash, you can’t look up business details",
+            "It fits on one machine and the load is reads, so replicas scale it"
+          ],
+          "answer": 3,
+          "explanation": "The premise is that the index table fits on a single machine. It only stores the mapping between geohash and business_id, so there is no technical need to shard it, and its load is reads, which read replicas address most directly. The business table is large, and sharding it by business_id spreads data evenly.",
+          "ref": "Scaling the Geospatial Index"
+        },
+        {
+          "id": "c16-04-02",
+          "type": "single",
+          "prompt": "Why does nearby search use the geohash as the cache key instead of the user’s GPS coordinates?",
+          "options": [
+            "With GPS coordinates as keys you can’t compute neighboring cells",
+            "A geohash key can cache the final results already sorted by distance",
+            "Redis can’t use decimal coordinates as keys",
+            "Coordinates change with every small move, but users in one cell can share a key"
+          ],
+          "answer": 3,
+          "explanation": "GPS readings are imprecise and change as soon as the user moves, so coordinate keys almost never hit. A geohash maps a whole area to one key, and users in that cell share the business ID list. The final ranking is still computed from each user’s own coordinates.",
+          "ref": "Caching Strategy"
+        },
+        {
+          "id": "c16-04-03",
+          "type": "judge",
+          "prompt": "Two users in the same geohash cell can directly share the cached final results, already sorted by distance.",
+          "answer": false,
+          "explanation": "Users in the same cell can share the candidate business ID list, but their coordinates differ, so each business is at a different distance and the ranking differs too. Recompute distances and filter using each user’s own coordinates.",
+          "ref": "Caching Strategy"
+        },
+        {
+          "id": "c16-04-04",
+          "type": "fill",
+          "prompt": "Complete the two cache layers",
+          "text": "The cache keyed by [[geohash]] stores the business IDs in a cell, and the cache keyed by [[business_id]] stores details such as name, address, and reviews.",
+          "distractors": [
+            "GPS coordinates",
+            "user_id",
+            "radius"
+          ],
+          "explanation": "The first layer answers “who is in this cell,” and the second answers “what does this business look like.” A lookup first fetches the business IDs for the 9 cells from the first layer, then fetches details from the second.",
+          "ref": "Caching Strategy"
+        },
+        {
+          "id": "c16-04-05",
+          "type": "order",
+          "prompt": "Put the steps of a “restaurants within 500 meters” lookup in order",
+          "items": [
+            "Client sends coordinates and radius to the load balancer",
+            "Load balancer forwards to the LBS",
+            "LBS picks a geohash length and computes neighbors",
+            "Query the geohash Redis in parallel for business IDs",
+            "Fetch business details, sort by distance, and return"
+          ],
+          "explanation": "First settle the cells (in the chapter’s example 500 meters maps to length 6), then fetch candidate IDs for the 9 cells in parallel, and finally fetch details and sort by distance from the user, filtering out candidates beyond the radius.",
+          "ref": "Steps to Retrieve Nearby Businesses"
+        },
+        {
+          "id": "c16-04-06",
+          "type": "single",
+          "prompt": "The LBS queried 9 cells at geohash length 6 and got 120 candidate restaurants. What must it still do before returning them?",
+          "options": [
+            "Compute real distances, drop those beyond the radius, then sort",
+            "Sort by business ID ascending and return",
+            "Keep only businesses in the same cell as the user",
+            "Sort by geohash alphabetical order and return directly"
+          ],
+          "answer": 0,
+          "explanation": "The nine cells together form a square larger than the query circle, so businesses in the corners may be over 500 meters away. Filter and sort by real distance. Keeping only the home cell would miss close neighbors just across the boundary.",
+          "ref": "Steps to Retrieve Nearby Businesses"
+        },
+        {
+          "id": "c16-04-07",
+          "type": "single",
+          "prompt": "The encoding length was chosen too long, so the home cell plus 8 neighbors is still smaller than the search circle. What should you do?",
+          "options": [
+            "Switch the cache key back to GPS coordinates and query again",
+            "Automatically shrink the user’s radius to the nine-cell area",
+            "Return only the businesses in the nine cells and ignore the rest of the circle",
+            "Expand neighbors or use a shorter encoding until the circle is covered"
+          ],
+          "answer": 3,
+          "explanation": "Actual cell size varies with latitude and precision, so nine cells aren’t guaranteed to suffice. Check that the chosen cells cover the whole query circle, keep expanding neighbors if they don’t, and filter precisely at the end.",
+          "ref": "Steps to Retrieve Nearby Businesses"
+        },
+        {
+          "id": "c16-04-08",
+          "type": "multi",
+          "prompt": "In the final architecture, which practices directly shorten nearby-search response time?",
+          "options": [
+            "Caching each cell’s business IDs and the business details",
+            "Processing business updates in a daily batch",
+            "Calling Redis for the 9 cells in parallel",
+            "Sending all business writes through the primary",
+            "Using the geohash index to cut the number of candidates"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "The chapter lists three key optimizations: parallel Redis calls cut waiting, the geohash index cuts candidates, and caching speeds up ID and detail lookups. Batch updates and primary writes address writes and don’t directly shorten search latency.",
+          "ref": "Key Optimizations"
+        },
+        {
+          "id": "c16-04-09",
+          "type": "judge",
+          "prompt": "Under this chapter’s design, after a business changes its address, users may not find the new location until the next batch run, and the requirements allow this.",
+          "answer": true,
+          "explanation": "Although the chapter’s section is titled as handling real-time updates, the actual design processes business updates in a daily batch. The functional requirements also say business creates, updates, and deletes needn’t take effect in real time, so this delay is acceptable.",
+          "ref": "Handling Updates"
+        }
+      ]
+    }
+  ]
+}

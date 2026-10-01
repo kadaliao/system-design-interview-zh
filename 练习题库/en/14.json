@@ -1,0 +1,527 @@
+{
+  "chapter": 14,
+  "title": "YouTube",
+  "fullTitle": "Chapter 14: Design YouTube",
+  "intro": [
+    "**Learning goal**: Break “large file upload + video playback” into control requests, original storage, asynchronous transcoding, and CDN delivery.",
+    "**Remember first**: Upload the original once and transcode it into several playable versions. Video bytes go straight into object storage and are played straight from the CDN; the API handles permissions and metadata.",
+    "**Common mistakes**: Relaying every video byte through the business API; treating MP4 as an encoding algorithm; assuming that once the upload finishes, every quality level is ready to play."
+  ],
+  "keyPoints": [
+    "The API handles only auth, upload control, and metadata; video bytes go straight to object storage via pre-signed URLs and play from the CDN.",
+    "Upload the original once; a DAG transcodes it into many resolutions, bitrates, and formats. Independent tasks run in parallel; GOP splits enable retries.",
+    "Publish ready only after the required outputs and manifest are persisted and verified, or users see “playable” and get a 404. HD can follow later.",
+    "The player fetches the manifest, then downloads segments; ABR switches bitrate by throughput and buffer. MP4 is a container; H.264 and VP9 are codecs.",
+    "CDN traffic is the biggest cost. Serving cold videos from the origin and transcoding on demand saves money but adds latency and waits; check watch data.",
+    "Retry temporary failures in uploads, transcoding, and allocation; stop on unrecoverable errors such as corrupt formats and return a clear error code."
+  ],
+  "refs": {
+    "Introduction": "简介（Introduction）",
+    "How Many Uploaders 150 TB Implies": "批注：150 TB 隐含多少上传者",
+    "Assumptions": "假设（Assumptions）",
+    "Historical Background vs. Exercise Assumptions": "批注：历史背景与本题假设分开",
+    "Importance": "为什么需要（Importance）",
+    "Components": "组件（Components）",
+    "Completion Needs a Real Condition": "批注：完成通知必须有真正的完成条件",
+    "Video Uploading Flow": "1. 视频上传流程（Video Uploading Flow）",
+    "Think of Video as Small Segments": "批注：把视频想成一串小片段",
+    "MP4 Is the Box, H.264 Is the Packing Method": "批注：MP4 像盒子，H.264 像打包方法",
+    "Directed Acyclic Graph (DAG) Model": "有向无环图模型（Directed Acyclic Graph / DAG）",
+    "GOP Alignment and Task Retries": "批注：GOP 对齐与任务重试",
+    "Preprocessor": "1. Preprocessor（预处理器）",
+    "Video Transcoding Architecture": "视频转码架构（Video Transcoding Architecture）",
+    "Resource Manager": "3. Resource Manager（资源管理器）",
+    "Temporary Storage": "5. Temporary Storage（临时存储）",
+    "Speed Optimizations": "速度优化（Speed Optimizations）",
+    "Pre-signed URLs Are Time-Limited": "批注：预签名 URL 是限时授权",
+    "Safety Optimizations": "安全优化（Safety Optimizations）",
+    "Cost Optimization Has a Scale Threshold": "批注：成本优化有规模门槛",
+    "Error Handling": "错误处理（Error Handling）"
+  },
+  "lessons": [
+    {
+      "id": "c14-01",
+      "title": "Scale Estimates",
+      "summary": "Design goals, assumptions, and two estimates",
+      "exercises": [
+        {
+          "id": "c14-01-01",
+          "type": "match",
+          "prompt": "Match each design goal with the approach that supports it most directly",
+          "pairs": [
+            ["Fast upload", "Parallel chunk upload, nearby upload entry"],
+            ["Low playback latency", "Stream from a nearby CDN edge node"],
+            ["Switchable quality", "Transcode into many resolutions and bitrates"],
+            ["Lower cost", "Transcode unpopular videos on demand"],
+            ["Reliability", "Automatically retry temporary failures"]
+          ],
+          "explanation": "Fast uploads come from parallel chunks and a nearby entry point; low latency from CDN edge delivery; switchable quality from transcoding into several versions; savings from skipping unwatched transcodes; reliability from retries and similar fault tolerance. The CDN only distributes; the quality versions come from transcoding.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c14-01-02",
+          "type": "single",
+          "prompt": "This chapter assumes 5 million DAU, an average video of 300 MB, and 150 TB of new storage per day. Working backward, roughly how many videos are added per day?",
+          "options": [
+            "About 500,000, 1 upload per 10 DAU",
+            "About 50,000, 1 upload per 100 DAU",
+            "About 5 million, 1 upload per DAU",
+            "About 150,000, 1 upload per 33 DAU"
+          ],
+          "answer": 0,
+          "explanation": "150 TB ÷ 300 MB = 150 trillion bytes ÷ 300 million bytes ≈ 500,000 videos, which is 1 upload per 10 of the 5 million DAU each day. The chapter’s estimate leaves this ratio unstated; saying it out loud in an interview lets you check whether 150 TB is reasonable.",
+          "ref": "How Many Uploaders 150 TB Implies"
+        },
+        {
+          "id": "c14-01-03",
+          "type": "single",
+          "prompt": "The chapter estimates CDN cost: 5 million DAU, 5 videos per person per day, 0.3 GB each, at $0.02/GB. Roughly how much is that per day?",
+          "options": [
+            "$1,500,000",
+            "$15,000",
+            "$150,000",
+            "$30,000"
+          ],
+          "answer": 2,
+          "explanation": "5 million × 5 = 25 million views, × 0.3 GB = 7.5 million GB, × $0.02 = $150,000/day. $30,000 forgets to multiply by the 5 views per person. This is only a rough estimate at historical prices, not a current quote.",
+          "ref": "Assumptions"
+        },
+        {
+          "id": "c14-01-04",
+          "type": "single",
+          "prompt": "Everything else stays the same, but the average video size goes from 300 MB to 600 MB. Using the chapter’s formula, what is the daily CDN cost?",
+          "options": [
+            "Still $150,000; cost depends only on DAU",
+            "About $600,000, 4 times as much",
+            "About $75,000, half as much",
+            "About $300,000, double"
+          ],
+          "answer": 3,
+          "explanation": "The formula “DAU × views per person × video size × unit price” is linear in every term, so doubling the video size doubles traffic and cost. Cost follows the traffic that is watched, not DAU alone.",
+          "ref": "Assumptions"
+        },
+        {
+          "id": "c14-01-05",
+          "type": "judge",
+          "prompt": "Using the chapter’s estimation method, “5 videos watched per person per day” affects only the CDN traffic cost, not the daily new storage.",
+          "answer": true,
+          "explanation": "New storage is driven by uploads (about 500,000 videos × 300 MB); CDN cost is driven by views (25 million views × 0.3 GB). The two estimates have different drivers, so to estimate storage you also have to assume how many people upload.",
+          "ref": "Assumptions"
+        },
+        {
+          "id": "c14-01-06",
+          "type": "judge",
+          "prompt": "The chapter lists 2 billion monthly active users and 5 billion views per day; these should be inputs to this exercise’s storage and bandwidth estimates.",
+          "answer": false,
+          "explanation": "Those are background figures from around 2020, not inputs to the exercise formula. The exercise uses its own assumptions (5 million DAU, 300 MB average, and so on). Mixing the two sets of numbers can throw the estimate off by several orders of magnitude.",
+          "ref": "Historical Background vs. Exercise Assumptions"
+        },
+        {
+          "id": "c14-01-07",
+          "type": "multi",
+          "prompt": "The chapter’s CDN cost is only a rough estimate. Which factors should you add to get closer to the real number?",
+          "options": [
+            "Length of video titles and descriptions",
+            "Number of CPU cores on API servers",
+            "Bitrate differences between quality versions",
+            "CDN cache hit rate and origin traffic",
+            "Actual watch time, since many people don’t finish a video"
+          ],
+          "answers": [2, 3, 4],
+          "explanation": "CDN cost depends on the bytes actually sent: how long people watch, which bitrate they get, and whether the edge hits all change the traffic. Titles and descriptions are metadata, and API server CPU is not on the CDN bill.",
+          "ref": "How Many Uploaders 150 TB Implies"
+        },
+        {
+          "id": "c14-01-08",
+          "type": "fill",
+          "prompt": "Complete the two estimates",
+          "text": "150 TB ÷ 300 MB ≈ [[500,000]] videos/day; 5 million DAU × 5 views × 0.3 GB ≈ [[7.5 million GB]] of traffic/day.",
+          "distractors": ["50,000", "750,000 GB", "15 million GB"],
+          "explanation": "The first is the storage estimate, driven by uploads. The second is the traffic estimate, driven by views; multiply it by $0.02/GB and you get $150,000 per day.",
+          "ref": "Assumptions"
+        },
+        {
+          "id": "c14-01-09",
+          "type": "single",
+          "prompt": "The requirements say the service must support phone apps, web browsers, and smart TVs. Which part of the design does this affect most directly?",
+          "options": [
+            "Uploads must pass through the API server for unified validation",
+            "Transcode into several formats and resolutions for different devices",
+            "Deploy a separate upload and storage system for each device type",
+            "Store one MP4 original and let each device play it as it can"
+          ],
+          "answer": 1,
+          "explanation": "One reason to transcode is to provide formats that work across devices and browsers. A single MP4 is not enough: the same container does not mean the codec and resolution inside are supported. Splitting systems by device is duplicated effort, and relaying video bytes through the API is exactly what this chapter avoids.",
+          "ref": "Importance"
+        }
+      ]
+    },
+    {
+      "id": "c14-02",
+      "title": "Upload & Playback",
+      "summary": "Control vs. data plane, completion, adaptive playback",
+      "exercises": [
+        {
+          "id": "c14-02-01",
+          "type": "single",
+          "prompt": "Why do video bytes go straight to object storage and play from the CDN instead of passing through the API server?",
+          "options": [
+            "API servers can’t authenticate, so the CDN has to",
+            "Video traffic is huge and would swamp the API’s bandwidth and connections",
+            "Object storage can’t hold metadata, so it bypasses the API",
+            "A CDN guarantees strong consistency more easily than an API server"
+          ],
+          "answer": 1,
+          "explanation": "The API handles only small requests: auth, upload control, and metadata. Video bytes, often hundreds of MB, flow through object storage and the CDN, and each side scales independently with its own load. Relaying all video bytes through the business API is a common mistake.",
+          "ref": "Components"
+        },
+        {
+          "id": "c14-02-02",
+          "type": "match",
+          "prompt": "Match each component with its responsibility",
+          "pairs": [
+            ["API server", "Auth, upload control, metadata updates"],
+            ["Metadata DB", "Stores title, description, size, etc."],
+            ["Original storage", "Stores the raw videos users upload"],
+            ["Transcoding servers", "Produce many resolutions and formats"],
+            ["CDN", "Caches and serves video from nearby"]
+          ],
+          "explanation": "The API server handles interactions other than moving video data. Original storage and transcoded storage are both object storage, one for inputs and one for outputs. The CDN delivers the finished videos from the location closest to the user.",
+          "ref": "Components"
+        },
+        {
+          "id": "c14-02-03",
+          "type": "order",
+          "prompt": "Put the main steps from upload to playable in order",
+          "items": [
+            "The client uploads the original to original storage",
+            "Transcoders produce several formats and resolutions",
+            "Outputs and manifest are written and verified",
+            "The completion handler marks the metadata as playable",
+            "The user streams from the CDN"
+          ],
+          "explanation": "The textbook’s original diagram draws “write to transcoded storage” and “queue the completion event” as parallel branches. But the required outputs and manifest must be written and verified before ready is published; otherwise users see “playable” and get a 404.",
+          "ref": "Completion Needs a Real Condition"
+        },
+        {
+          "id": "c14-02-04",
+          "type": "judge",
+          "prompt": "Metadata and the original are uploaded in parallel, so once the metadata write succeeds, the video can be marked playable.",
+          "answer": false,
+          "explanation": "Metadata only describes the video (file name, size, format). Whether it can play depends on whether the transcoded outputs and manifest are persisted and verified. Marking ready when the metadata has arrived but the outputs have not gives users a 404.",
+          "ref": "Video Uploading Flow"
+        },
+        {
+          "id": "c14-02-05",
+          "type": "single",
+          "prompt": "The completion event enters the completion queue and the handler marks the video playable at once, but the outputs are not yet written to transcoded storage. A user opens the video now. What is the most likely result?",
+          "options": [
+            "The player falls back to the original",
+            "Nothing goes wrong; the completion queue guarantees the order",
+            "The CDN waits until the outputs are written",
+            "The user sees “playable” but the video request returns 404"
+          ],
+          "answer": 3,
+          "explanation": "In the original design, 3a (write to transcoded storage) and 3b (enqueue the event) are parallel branches, and a queue cannot guarantee the object has landed. When the CDN fetches from the origin, the object does not exist yet, so it returns 404. The system has no “fall back to the original” mechanism.",
+          "ref": "Completion Needs a Real Condition"
+        },
+        {
+          "id": "c14-02-06",
+          "type": "single",
+          "prompt": "A video’s 360p version and its manifest are written and verified, but 1080p is still transcoding. To let users watch as soon as possible, what is a sensible approach?",
+          "options": [
+            "Publish 360p now and add 1080p when it finishes",
+            "Substitute the original for the unfinished 1080p version",
+            "Wait for every quality level, then publish them together",
+            "Mark 1080p available too and retry if it fails"
+          ],
+          "answer": 0,
+          "explanation": "Once the required outputs are persisted and verified, ready can be published and higher qualities can become available gradually. Waiting for every version delays launch for nothing, and marking an unfinished version available creates 404s.",
+          "ref": "Completion Needs a Real Condition"
+        },
+        {
+          "id": "c14-02-07",
+          "type": "judge",
+          "prompt": "After transcoding finishes, the video must be copied to every CDN edge node before users can play it.",
+          "answer": false,
+          "explanation": "A CDN usually caches on demand: the first miss at an edge fetches from the origin and caches it, and later requests hit nearby. Pushing unpopular videos to every edge wastes space and is not a prerequisite for playback.",
+          "ref": "Completion Needs a Real Condition"
+        },
+        {
+          "id": "c14-02-08",
+          "type": "single",
+          "prompt": "A user watches on the subway, where the network speed keeps jumping up and down. What mainly lets the player reduce stalling?",
+          "options": [
+            "Switching between segments of different bitrates by throughput and buffer",
+            "Pausing until the whole video has downloaded",
+            "Downloading from nearby users over P2P",
+            "Asking the server to transcode it again on the spot"
+          ],
+          "answer": 0,
+          "explanation": "The player fetches the manifest first, then downloads segment by segment; adaptive bitrate (ABR) switches versions based on throughput and buffer level. ABR only switches among existing versions. On-demand transcoding is a cost optimization for unpopular videos’ first play and can’t keep up with second-by-second swings.",
+          "ref": "Think of Video as Small Segments"
+        },
+        {
+          "id": "c14-02-09",
+          "type": "fill",
+          "prompt": "Complete the streaming playback process",
+          "text": "The player first fetches the [[manifest]], then downloads video segment by segment; [[adaptive bitrate]] switches quality versions based on network throughput and buffer.",
+          "distractors": ["completion queue", "pre-signed URL", "DAG"],
+          "explanation": "The manifest lists which versions exist and where each segment is; segmented download lets the player change bitrate between segments. The completion queue belongs to the post-transcoding notification, the pre-signed URL to upload authorization, and the DAG to transcoding tasks.",
+          "ref": "Think of Video as Small Segments"
+        }
+      ]
+    },
+    {
+      "id": "c14-03",
+      "title": "Transcode Pipeline",
+      "summary": "Containers, codecs, DAG, GOP splits, scheduling",
+      "exercises": [
+        {
+          "id": "c14-03-01",
+          "type": "single",
+          "prompt": "A player says it “supports MP4” but can’t open a particular MP4 file. What is the most likely cause?",
+          "options": [
+            "It doesn’t support the video codec in the file, such as VP9",
+            "The MP4 container sets quality, and this file’s quality is too high",
+            "MP4 is a compression algorithm and the file uses a newer version",
+            "The MP4 must be converted to an AVI container before decoding"
+          ],
+          "answer": 0,
+          "explanation": "MP4 is a container (the box) that wraps video, audio, and metadata; H.264 and VP9 are codecs (the packing method). The same MP4 can hold different codecs, so supporting the container doesn’t mean supporting every codec. Switching to AVI only changes the box, and quality comes from the codec and bitrate, not the container.",
+          "ref": "MP4 Is the Box, H.264 Is the Packing Method"
+        },
+        {
+          "id": "c14-03-02",
+          "type": "judge",
+          "prompt": "Transcoding compresses video, so after transcoding into several versions, total storage is generally smaller than storing only the original.",
+          "answer": false,
+          "explanation": "When the chapter says transcoding “reduces space,” it means a single compressed version can be smaller than a high-bitrate original. The several quality versions together, plus the original you keep, usually increase total storage; they do not necessarily reduce it.",
+          "ref": "MP4 Is the Box, H.264 Is the Packing Method"
+        },
+        {
+          "id": "c14-03-03",
+          "type": "single",
+          "prompt": "In the transcoding DAG, “generate thumbnails” and “encode the 1080p version” don’t depend on each other. What is the direct benefit of describing tasks as a DAG?",
+          "options": [
+            "Preprocessing can be skipped and encoding can start directly",
+            "They can run in parallel, shortening total processing time",
+            "They must run serially so the output order is consistent",
+            "Temporary storage can be dropped"
+          ],
+          "answer": 1,
+          "explanation": "A DAG lays out tasks such as encoding, thumbnails, and watermarks along with their dependencies, so tasks with no dependency can go to different workers at the same time. Transcoding is slow and compute-heavy, so parallelism is the key to speed.",
+          "ref": "Directed Acyclic Graph (DAG) Model"
+        },
+        {
+          "id": "c14-03-04",
+          "type": "single",
+          "prompt": "Why does the preprocessor split video at GOP boundaries instead of every fixed number of bytes?",
+          "options": [
+            "Object storage only accepts files aligned to GOP boundaries",
+            "Quality is highest at GOP boundaries, which suits thumbnails",
+            "Frames depend on each other, so only GOP cuts decode independently",
+            "Splitting by bytes makes the transcoded files larger overall"
+          ],
+          "answer": 2,
+          "explanation": "Video frames depend on each other for decoding, so a segment cut at an arbitrary byte offset may not decode on its own. At a GOP (group of pictures) or keyframe boundary, each segment can be encoded alone and retried alone.",
+          "ref": "GOP Alignment and Task Retries"
+        },
+        {
+          "id": "c14-03-05",
+          "type": "multi",
+          "prompt": "Which of the following are responsibilities of the preprocessor?",
+          "options": [
+            "Generate the DAG from a config file",
+            "Pick an idle worker and tell it to run a task",
+            "Distribute finished videos to the CDN",
+            "Store GOPs and metadata in temporary storage for failure retries",
+            "Split the video at GOP boundaries"
+          ],
+          "answers": [0, 3, 4],
+          "explanation": "The preprocessor splits the video (including GOP alignment for older clients), generates the DAG from config, and stores intermediate data in temporary storage. Picking workers is the task scheduler’s job in the resource manager, and CDN distribution happens after the outputs exist.",
+          "ref": "Preprocessor"
+        },
+        {
+          "id": "c14-03-06",
+          "type": "fill",
+          "prompt": "Complete the division of labor in the transcoding pipeline",
+          "text": "The [[preprocessor]] generates the DAG from config, the [[DAG scheduler]] splits it into stages and puts them in the task queue, and the [[resource manager]] picks a suitable worker for each task.",
+          "distractors": ["completion handler", "CDN"],
+          "explanation": "Pipeline order: the preprocessor generates the DAG, the scheduler splits it into stages, the resource manager matches tasks to workers, workers run them, and outputs are written to transcoded storage. The completion handler updates metadata only after the outputs exist.",
+          "ref": "Video Transcoding Architecture"
+        },
+        {
+          "id": "c14-03-07",
+          "type": "match",
+          "prompt": "Match each resource manager part with its responsibility",
+          "pairs": [
+            ["Task queue", "Pending tasks ordered by priority"],
+            ["Worker queue", "Tracks each worker’s utilization"],
+            ["Running queue", "Running tasks and their workers"],
+            ["Task scheduler", "Picks a task and worker, then starts it"]
+          ],
+          "explanation": "The three queues answer “what needs doing,” “who is free,” and “who is doing what.” From them, the task scheduler assigns the right task to the right worker.",
+          "ref": "Resource Manager"
+        },
+        {
+          "id": "c14-03-08",
+          "type": "single",
+          "prompt": "A segment’s 720p encoding task times out and is retried, but the original task actually finished writing. How do you avoid ending up with two inconsistent outputs?",
+          "options": [
+            "Delete all transcoded output for the video before each retry and start over",
+            "Forbid automatic retries and make users re-upload on failure",
+            "Give tasks a stable ID so repeated runs write to the same place or publish atomically",
+            "Have each run write a random file name and pick either one at playback"
+          ],
+          "answer": 2,
+          "explanation": "Use “video, version, segment, parameters” as a stable ID; however many times the task runs, it writes to a fixed location or publishes atomically, so the result is the same. Random file names leave two outputs behind, and starting over wastes a lot of compute.",
+          "ref": "GOP Alignment and Task Retries"
+        },
+        {
+          "id": "c14-03-09",
+          "type": "judge",
+          "prompt": "Temporary storage holds the split GOPs and metadata, so when one segment’s encoding fails, you can retry just that segment instead of reprocessing the whole video.",
+          "answer": true,
+          "explanation": "The preprocessor puts GOPs and metadata into temporary storage precisely so a failed encode can be retried from them. When choosing temporary storage, also consider data type, size, access frequency, and lifecycle.",
+          "ref": "Temporary Storage"
+        }
+      ]
+    },
+    {
+      "id": "c14-04",
+      "title": "Tuning & Errors",
+      "summary": "Speed-ups, pre-signed URLs, cost, error types",
+      "exercises": [
+        {
+          "id": "c14-04-01",
+          "type": "single",
+          "prompt": "A user uploads an 800 MB video on a weak network and loses connection halfway. Which design lets them resume without starting over?",
+          "options": [
+            "Split into small chunks, upload in parallel, and record completed chunks",
+            "Raise the API server timeout to 1 hour",
+            "Transcode to 1080p on the phone before uploading",
+            "Upload the whole video into API server memory, then copy it over"
+          ],
+          "answer": 0,
+          "explanation": "Chunked parallel upload both speeds things up and supports resuming: chunks already acknowledged need not be sent again. A longer timeout can’t save a dropped connection, and transcoding on the phone does nothing about restarting from scratch after an interruption.",
+          "ref": "Speed Optimizations"
+        },
+        {
+          "id": "c14-04-02",
+          "type": "single",
+          "prompt": "Users overseas always upload videos slowly. What is the idea behind the chapter’s “distributed upload centers”?",
+          "options": [
+            "Force compression to 360p before upload",
+            "Funnel all uploads into one big data center",
+            "Connect each user to the upload entry nearest them",
+            "Add read-only replicas to the metadata DB"
+          ],
+          "answer": 2,
+          "explanation": "The closer the upload entry is to the user, the fewer round trips and packet losses a long-distance link suffers. The chapter uses a CDN as a nearby upload hub as an example; in practice, pick a service that offers upload or acceleration features. Compressing to 360p would ruin the original’s quality.",
+          "ref": "Speed Optimizations"
+        },
+        {
+          "id": "c14-04-03",
+          "type": "judge",
+          "prompt": "After decoupling modules such as upload and transcoding with a message queue, an upstream module can keep accepting new tasks without waiting for downstream processing to finish.",
+          "answer": true,
+          "explanation": "When modules depend on each other directly, one slow module holds up its upstream. With a message queue in between, the upstream puts a task in the queue and moves on, the downstream consumes at its own pace, and modules can work in parallel.",
+          "ref": "Speed Optimizations"
+        },
+        {
+          "id": "c14-04-04",
+          "type": "order",
+          "prompt": "Put the steps of a pre-signed URL upload in order",
+          "items": [
+            "The client asks the API server to upload",
+            "The API server authenticates, issues a time-limited URL",
+            "The client uploads directly to object storage via the URL",
+            "The server verifies object size, type, and completion"
+          ],
+          "explanation": "The API authenticates first, then issues a short-lived address scoped to one object and one operation; video bytes never pass through the API. The final object must still be verified after upload, because anyone who gets the URL can use it while it is valid.",
+          "ref": "Pre-signed URLs Are Time-Limited"
+        },
+        {
+          "id": "c14-04-05",
+          "type": "single",
+          "prompt": "A user forwards the pre-signed upload URL they received to someone else. What happens during the URL’s validity period?",
+          "options": [
+            "The URL is bound to the device, so nobody else can use it",
+            "Whoever has the URL can also upload with it",
+            "The URL stays valid forever; the only quick fix is deleting the bucket",
+            "Object storage asks for an account and password again"
+          ],
+          "answer": 1,
+          "explanation": "A pre-signed URL is itself a time-limited credential, and whoever holds it can use it until it expires. So scope it to one object and operation, give it a short expiry, and verify the object’s size, type, and completion status after upload.",
+          "ref": "Pre-signed URLs Are Time-Limited"
+        },
+        {
+          "id": "c14-04-06",
+          "type": "multi",
+          "prompt": "Which of the following statements about protecting video are correct?",
+          "options": [
+            "DRM (such as FairPlay and Widevine) controls who can play",
+            "A pre-signed URL is itself a form of DRM",
+            "Watermarks overlay identifying information on the picture",
+            "Any one of the three guarantees the video can’t be copied",
+            "AES encryption stops unauthorized parties from reading the content directly"
+          ],
+          "answers": [0, 2, 4],
+          "explanation": "DRM, encryption, and watermarks each serve a different goal: controlling authorized playback, protecting content, and marking ownership. None of them means “cannot be copied.” A pre-signed URL authorizes uploads and has nothing to do with playback protection.",
+          "ref": "Safety Optimizations"
+        },
+        {
+          "id": "c14-04-07",
+          "type": "single",
+          "prompt": "To save CDN cost, you serve unpopular videos directly from high-capacity origin servers. What is the main cost you accept?",
+          "options": [
+            "Higher latency for unpopular videos and more load on the origin",
+            "Popular videos are forced to be served from the origin too",
+            "Authors must re-upload unpopular videos once",
+            "Metadata DB writes double as a result"
+          ],
+          "answer": 0,
+          "explanation": "Bypassing the CDN loses nearby caching: viewers far from the origin see higher latency, and every request hits the origin. So first work out the watch distribution and confirm that unpopular traffic is small enough to make this worthwhile.",
+          "ref": "Cost Optimization Has a Scale Threshold"
+        },
+        {
+          "id": "c14-04-08",
+          "type": "single",
+          "prompt": "For long-tail unpopular videos, you switch to transcoding a version only when someone watches it. What does this save, and what does it cost?",
+          "options": [
+            "Saves original storage, but later transcoding becomes impossible",
+            "Saves CDN traffic, but uploads get slower",
+            "Saves metadata storage, but thumbnails can’t be generated",
+            "Skips versions nobody watches, but the first play may wait"
+          ],
+          "answer": 3,
+          "explanation": "Many versions of an unpopular video may never be watched, so on-demand transcoding avoids generating them ahead of time. The price is that the first viewer waits for transcoding to finish. The original must still be kept; without it there is nothing to transcode on demand.",
+          "ref": "Cost Optimization Has a Scale Threshold"
+        },
+        {
+          "id": "c14-04-09",
+          "type": "judge",
+          "prompt": "As long as the per-GB cost of building your own CDN is lower than a CDN vendor’s quote, you should build your own.",
+          "answer": false,
+          "explanation": "Per-GB price is only part of the bill: building your own also means construction, an operations team, and ISP partnerships, which pay off only at large enough traffic. Check the scale threshold first, then work out the total from actual watch time, cache hit rate, and popularity distribution.",
+          "ref": "Cost Optimization Has a Scale Threshold"
+        },
+        {
+          "id": "c14-04-10",
+          "type": "multi",
+          "prompt": "Which of the following should be treated as “recoverable errors” and retried automatically?",
+          "options": [
+            "The uploaded video’s format is corrupt and can’t be decoded",
+            "A transcoding worker is temporarily down",
+            "The network drops during an upload",
+            "Resource allocation fails temporarily"
+          ],
+          "answers": [1, 2, 3],
+          "explanation": "Temporary failures may succeed on retry. A corrupt input fails the same way however many times you retry, so stop the task and return a clear error code. Telling the two kinds of error apart keeps you from wasting resources on a bad task.",
+          "ref": "Error Handling"
+        }
+      ]
+    }
+  ]
+}

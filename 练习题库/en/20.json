@@ -1,0 +1,576 @@
+{
+  "chapter": 20,
+  "title": "Metrics, Monitoring, and Alerting",
+  "fullTitle": "Chapter 20: Metrics Monitoring and Alerting System",
+  "intro": [
+    "**How to read this chapter**: Think of monitoring as a service’s medical record: measure at regular intervals, store along the time axis, draw trends, and call someone when something is abnormal. Remember five steps: **collect → transmit → store → alert → display**. The point is not a pretty chart but controlling label cardinality, knowing what missing data means, and making sure critical alerts get delivered. This chapter covers metrics only, not logs or distributed tracing."
+  ],
+  "keyPoints": [
+    "Clarify scope: internal metrics and alerts only, no logs or tracing. 10 million series sampled every 10 seconds is about 1 million points per second.",
+    "A series is metric name plus labels; the count depends on combinations that occur. Keep high-cardinality values like request_id or user ID out of labels.",
+    "Pull eases debugging and shows failures directly; push suits short jobs and network boundaries. Kafka after the collectors rides out database outages.",
+    "Aggregating earlier saves writes but costs flexibility; pre-aggregate by keeping sum and count, since averages and P95s cannot simply be averaged again.",
+    "Time-series databases compress with delta encoding and downsample by data age; downsampling erases spikes, so store the maximum too when it matters.",
+    "Alerts use a threshold plus a for-duration to avoid flapping; retries give at-least-once delivery, so receivers deduplicate. No data is not healthy."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Design Scope": "第一步：理解问题并确定范围",
+    "Basic Components": "基础组成",
+    "Non-Functional Requirements": "非功能需求",
+    "High-Level Requirements and Assumptions": "总体要求与假设",
+    "Storage Layer": "存储层（Storage Layer）",
+    "Data Model": "数据模型",
+    "Metrics Collection": "指标采集（Metrics Collection）",
+    "Scaling the Metrics Transmission Pipeline": "扩展指标传输流水线",
+    "Where to Aggregate?": "在哪里聚合？",
+    "Query Service": "查询服务（Query Service）",
+    "Alerting System": "告警系统（Alerting System）"
+  },
+  "lessons": [
+    {
+      "id": "c20-01",
+      "title": "Scope and Scale",
+      "summary": "Scope, components, write rate, tiered retention",
+      "exercises": [
+        {
+          "id": "c20-01-01",
+          "type": "single",
+          "prompt": "An interviewer says, “Design a monitoring system for us.” After the scoping questions in this chapter, which of the following is within the design scope?",
+          "options": [
+            "Tracing one request across multiple services end to end",
+            "Collecting CPU, memory, and requests per second, and alerting on them",
+            "Reporting business metrics such as daily order value and conversion rate",
+            "Collecting and full-text searching each service’s error logs"
+          ],
+          "answer": 1,
+          "explanation": "This is operational metrics monitoring for a large company’s internal use: CPU, memory, disk, requests per second, plus alerting. Log monitoring (commonly ELK) and distributed tracing are explicitly excluded, and so are business metrics. Clarifying scope keeps you from designing a log search system by mistake.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c20-01-02",
+          "type": "match",
+          "prompt": "Match each of the five monitoring system components with its job",
+          "pairs": [
+            [
+              "Data collection",
+              "Get metrics from various sources"
+            ],
+            [
+              "Data transmission",
+              "Move metrics into the monitoring system"
+            ],
+            [
+              "Data storage",
+              "Organize and store time series"
+            ],
+            [
+              "Alerting",
+              "Detect anomalies and notify people"
+            ],
+            [
+              "Visualization",
+              "Show metric trends as charts"
+            ]
+          ],
+          "explanation": "Collection gets metrics from application servers, databases, queues, and other sources. Transmission moves them into the system, with a queue as a buffer at scale. Storage keeps them as time series. Alerting detects anomalies and notifies people. Visualization shows trends. Order: collect → transmit → store → alert → display.",
+          "ref": "Basic Components"
+        },
+        {
+          "id": "c20-01-03",
+          "type": "multi",
+          "prompt": "Which of the following are non-functional requirements in this chapter?",
+          "options": [
+            "Low query latency for dashboards and alerts",
+            "Multi-tenant billing for external customers",
+            "Not missing critical alerts",
+            "Keep adding more metrics and alerts",
+            "Not a single metric point is ever lost"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "The non-functional requirements are scalability, low latency, reliability, and flexibility. Reliability applies to critical alerts; occasionally losing a metric point is acceptable, and collectors can send on a best-effort basis (fire and forget). This is an internal company system, not a SaaS product for external customers.",
+          "ref": "Non-Functional Requirements"
+        },
+        {
+          "id": "c20-01-04",
+          "type": "single",
+          "prompt": "1,000 server pools × 100 servers per pool × about 100 metrics per server. If each series records one point every 10 seconds, what is the write rate?",
+          "options": [
+            "About 100,000 points per second",
+            "About 100 million points per second",
+            "About 10 million points per second",
+            "About 1 million points per second"
+          ],
+          "answer": 3,
+          "explanation": "1,000 × 100 × 100 = 10 million series. Each series produces one point every 10 seconds, so 10 million ÷ 10 = 1 million points per second. 10 million points per second mistakes the number of series for the write rate.",
+          "ref": "High-Level Requirements and Assumptions"
+        },
+        {
+          "id": "c20-01-05",
+          "type": "judge",
+          "prompt": "“10 million metric series” means the system must write 10 million data points per second.",
+          "answer": false,
+          "explanation": "The series count only says how many timelines there are; the write rate also depends on the sampling interval. One point every 10 seconds is about 1 million points per second. Change the interval to 1 minute and the write volume drops to about one-sixth.",
+          "ref": "High-Level Requirements and Assumptions"
+        },
+        {
+          "id": "c20-01-06",
+          "type": "fill",
+          "prompt": "Complete the rule for tiered retention by data age",
+          "text": "Keep [[raw resolution]] for 0–7 days, downsample to [[1-minute]] resolution for 7–30 days, and to [[1-hour]] resolution for 30 days to 1 year.",
+          "distractors": [
+            "30 seconds",
+            "1 day",
+            "5 minutes"
+          ],
+          "explanation": "Older data is queried less and only needs to show trends, so precision drops tier by tier to save storage. Writing the tiers as age ranges avoids the overlap between “7 days” and “30 days” in the chapter’s wording.",
+          "ref": "High-Level Requirements and Assumptions"
+        },
+        {
+          "id": "c20-01-07",
+          "type": "single",
+          "prompt": "One series records a point every 10 seconds. After downsampling to 1-hour resolution, how does the number of points per day change?",
+          "options": [
+            "86,400 → 24",
+            "8,640 → 1,440",
+            "8,640 → 24",
+            "1,440 → 24"
+          ],
+          "answer": 2,
+          "explanation": "One day has 86,400 seconds ÷ 10 = 8,640 points. At 1-hour resolution a day has only 24 points, about 360 times fewer. 1,440 is the points per day at 1-minute resolution. Downsampling is what keeps a year of retention affordable.",
+          "ref": "Storage Layer"
+        },
+        {
+          "id": "c20-01-08",
+          "type": "single",
+          "prompt": "You investigate a 20-second CPU spike from 3 months ago. Under this chapter’s retention policy, what will you see?",
+          "options": [
+            "Only hourly aggregates; a spike is likely averaged away",
+            "The raw 10-second data, fully intact",
+            "Nothing, because only 30 days are kept",
+            "Data at 1-minute resolution"
+          ],
+          "answer": 0,
+          "explanation": "3 months is past 30 days, so only 1-hour resolution remains, and a 20-second spike gets averaged with the other points in that hour, making it hard to see. Data is kept for a year, not deleted. This is also why you should store the maximum alongside the average when downsampling.",
+          "ref": "High-Level Requirements and Assumptions"
+        }
+      ]
+    },
+    {
+      "id": "c20-02",
+      "title": "Data Model",
+      "summary": "Time series, label cardinality, time-series databases",
+      "exercises": [
+        {
+          "id": "c20-02-01",
+          "type": "single",
+          "prompt": "In `CPU.load host=webserver01,region=us-west 1613707265 50`, which parts together identify “which time series this is”?",
+          "options": [
+            "The label set and the value",
+            "The metric name and the timestamp",
+            "The metric name and the label set",
+            "The timestamp and the value"
+          ],
+          "answer": 2,
+          "explanation": "A series is identified by the metric name plus the label set, for example CPU.load with host and region. The timestamp and value belong to one data point on that series. Change the host label and you have a different series.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-02",
+          "type": "single",
+          "prompt": "You add labels to an HTTP request-count metric. Which one is most likely to make the series count explode?",
+          "options": [
+            "method (GET, POST, and so on)",
+            "request_id (unique per request)",
+            "region (a handful of regions)",
+            "status_code (a limited set of codes)"
+          ],
+          "answer": 1,
+          "explanation": "The number of series is set by the label combinations that actually occur. request_id is different for every request, so each new request creates a new series and the index and memory balloon. method, region, and status_code have limited values, so their combinations stay manageable.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-03",
+          "type": "judge",
+          "prompt": "As long as each metric has no more than 3 label names, the series count cannot get out of control.",
+          "answer": false,
+          "explanation": "The series count is roughly the number of label-value combinations that actually occur, so what matters is the values, not how many label names there are. If just one of the 3 labels is user_id or request_id, the combinations can reach hundreds of millions. Evaluate before putting user IDs or raw URL parameters into labels.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-04",
+          "type": "single",
+          "prompt": "To compute the average CPU load across all us-west web servers over the past 10 minutes, you average the values of all data points directly. What must hold for this to be valid?",
+          "options": [
+            "The series are sampled at even intervals, so every sample has the same weight",
+            "There are so many samples that weight differences are negligible",
+            "There are no more than 100 servers",
+            "All data points share the same timestamp"
+          ],
+          "answer": 0,
+          "explanation": "A direct average assumes every point has equal weight. A machine sampled more densely gets counted more, and more samples do not cancel that bias; machines with different core counts may need weights too. A shared timestamp is the book’s example problem: duplicates may be overwritten, and one timestamp cannot show 10 minutes.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-05",
+          "type": "judge",
+          "prompt": "A metrics system’s access pattern is heavy, continuous writes and light reads most of the time, with sudden bursts of queries during incidents.",
+          "answer": true,
+          "explanation": "Every machine reports on a schedule without pause, so writes are steady and heavy. Normally only dashboards and alert rules read; during an incident everyone looks at the data at once and read traffic spikes. The storage design has to handle both loads.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-06",
+          "type": "single",
+          "prompt": "Why does this chapter lean toward a dedicated time-series database for metrics rather than a general-purpose relational database?",
+          "options": [
+            "A time-series database supports cross-table transactions, so metrics are never lost",
+            "A time-series database has built-in aggregation by label and time, saving tuning",
+            "A general-purpose relational database cannot handle this scale however you tune it",
+            "Only a time-series database can store timestamped numbers"
+          ],
+          "answer": 1,
+          "explanation": "The book does not say a general-purpose database cannot do it: with expert tuning it can reach the scale, just with more effort. A time-series database offers ready-made interfaces for filtering by label and aggregating by time, plus compression. Any database can store timestamps, and metrics need no cross-table transactions.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-07",
+          "type": "match",
+          "prompt": "Match each storage candidate or figure with the caution that goes with it",
+          "pairs": [
+            [
+              "Relational DB",
+              "Can scale, but needs expert tuning"
+            ],
+            [
+              "General NoSQL store",
+              "You must build time-series storage yourself"
+            ],
+            [
+              "OpenTSDB",
+              "Needs Hadoop/HBase infrastructure first"
+            ],
+            [
+              "InfluxDB benchmark",
+              "Figure for one setup, not a capacity guarantee"
+            ]
+          ],
+          "explanation": "Each candidate has a cost: a relational database is costly to tune, NoSQL makes you design the time-series model yourself, and OpenTSDB needs Hadoop/HBase first. Over 250,000 writes per second on 8 cores and 32 GB is a benchmark under specific conditions; this chapter needs about 1 million points per second, so load-test it.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-08",
+          "type": "single",
+          "prompt": "In the book’s example, two `host=webserver01` rows use the same timestamp with different values. What problem does this cause?",
+          "options": [
+            "Data from two different hosts is merged into one series",
+            "The same timestamp doubles the label cardinality",
+            "Same-series duplicates at one instant may be overwritten or deduplicated",
+            "The time-series database rejects the whole batch"
+          ],
+          "answer": 2,
+          "explanation": "With the same metric name, labels, and timestamp, these are the same series at the same instant, and the time-series database may keep only one value. That makes a 10-minute average impossible to compute, and it shows the example is only an illustration of the row format, not real data.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c20-02-09",
+          "type": "fill",
+          "prompt": "Complete the key to aggregation queries in a time-series database",
+          "text": "A time-series database builds an [[index]] on labels to aggregate efficiently, so you must limit label [[cardinality]]; otherwise the series count gets out of control.",
+          "distractors": [
+            "snapshot",
+            "replica",
+            "precision"
+          ],
+          "explanation": "Aggregating by labels such as region and host relies on the label index. Every new label combination adds a series and an index entry, so high-cardinality labels make the index and memory grow with them.",
+          "ref": "Data Model"
+        }
+      ]
+    },
+    {
+      "id": "c20-03",
+      "title": "Collection",
+      "summary": "Push vs. pull, Kafka buffering, where to aggregate",
+      "exercises": [
+        {
+          "id": "c20-03-01",
+          "type": "single",
+          "prompt": "In the pull model with multiple collectors, how do you keep the same target server from being collected twice?",
+          "options": [
+            "Have each target server pick a random collector to push to",
+            "Have every collector scrape all targets, then deduplicate at ingestion",
+            "Have all collectors take turns scraping the same target to share the load",
+            "Use consistent hashing to assign each target to exactly one collector"
+          ],
+          "answer": 3,
+          "explanation": "Consistent hashing gives every target exactly one responsible collector, and adding or removing collectors moves only a few targets. Scraping everything and deduplicating later multiplies the wasted resources; having targets push to collectors turns it into the push model.",
+          "ref": "Metrics Collection"
+        },
+        {
+          "id": "c20-03-02",
+          "type": "single",
+          "prompt": "A batch job runs for only 20 seconds, and the pull collector scrapes every 60 seconds. What is the most likely problem, and how do you fix it?",
+          "options": [
+            "No problem: service discovery will collect it after the job ends",
+            "The job ends before the next scrape; bridge the gap with a Push Gateway",
+            "Scraping is so frequent it overwhelms the job; change the interval to 10 minutes",
+            "Pull requests interrupt the job; switch to UDP pulling"
+          ],
+          "answer": 1,
+          "explanation": "Pull can only scrape targets that are still alive at scrape time, so a short job may never get scraped. A Push Gateway lets the job push its metrics there first, and the collector then pulls from it. It also shows that push fits short-lived jobs better.",
+          "ref": "Metrics Collection"
+        },
+        {
+          "id": "c20-03-03",
+          "type": "match",
+          "prompt": "Following the book’s push vs. pull comparison, match each scenario with its conclusion",
+          "pairs": [
+            [
+              "Debugging",
+              "Pull is easier: hit /metrics directly"
+            ],
+            [
+              "Short-lived jobs",
+              "Push fits better: send before exiting"
+            ],
+            [
+              "Firewall / cross-DC",
+              "Push is easier: send to a reachable entry"
+            ],
+            [
+              "Source authenticity",
+              "Push needs an allowlist or authentication"
+            ]
+          ],
+          "explanation": "A pull collector can hit /metrics at any time, which helps debugging. A short job may not live until the next scrape, so push fits better. Across data centers, sending to a reachable load balancer entry is simpler than letting collectors reach every target. But any client can push, so you need an allowlist or authentication.",
+          "ref": "Metrics Collection"
+        },
+        {
+          "id": "c20-03-04",
+          "type": "judge",
+          "prompt": "In the push model, if you have not received data from a machine for a long time, you can conclude that the machine is down.",
+          "answer": false,
+          "explanation": "Missing reports could mean the service is down, but also a network failure or a problem on the sender, and the push model cannot tell these apart directly. A failed pull is a more direct signal, but it too has to distinguish network failures from service failures.",
+          "ref": "Metrics Collection"
+        },
+        {
+          "id": "c20-03-05",
+          "type": "judge",
+          "prompt": "Push or pull does not determine the transport protocol; push can also send over HTTP/TCP.",
+          "answer": true,
+          "explanation": "The book’s table gives TCP pull and UDP push as examples, but they are only examples, not the essential difference between push and pull. TCP connection overhead may also be small relative to the payload, so there is no need to force UDP just to save overhead.",
+          "ref": "Metrics Collection"
+        },
+        {
+          "id": "c20-03-06",
+          "type": "single",
+          "prompt": "You add Kafka between the collectors and the time-series database. What is the main problem it solves?",
+          "options": [
+            "Guarantees every alert is delivered exactly once",
+            "Removes the need for compression encoding and downsampling in the time-series database",
+            "Holds data while the time-series database is down, decoupling collection from processing",
+            "Removes the need for service discovery and configuration in collectors"
+          ],
+          "answer": 2,
+          "explanation": "Collectors can scale automatically, but if the time-series database goes down, data is lost. Kafka is reliable and scalable: it holds the data first, and consumers or stream processors such as Flink write it once downstream recovers. The cost is one more system to operate.",
+          "ref": "Scaling the Metrics Transmission Pipeline"
+        },
+        {
+          "id": "c20-03-07",
+          "type": "fill",
+          "prompt": "Complete Kafka’s partitioning strategy",
+          "text": "The book suggests partitioning Kafka by [[metric name]], which makes aggregating the same metric easier; at larger scale, shard further by [[label]].",
+          "distractors": [
+            "timestamp",
+            "collector IP",
+            "alert severity"
+          ],
+          "explanation": "Data for one metric goes to one partition, so aggregating it downstream needs no cross-partition merge. If a single metric is too large, split it by label; you can also classify by importance to handle critical data first. “One partition per metric” is only an illustration: with many metrics, map them onto fewer partitions.",
+          "ref": "Scaling the Metrics Transmission Pipeline"
+        },
+        {
+          "id": "c20-03-08",
+          "type": "multi",
+          "prompt": "Which statements about “where to aggregate” are correct?",
+          "options": [
+            "Aggregating before ingestion cuts writes, but not storing raw values loses detail",
+            "After pre-ingestion aggregation, you can still recover raw peaks from the averages",
+            "Aggregating at query time is most flexible, but processes more data and may be slower",
+            "Aggregating at query time has the smallest write volume",
+            "The collection agent suits simple aggregation, such as counting over 1 minute"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "The earlier you aggregate, the lower the write volume and the flexibility: the agent does simple aggregation, pipeline aggregation cuts writes but loses raw detail, and query-time aggregation keeps all raw data. Averages smooth peaks away for good; query-time aggregation writes every raw point, so its write volume is largest.",
+          "ref": "Where to Aggregate?"
+        },
+        {
+          "id": "c20-03-09",
+          "type": "single",
+          "prompt": "Each machine reports its own P95 latency. To get the P95 for the whole cluster, which approach is correct?",
+          "options": [
+            "Take a weighted average of the P95s by each machine’s request count",
+            "Take the plain average of the machines’ P95s",
+            "Recompute from the raw samples or their distribution",
+            "Take the maximum of the machines’ P95s"
+          ],
+          "answer": 2,
+          "explanation": "Percentiles cannot be added and averaged: the cluster P95 depends on the combined distribution of all requests. Averaging the per-machine P95s, weighting them, or taking the maximum all fail to produce it. Either keep the raw samples, or store distribution data that can be merged and recompute from it.",
+          "ref": "Where to Aggregate?"
+        },
+        {
+          "id": "c20-03-10",
+          "type": "fill",
+          "prompt": "Work it out: why pre-aggregation should keep the sample count",
+          "text": "Machine A has an average of 10 (1 sample) and machine B has an average of 40 (3 samples), so the overall average of the two machines should be [[32.5]].",
+          "distractors": [
+            "25",
+            "40",
+            "30"
+          ],
+          "explanation": "Overall average = (10×1 + 40×3) ÷ 4 = 130 ÷ 4 = 32.5. Simply averaging the two averages gives 25, which ignores the sample counts. That is why pre-aggregation should keep sum and count, not just the average.",
+          "ref": "Where to Aggregate?"
+        }
+      ]
+    },
+    {
+      "id": "c20-04",
+      "title": "Storage and Alerts",
+      "summary": "Compression, downsampling, alert rules, delivery",
+      "exercises": [
+        {
+          "id": "c20-04-01",
+          "type": "single",
+          "prompt": "CPU values sampled every 10 seconds from 19:00:00 are 10, 16, 20, 30, 20, 30. Averaged over 30-second windows [00,30) and [30,60), what are the results?",
+          "options": [
+            "About 15.33 and 26.67",
+            "19 and 25",
+            "19 and about 26.67",
+            "22 and 25"
+          ],
+          "answer": 0,
+          "explanation": "[00,30) holds 10, 16, 20: 46÷3 ≈ 15.33. [30,60) holds 30, 20, 30: 80÷3 ≈ 26.67. 19 and 25 come from an arithmetic error in the book’s table; 22 and 25 come from wrongly using (00,30] and (30,60]; 19 and about 26.67 puts the point at second 30 into the first window.",
+          "ref": "Storage Layer"
+        },
+        {
+          "id": "c20-04-02",
+          "type": "single",
+          "prompt": "After downsampling keeps only averages, a 10-second CPU spike disappears from the hourly data. What should you do?",
+          "options": [
+            "Also store the maximum when downsampling",
+            "Back out the peak proportionally from the hourly average",
+            "Store the median instead of the average",
+            "Re-interpolate the hourly data back to 10-second resolution"
+          ],
+          "answer": 0,
+          "explanation": "Once raw points are dropped, an average cannot recover a brief peak; interpolation and back-calculation are only guesses. Storing the maximum alongside the average when downsampling preserves spike information in long-term data. A median is even less sensitive to spikes.",
+          "ref": "Storage Layer"
+        },
+        {
+          "id": "c20-04-03",
+          "type": "fill",
+          "prompt": "Work through second-order delta encoding of timestamps",
+          "text": "Timestamps 1000, 1010, 1020, 1030: storing the deltas gives a constant [[10]], and storing the delta of the deltas gives all [[0]]; smaller numbers compress more easily.",
+          "distractors": [
+            "1010",
+            "20",
+            "1"
+          ],
+          "explanation": "With a steady sampling interval, the delta is always 10 and the delta of the deltas is all 0, which takes very few bits to encode. This is why delta and delta-of-delta encoding can compress timestamps so well, and good time-series databases usually build it in.",
+          "ref": "Storage Layer"
+        },
+        {
+          "id": "c20-04-04",
+          "type": "judge",
+          "prompt": "Most operational queries target data from roughly the last day, so storage should focus on optimizing recent hot data, and old data that is rarely accessed can move to cold storage.",
+          "answer": true,
+          "explanation": "The book cites a Facebook study: about 85% of operational queries target the past 26 hours. Keep recent data in a fast storage tier, and downsample old data and move it to cold storage, which keeps queries fast and costs under control.",
+          "ref": "Storage Layer"
+        },
+        {
+          "id": "c20-04-05",
+          "type": "single",
+          "prompt": "A team uses Grafana and an off-the-shelf alerting tool, and the time-series database’s own query interface and cache are good enough. Do they still need to build a query service?",
+          "options": [
+            "No: the tools have mature plugins, so skip it if the interface and cache suffice",
+            "Yes: without a query service you cannot guarantee alert delivery",
+            "Yes: Grafana can only read the interface of a self-built query service",
+            "No: alerts can consume the raw metrics in Kafka directly"
+          ],
+          "answer": 0,
+          "explanation": "A query layer decouples components, eases swapping databases, and allows a cache. But many visualization and alerting tools have mature plugins, so skip it if the database interface is good enough. Alert rules query time-series data periodically instead of reading Kafka; delivery relies on retries and durable acknowledgements.",
+          "ref": "Query Service"
+        },
+        {
+          "id": "c20-04-06",
+          "type": "judge",
+          "prompt": "When a host goes silent and stops reporting, a threshold alert rule finds no value over the threshold, so the system can be considered healthy again.",
+          "answer": false,
+          "explanation": "“No data” does not mean “healthy”: a host that has gone silent is exactly the one that needs attention. Missing metrics need an explicit rule, such as a separate alert on missing data; otherwise the alert would wrongly “resolve” while the host is down.",
+          "ref": "Alerting System"
+        },
+        {
+          "id": "c20-04-07",
+          "type": "order",
+          "prompt": "Put the steps from rule evaluation to notification for one alert in order",
+          "items": [
+            "The alert manager reads alert rules from the cache",
+            "It calls the query service periodically to fetch data",
+            "When a rule is met, an alert is created and deduplicated",
+            "The alert event is written to Kafka",
+            "Notification consumers send email, PagerDuty, and so on"
+          ],
+          "explanation": "Rule configs are loaded into the cache first. The alert manager queries data periodically, creates an alert event when a condition is met, and filters, merges, and deduplicates repeated triggers. After the event is written to Kafka, notification consumers send it through each channel.",
+          "ref": "Alerting System"
+        },
+        {
+          "id": "c20-04-08",
+          "type": "single",
+          "prompt": "A rule has `expr: up == 0` and `for: 5m`. An instance is unreachable for 2 minutes because of network flapping, then recovers. What happens?",
+          "options": [
+            "No alert: the condition must hold for 5 minutes to fire",
+            "An alert fires immediately and resolves itself after 2 minutes",
+            "An alert is sent 5 minutes later",
+            "An alert fires once at the 2-minute mark"
+          ],
+          "answer": 0,
+          "explanation": "for: 5m requires the condition to hold for 5 minutes before the alert actually fires. Until then it is only pending, and if the condition clears it returns to normal. This filters out false alarms from brief flapping, at the cost of reporting a real failure a few minutes late.",
+          "ref": "Alerting System"
+        },
+        {
+          "id": "c20-04-09",
+          "type": "multi",
+          "prompt": "Besides evaluating rules, what else should the alert manager be responsible for?",
+          "options": [
+            "Downsampling historical data",
+            "Rendering dashboard charts",
+            "Controlling who may change alert rules",
+            "Filtering, merging, and deduplicating repeated triggers",
+            "Retrying failed sends to guarantee at-least-once delivery"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "Repeated triggers from the same instance should produce only one event, alert rules need access control, and retries guarantee at-least-once delivery. Dashboards belong to a visualization system such as Grafana, and downsampling is the storage layer’s job.",
+          "ref": "Alerting System"
+        },
+        {
+          "id": "c20-04-10",
+          "type": "judge",
+          "prompt": "Alert notifications are retried at-least-once, so the same alert may be delivered more than once, and the receiving side needs to deduplicate.",
+          "answer": true,
+          "explanation": "Retries prevent missed sends, but if a send succeeds and the acknowledgement is lost, it is sent again. Storing only alert state does not guarantee delivery by itself; you also need recoverable tasks, durable acknowledgements, and handling of downstream responses.",
+          "ref": "Alerting System"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,508 @@
+{
+  "chapter": 10,
+  "title": "Notification System",
+  "fullTitle": "Chapter 10: Design a Notification System",
+  "intro": [
+    "**Learning goal**: turn the synchronous code that “sends an email after an order” into a notification pipeline that can retry, scale, and track state.",
+    "**Remember first**: business event → durable queue → channel worker → third party. Accepted, delivered, displayed, and opened are different states.",
+    "**Common mistakes**: assuming a third-party timeout means nothing was sent; believing event-ID dedup automatically guarantees no duplicates; ignoring users’ opt-out settings."
+  ],
+  "keyPoints": [
+    "Ask about channels, platforms, daily volume, timeliness, and opt-out first: say 10 million push, 1 million SMS, and 5 million email per day.",
+    "Persist and enqueue business events; per-channel workers call the third parties. Separate queues keep one provider’s outage from hurting other channels.",
+    "A queue smooths short spikes but doesn’t raise a third party’s long-term capacity; for a lasting backlog, check channel quota, worker throughput, expiry.",
+    "A third-party timeout means “state unknown”; retry with an atomic claim and a stable idempotency key: promise at-least-once plus dedup, not exactly-once.",
+    "“Accepted,” “delivered,” and “opened” are different states; expired verification codes need no resend, and opt-outs are checked before sending."
+  ],
+  "refs": {
+    "Notification Types and Channels": "1. 通知类型与渠道",
+    "Requirements": "需求（Requirements）",
+    "Contact Info Gathering": "2. 收集联系信息（Contact Info Gathering）",
+    "Soft Real-Time Is Not Always Instant": "批注：软实时不等于永远立即到达",
+    "Additional Components": "其他组件（Additional Components）",
+    "Improved Design": "改进设计（Improved Design）",
+    "Notification Flow": "最终通知流程（Notification Flow）",
+    "Challenges in Initial Design": "初版设计的问题（Challenges in Initial Design）",
+    "The Queue as a Shipping Dock": "批注：队列像快递站的待发货区",
+    "Why Check-Then-Send Is Not Enough": "批注：为什么简单“先查后发”不够",
+    "Prevent Data Loss": "1. 防止数据丢失（Prevent Data Loss）",
+    "Interview Answer Template": "批注：面试回答模板",
+    "Security": "安全（Security）",
+    "Key Optimizations": "关键优化（Key Optimizations）"
+  },
+  "lessons": [
+    {
+      "id": "c10-01",
+      "title": "Needs and Channels",
+      "summary": "Channels, scale, timeliness, and contact info",
+      "exercises": [
+        {
+          "id": "c10-01-01",
+          "type": "match",
+          "prompt": "Match each notification type to the delivery channel the source gives as an example",
+          "pairs": [
+            [
+              "iOS push",
+              "APNS"
+            ],
+            [
+              "Android push",
+              "FCM"
+            ],
+            [
+              "SMS",
+              "Third-party SMS service, e.g. Twilio"
+            ],
+            [
+              "Email",
+              "Commercial email service, e.g. SendGrid"
+            ]
+          ],
+          "explanation": "Push goes through the platform’s official channel: Apple’s APNS for iOS, Firebase’s FCM for Android. SMS and email are handed to third-party providers. The source notes these are only example implementations; the real choice depends on your platform.",
+          "ref": "Notification Types and Channels"
+        },
+        {
+          "id": "c10-01-02",
+          "type": "single",
+          "prompt": "Push, SMS, and email add up to about 16 million messages a day. Roughly how many per second is that on average?",
+          "options": [
+            "About 1,850 per second",
+            "About 185 per second",
+            "About 16,000 per second",
+            "About 20 per second"
+          ],
+          "answer": 1,
+          "explanation": "16 million ÷ 86,400 seconds ≈ 185 per second. The average isn’t large; the hard parts are traffic spikes, slow third-party responses, and retries after failures, which is why a queue comes next.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c10-01-03",
+          "type": "fill",
+          "prompt": "Fill in the contact info each channel needs in order to send",
+          "text": "Push needs a [[device token]], SMS needs a phone number, and email needs an [[email address]].",
+          "distractors": [
+            "IP address",
+            "event ID",
+            "username"
+          ],
+          "explanation": "This contact info is collected at app install or sign-up and stored: device tokens in the Device Tokens table, phone numbers and email addresses in the User table. An IP address changes and can’t locate a user; an event ID is the identifier used for deduplication.",
+          "ref": "Contact Info Gathering"
+        },
+        {
+          "id": "c10-01-04",
+          "type": "judge",
+          "prompt": "Soft real-time tolerates occasional delays: arriving late now and then is not a system failure, unlike hard real-time.",
+          "answer": true,
+          "explanation": "Soft real-time means “as fast as possible,” and being slow once in a while is acceptable; only in hard real-time does a missed deadline count as a system failure. So a notification system focuses on low latency and reliability, not on a hard deadline for every message.",
+          "ref": "Soft Real-Time Is Not Always Instant"
+        },
+        {
+          "id": "c10-01-05",
+          "type": "single",
+          "prompt": "The SMS provider was down for 2 hours and has just recovered. The queue holds a backlog of login verification codes. What is the most sensible handling?",
+          "options": [
+            "Drop the expired codes and don’t resend them",
+            "Resend the backlogged codes first, then handle new requests",
+            "Resend the backlogged codes by email instead",
+            "Resend all of them in order so none is lost"
+          ],
+          "answer": 0,
+          "explanation": "Verification codes have a validity period. Sending an expired one only annoys the user, wastes quota, and delays the new codes behind it. Define a validity period per notification type and discard whatever has expired: that is the right trade-off under soft real-time.",
+          "ref": "Soft Real-Time Is Not Always Instant"
+        },
+        {
+          "id": "c10-01-06",
+          "type": "single",
+          "prompt": "The device token needed for push: when is it usually collected, and where is it stored?",
+          "options": [
+            "Only APNS/FCM keep it; your backend doesn’t need to",
+            "Requested from the user just before each send",
+            "Kept only on the client; the server doesn’t store it",
+            "Collected at install or sign-up and stored in the device token table"
+          ],
+          "answer": 3,
+          "explanation": "The device token is collected at install or sign-up and stored in the Device Tokens table, ready to use when sending; asking for it at send time would be far too late. The push platform handles delivery, but your backend must supply the token that says whom to push to.",
+          "ref": "Contact Info Gathering"
+        },
+        {
+          "id": "c10-01-07",
+          "type": "judge",
+          "prompt": "When a user turns off a type of notification, it is only a front-end display issue, so the server can keep sending as usual.",
+          "answer": false,
+          "explanation": "Opt-out is part of the requirements: the notification settings table records each user’s opt-in/opt-out per channel, and it must be checked before sending. Sending anyway annoys the user and burns third-party quota for nothing.",
+          "ref": "Additional Components"
+        },
+        {
+          "id": "c10-01-08",
+          "type": "single",
+          "prompt": "The requirements say notifications can be triggered by “client actions” or by “server-side scheduled jobs.” Which one is triggered by a server-side scheduled job?",
+          "options": [
+            "A user taps “Resend verification code”",
+            "A user likes a friend’s post in the app, and the friend is notified",
+            "A bill reminder is sent automatically on the 1st of every month",
+            "A user gets a welcome email after signing up"
+          ],
+          "answer": 2,
+          "explanation": "A bill reminder is triggered in batches by a scheduled job such as cron, according to the date and regardless of what any user is doing right now. The other three are all caused by a user’s action, so they are client-triggered.",
+          "ref": "Requirements"
+        }
+      ]
+    },
+    {
+      "id": "c10-02",
+      "title": "From Sync to Queue",
+      "summary": "Problems in the first design and decoupling",
+      "exercises": [
+        {
+          "id": "c10-02-01",
+          "type": "match",
+          "prompt": "Match each role in the notification pipeline to its responsibility",
+          "pairs": [
+            [
+              "Trigger service",
+              "Emits events: bill reminders, shipping updates"
+            ],
+            [
+              "Notification server",
+              "Exposes the API; validates, fetches render data"
+            ],
+            [
+              "Message queue",
+              "Decouples components and buffers bursts"
+            ],
+            [
+              "Channel worker",
+              "Pulls events and calls the matching third party"
+            ],
+            [
+              "Third-party service",
+              "Actually delivers the notification to the device"
+            ]
+          ],
+          "explanation": "The trigger service only says “time to send”; the notification server validates and prepares the content; the queue buffers; workers talk to each channel; and the third party does the final delivery. Each stage can scale independently.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c10-02-02",
+          "type": "order",
+          "prompt": "Put the steps a notification takes through the improved architecture in order",
+          "items": [
+            "Trigger service calls the notification API",
+            "Notification server validates it and fetches metadata",
+            "Notification event is put on the message queue",
+            "Worker takes the event and calls the third party",
+            "Third party delivers the notification to the user"
+          ],
+          "explanation": "The key change is in the middle: once the notification server has validated the request, it puts the event on the queue, and the slow, failure-prone work of calling the third party is left to workers, asynchronously.",
+          "ref": "Notification Flow"
+        },
+        {
+          "id": "c10-02-03",
+          "type": "multi",
+          "prompt": "Compared with the original single-server synchronous design, what did the improved design change?",
+          "options": [
+            "All channels share one worker to simplify deployment",
+            "Moved the database and cache out of the notification server",
+            "Notification server waits for the third party’s reply before responding",
+            "Deployed multiple notification servers to scale horizontally",
+            "Added a message queue to decouple and buffer notifications"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "Moving storage out removes coupling, multiple servers remove the single point, and the queue decouples and buffers. A shared worker would let one failing channel drag down all the others, and waiting synchronously on the third party was the original design’s bottleneck.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c10-02-04",
+          "type": "single",
+          "prompt": "The first design has one notification server hosting the database, cache, and sending logic. What happens when it goes down?",
+          "options": [
+            "Notifications on every channel stop going out",
+            "The third-party services automatically take over sending",
+            "The database holds requests and resends them automatically later",
+            "Only push is affected; SMS and email carry on"
+          ],
+          "answer": 0,
+          "explanation": "This is a single point of failure (SPOF): when the only server dies, the whole pipeline stops, and the database becomes unavailable with it. The improved design scales the notification servers horizontally and moves the database and cache out to scale on their own.",
+          "ref": "Challenges in Initial Design"
+        },
+        {
+          "id": "c10-02-05",
+          "type": "single",
+          "prompt": "Why does the trigger service’s call to the notification API return faster once a message queue is added?",
+          "options": [
+            "The notification server no longer validates requests",
+            "The queue makes the third party send faster",
+            "It can return once the event is enqueued, without waiting for delivery",
+            "The queue merges duplicate notifications, so fewer are sent"
+          ],
+          "answer": 2,
+          "explanation": "The business service hands the “parcel” to a reliable shipping dock and leaves, rather than waiting for the courier to deliver it. The third party itself isn’t any faster; slowness and failures are absorbed by workers asynchronously.",
+          "ref": "The Queue as a Shipping Dock"
+        },
+        {
+          "id": "c10-02-06",
+          "type": "fill",
+          "prompt": "Fill in the limits of what a message queue can do",
+          "text": "A queue can smooth out short-term [[spikes]], but it does not raise the third party’s long-term [[processing capacity]].",
+          "distractors": [
+            "latency",
+            "storage capacity",
+            "retry count"
+          ],
+          "explanation": "Extra notifications during a spike wait in the queue and drain slowly in the quiet periods. But if they arrive faster than the third party can handle for a long time, the backlog just keeps growing.",
+          "ref": "The Queue as a Shipping Dock"
+        },
+        {
+          "id": "c10-02-07",
+          "type": "single",
+          "prompt": "The SMS queue’s backlog has kept growing for several hours. What should you check first?",
+          "options": [
+            "Template rendering time; optimize the templates first",
+            "The queue’s capacity limit; raise it so the backlog can’t overflow",
+            "The SMS channel quota, worker throughput, and expiry policy",
+            "The number of notification servers; add a few first"
+          ],
+          "answer": 2,
+          "explanation": "A steadily growing backlog means consumers can’t keep up, usually due to channel quota or worker throughput. Extra notification servers and faster templates sit upstream of the queue and only speed up enqueuing; a bigger queue just stores the backlog longer. Discard expired notifications so they don’t hold quota.",
+          "ref": "The Queue as a Shipping Dock"
+        },
+        {
+          "id": "c10-02-08",
+          "type": "judge",
+          "prompt": "16 million notifications a day is under 200 per second on average, so there is no need for a message queue.",
+          "answer": false,
+          "explanation": "The average hides spikes and third-party jitter. The queue’s value is decoupling and buffering: when traffic bursts or the third party slows down or fails, notifications aren’t lost and the business service isn’t held up.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c10-02-09",
+          "type": "judge",
+          "prompt": "If iOS, Android, SMS, and email each have their own queue and worker, an SMS provider outage backs up only the SMS pipeline.",
+          "answer": true,
+          "explanation": "Per-channel queues confine a failure to one pipeline, while push and email keep being consumed as usual. If all channels shared one queue, stuck SMS tasks would slow the other channels down.",
+          "ref": "Improved Design"
+        }
+      ]
+    },
+    {
+      "id": "c10-03",
+      "title": "Reliable Delivery",
+      "summary": "Notification log, retries, idempotent dedup",
+      "exercises": [
+        {
+          "id": "c10-03-01",
+          "type": "single",
+          "prompt": "A worker’s call to the SMS service timed out with no response at all. What is the right conclusion about that message?",
+          "options": [
+            "It definitely wasn’t sent, so it’s safe to resend",
+            "It was definitely delivered, so mark it successful",
+            "Its state is unknown; the third party may already have sent it",
+            "The user definitely hasn’t seen it, so resend on another channel"
+          ],
+          "answer": 2,
+          "explanation": "A timeout only means no reply arrived. The third party may have accepted and sent the message while the response was lost on the network, and blindly resending would then create a duplicate. That is why retries rely on an idempotency key and state records.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-02",
+          "type": "single",
+          "prompt": "What is the main role of the notification log database in a reliable design?",
+          "options": [
+            "Record each notification’s state, for retries and troubleshooting",
+            "Store notification templates to standardize formats",
+            "Store users’ opt-out settings for each channel",
+            "Track users’ open and click rates"
+          ],
+          "answer": 0,
+          "explanation": "A notification is persisted before it is sent, and the log records which state each one is in; after a crash or a third-party failure it supports retries and troubleshooting, and the data doesn’t vanish with memory. Open rates, templates, and opt-outs each have their own components.",
+          "ref": "Prevent Data Loss"
+        },
+        {
+          "id": "c10-03-03",
+          "type": "judge",
+          "prompt": "If each retry uses a new idempotency key, the third party can recognize the request as a duplicate.",
+          "answer": false,
+          "explanation": "The idempotency key must be stable: every retry of the same event carries the same key, which is how the third party recognizes “already handled.” With a new key each time, it sees a brand-new notification.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-04",
+          "type": "multi",
+          "prompt": "Even with a “check, then send” step based on the event ID, in which cases can the user still receive duplicate notifications?",
+          "options": [
+            "The third party accepted the request, but the response was lost and the worker retried",
+            "Two workers both check and see “not seen before”",
+            "The first call wasn’t accepted by the third party and only the retry succeeded",
+            "A worker crashes after sending successfully but before writing the state",
+            "A user places two orders and gets one order notification for each"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "The three cases share one thing: a gap between “already sent” and “recorded as sent” (concurrent checks, a lost response, a crash before writing state). Two orders are two events, so one notification each is correct; if the first call wasn’t accepted, nothing was sent, so the user gets just one after the retry.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-05",
+          "type": "single",
+          "prompt": "To stop two workers from processing the same event at the same time, what is the key improvement?",
+          "options": [
+            "Use an atomic claim that makes “check + mark” a single step",
+            "Write the event ID record only after sending succeeds",
+            "Have each worker wait a random time to stagger the checks",
+            "Check the event ID record several times before sending"
+          ],
+          "answer": 0,
+          "explanation": "In “check, then send,” the check and the write are two steps, and the window between them lets two workers both pass. An atomic claim merges “check and mark as in progress” into one step, so only one worker wins. Checking more times or staggering randomly only lowers the odds of a collision; it doesn’t close the window.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-06",
+          "type": "judge",
+          "prompt": "“At-least-once delivery plus deduplication” describes a notification system’s reliability more accurately than promising exactly-once.",
+          "answer": true,
+          "explanation": "The third party may have accepted a request while the response was lost, so no system can guarantee exactly-once under every failure. What you can do is guarantee at least one send, then deduplicate as far as possible with atomic claims, stable idempotency keys, and the third party’s own idempotency support.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-07",
+          "type": "single",
+          "prompt": "After the order service writes to the database successfully, it must send an “order placed” notification, but the write and the enqueue might succeed or fail independently. What does the chapter recommend?",
+          "options": [
+            "Have the third-party service look up whether the order exists",
+            "Use a transactional outbox, committing the order and the event in one transaction",
+            "Enqueue right after the write; that step rarely fails",
+            "Enqueue first, then write; if the write fails, so be it"
+          ],
+          "answer": 1,
+          "explanation": "A transactional outbox writes the pending event and the business data in the same database transaction, so both succeed or both fail, and a background process then delivers the event to the queue. Swapping the order only trades one inconsistency for another.",
+          "ref": "Why Check-Then-Send Is Not Enough"
+        },
+        {
+          "id": "c10-03-08",
+          "type": "judge",
+          "prompt": "When the third party returns “accepted,” it means the user has already seen the notification.",
+          "answer": false,
+          "explanation": "Accepted, delivered, displayed, and opened are different states. Even after acceptance, a notification can fail to arrive because the device is offline, the token is invalid, and so on; whether the user opened it must be counted separately through event tracking.",
+          "ref": "Interview Answer Template"
+        }
+      ]
+    },
+    {
+      "id": "c10-04",
+      "title": "Support & Tracking",
+      "summary": "Rate limiting, retry, monitoring, tracking, security",
+      "exercises": [
+        {
+          "id": "c10-04-01",
+          "type": "single",
+          "prompt": "A promotion sends the same user 20 push notifications in one hour. Which component should prevent this bombardment?",
+          "options": [
+            "Rate limiting: cap how often one user is sent notifications",
+            "Retry: redeliver after a failure",
+            "Event tracking: measure open rates",
+            "Queue monitoring: adjust workers based on backlog"
+          ],
+          "answer": 0,
+          "explanation": "The rate limiting component caps how often notifications go to a single user, blocking a burst in a short time. Retries would only send more; queue monitoring and event tracking are for observation and don’t block anything.",
+          "ref": "Additional Components"
+        },
+        {
+          "id": "c10-04-02",
+          "type": "judge",
+          "prompt": "Using AppKey/AppSecret, as the source does, is enough to authenticate with every push platform such as APNS and FCM.",
+          "answer": false,
+          "explanation": "The source uses AppKey/AppSecret as an example, but real providers may use certificates, tokens, or service accounts, so integrate according to each platform’s requirements. Either way, keep the secrets safe on the server, never in the client.",
+          "ref": "Security"
+        },
+        {
+          "id": "c10-04-03",
+          "type": "single",
+          "prompt": "Operations wants to evaluate how well a push campaign worked. Which data matters most?",
+          "options": [
+            "The retry count in the notification log",
+            "The number of “accepted” responses from the third party",
+            "Open and click rates counted by event tracking",
+            "The message queue’s backlog length"
+          ],
+          "answer": 2,
+          "explanation": "Campaign impact depends on whether users opened and clicked, which event tracking measures. “Accepted” only says the third party took the request; queue backlog and retry counts reflect system health, not user engagement.",
+          "ref": "Additional Components"
+        },
+        {
+          "id": "c10-04-04",
+          "type": "fill",
+          "prompt": "Fill in what queue monitoring does",
+          "text": "Queue monitoring tracks each queue’s [[backlog]] and uses it to adjust the number of [[workers]] dynamically.",
+          "distractors": [
+            "click rate",
+            "notification servers",
+            "templates"
+          ],
+          "explanation": "A growing backlog means consumers can’t keep up, so you can add workers for that channel; a backlog that stays at zero lets you scale in. Adding notification servers doesn’t help: they sit upstream of the queue and would just stuff it faster.",
+          "ref": "Additional Components"
+        },
+        {
+          "id": "c10-04-05",
+          "type": "multi",
+          "prompt": "One item under the source’s “key optimizations” is written as Distributed Crawling. In context, which are sensible optimizations for a notification system?",
+          "options": [
+            "Turn off retries to reduce load on the third party",
+            "Cache frequently used data to cut latency",
+            "Add a distributed crawler component",
+            "Use the same third-party service for every channel",
+            "Optimize message delivery by region"
+          ],
+          "answers": [
+            1,
+            4
+          ],
+          "explanation": "Caching hot data and regional delivery optimization are both among the chapter’s key optimizations, with horizontal scaling and queues. The source mistakenly wrote the regional one as Distributed Crawling; no crawler is needed here. One shared provider amplifies single-point risk, and no retries loses notifications.",
+          "ref": "Key Optimizations"
+        },
+        {
+          "id": "c10-04-06",
+          "type": "single",
+          "prompt": "In an interview someone says, “Our notification delivery rate is 99%.” What should you ask first?",
+          "options": [
+            "What programming language the workers use",
+            "Which SMS and push providers are used",
+            "How it is measured: accepted, delivered, or opened",
+            "Whether the message queue delivers strictly in FIFO order"
+          ],
+          "answer": 2,
+          "explanation": "The same “99%” means very different things under different definitions: third-party acceptance may be very high while real user opens are very low. Define the states first, and only then does the number mean anything for comparison.",
+          "ref": "Interview Answer Template"
+        },
+        {
+          "id": "c10-04-07",
+          "type": "judge",
+          "prompt": "Predefining notification templates with a fixed format and filling in only variables at send time both unifies formats and makes rendering more efficient.",
+          "answer": true,
+          "explanation": "Notifications of the same kind share a format, and only a few variables such as the user name or order number are swapped in. Predefined templates avoid assembling content from scratch each time and give notifications from different businesses a consistent style.",
+          "ref": "Additional Components"
+        },
+        {
+          "id": "c10-04-08",
+          "type": "single",
+          "prompt": "When a third party has a temporary outage, how can the retry mechanism avoid making things worse?",
+          "options": [
+            "Give up after one failure and never retry",
+            "Back off, reuse the key, stop at cap or expiry",
+            "Use a new idempotency key on each retry",
+            "Retry at once, endlessly, until it succeeds"
+          ],
+          "answer": 1,
+          "explanation": "Backoff gives the third party time to recover, the same idempotency key lets it recognize duplicates, and a retry cap plus an expiry check end notifications that are doomed or no longer meaningful. Immediate, endless retries pile on during an outage.",
+          "ref": "Additional Components"
+        }
+      ]
+    }
+  ]
+}

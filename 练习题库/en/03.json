@@ -1,0 +1,554 @@
+{
+  "chapter": 3,
+  "title": "System Design Interview Framework",
+  "fullTitle": "Chapter 3: A Framework for System Design Interviews",
+  "intro": [
+    "**The through-line for CRUD engineers**: An interview isn't about memorizing one “universal architecture diagram.” It's about showing how you decide with incomplete information. First clarify the problem, then sketch the smallest viable blueprint, then dig into only the most critical bottlenecks, and finally summarize the trade-offs and how the design will evolve."
+  ],
+  "keyPoints": [
+    "Four steps: clarify scope, agree on a high-level design, deep dive, wrap up. In 45 minutes, spend about 3–10, 10–15, 10–25, and 3–5 minutes on them.",
+    "Ask only questions that change the design. With no numbers, propose assumptions, write them down, and invite the interviewer to correct them.",
+    "Draw the data flow first (who writes, who reads, where it rests), then add technologies. Get buy-in while the diagram is cheap to change.",
+    "A component deep dive quantifies workload, the first resource to run out, how failures spread, and recovery cost. “Add machines” is not enough.",
+    "Wrap up with what you covered, why you chose it, where it breaks, and when to upgrade. Admit any correctness gap on the spot."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Design Scope": "第 1 步：理解问题并确定设计范围（Understand the Problem and Establish Design Scope）",
+    "Step 2: Propose High-Level Design and Get Buy-In": "第 2 步：提出高层设计并取得共识（Propose High-Level Design and Get Buy-In）",
+    "Step 3: Design Deep Dive": "第 3 步：深入设计（Design Deep Dive）",
+    "Document Assumptions": "记录假设（Document Assumptions）",
+    "Example: Designing a News Feed System": "示例：设计新闻 Feed 系统",
+    "Example: News Feed System": "示例：新闻 Feed 系统",
+    "Example Topics": "示例主题（Example Topics）",
+    "Best Practices": "最佳实践（Best Practices）",
+    "Time Management": "时间管理（Time Management）"
+  },
+  "lessons": [
+    {
+      "id": "c03-01",
+      "title": "Clarify Scope",
+      "summary": "Ask design-changing questions, then write assumptions",
+      "exercises": [
+        {
+          "id": "c03-01-01",
+          "type": "single",
+          "prompt": "An interviewer says only, “Design a news feed system.” What is the best first step?",
+          "options": [
+            "Work out the exact five-year storage need first",
+            "Draw Kafka, Redis, and microservices right away",
+            "Ask clarifying questions about features, scale, and ranking",
+            "Design the post table's columns and indexes first"
+          ],
+          "answer": 2,
+          "explanation": "Step 1 is to understand the problem and set the scope, so you don't jump to solutions too early. If you pile on components or design tables first, and the question turns out to need only a friends' feed sorted by time, that detail work is wasted. Estimation belongs to step 2 and only makes sense once the scope is clear.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c03-01-02",
+          "type": "multi",
+          "prompt": "When designing a news feed, which of these clarifying questions have answers that substantially change the architecture?",
+          "options": [
+            "Whether the web front end uses React or Vue",
+            "Whether API fields use camelCase or snake_case",
+            "Whether the feed includes images and videos",
+            "The average and maximum number of followers",
+            "Whether the feed is newest first or personalized"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "Ranking decides between reading a materialized list and needing candidate retrieval plus ranking. The follower distribution decides the fan-out strategy. The media type decides whether you need object storage, a CDN, and transcoding. Field naming and front-end framework change none of these paths; asking just looks busy.",
+          "ref": "Q03-01"
+        },
+        {
+          "id": "c03-01-03",
+          "type": "match",
+          "prompt": "Match each requirement answer with the design change it brings",
+          "pairs": [
+            [
+              "Newest first",
+              "Read a materialized list by time + ID cursor"
+            ],
+            [
+              "Personalized ranking",
+              "Needs candidate retrieval, features, and ranking"
+            ],
+            [
+              "Million-follower celeb",
+              "Pull on read, or hybrid fan-out"
+            ],
+            [
+              "Includes video",
+              "Object storage, CDN, and async transcoding"
+            ]
+          ],
+          "explanation": "For each question, say how the answer changes the design: how you rank affects the read path, how many people affects fan-out, and what kind of content affects the media path. Remember: how to rank, how many people, what content.",
+          "ref": "Q03-01"
+        },
+        {
+          "id": "c03-01-04",
+          "type": "single",
+          "prompt": "A feed system has 100 posts per second, and each post has 200 recipients on average. With fan-out on write, about how many inbox writes per second is that?",
+          "options": [
+            "About 2,000",
+            "About 200,000",
+            "About 300",
+            "About 20,000"
+          ],
+          "answer": 3,
+          "explanation": "100 × 200 = 20,000 writes per second. But this is only an average: one post from a celebrity with a million followers causes a million writes, and an average must not hide the instantaneous load from the top users, so ask about the follower distribution.",
+          "ref": "Q03-01"
+        },
+        {
+          "id": "c03-01-05",
+          "type": "judge",
+          "prompt": "When the interviewer gives no scale numbers, you should wait for them and not offer assumptions, to avoid being wrong.",
+          "answer": false,
+          "explanation": "Without numbers, propose reasonable starting values yourself, write them on the whiteboard, and invite the interviewer to correct them. Written assumptions can be revisited with every later change. Waiting passively only wastes time and shows no judgment.",
+          "ref": "Document Assumptions"
+        },
+        {
+          "id": "c03-01-06",
+          "type": "judge",
+          "prompt": "“Is duplicate publishing allowed?” is worth asking while clarifying, because the answer affects whether you need an idempotent design.",
+          "answer": true,
+          "explanation": "Good questions can change the design: whether duplicate publishing is allowed affects idempotency, whether offline access is needed affects caching and sync, and peak QPS affects sharding and queues. Don't ask questions that won't change the design just to look professional.",
+          "ref": "Example: Designing a News Feed System"
+        },
+        {
+          "id": "c03-01-07",
+          "type": "single",
+          "prompt": "A candidate immediately draws Kafka, Redis, and ten microservices, then halfway through realizes the question only needs a friends' feed sorted by time. What is the root problem?",
+          "options": [
+            "The microservices aren't fine-grained enough, so responsibilities are unclear",
+            "The scope was never locked down, so more detail just means more drift",
+            "The diagram isn't detailed enough for the interviewer to follow",
+            "The chosen middleware is too slow to handle feed traffic"
+          ],
+          "answer": 1,
+          "explanation": "This is the classic failure of step 1: piling on components before confirming requirements. The components themselves may be fine, but they solve problems the question doesn't have, so the time goes to the wrong place.",
+          "ref": "Example: Designing a News Feed System"
+        },
+        {
+          "id": "c03-01-08",
+          "type": "fill",
+          "prompt": "Complete the step 1 practice",
+          "text": "With no numbers, propose a reasonable [[starting assumption]] and write it on the whiteboard, then invite the interviewer to [[correct]] it.",
+          "distractors": [
+            "final design",
+            "skip",
+            "exact figure"
+          ],
+          "explanation": "Once an assumption is written down, if the interviewer says “peak is 5 times, not 2,” you only change one parameter. Inviting corrections turns the interview into collaboration instead of guessing the answer.",
+          "ref": "Document Assumptions"
+        },
+        {
+          "id": "c03-01-09",
+          "type": "single",
+          "prompt": "The feed must support video, and product also wants “visible immediately after upload.” What must you pin down with the interviewer before designing?",
+          "options": [
+            "Whether to turn the CDN off to keep videos real time",
+            "Whether to show a placeholder or wait until transcoding is done",
+            "Whether videos go straight into the business database",
+            "Which video encoding format is the most popular"
+          ],
+          "answer": 1,
+          "explanation": "Video must be transcoded into several resolutions, usually asynchronously, so there is a gap between “immediately visible” and “processing finished,” and you must define the visibility semantics first. Large media belongs in object storage served by a CDN, and the post record stores only a media reference.",
+          "ref": "Q03-01"
+        }
+      ]
+    },
+    {
+      "id": "c03-02",
+      "title": "High-Level Design",
+      "summary": "Draw the blueprint, estimate, walk use cases, align",
+      "exercises": [
+        {
+          "id": "c03-02-01",
+          "type": "single",
+          "prompt": "In the high-level design phase, why get the interviewer's buy-in first instead of diving straight into the database design?",
+          "options": [
+            "Database details never need to be discussed in an interview",
+            "Once you reach agreement, the design can no longer change",
+            "Interviewers usually don't care about databases",
+            "If a basic assumption is wrong, deeper detail means more rework"
+          ],
+          "answer": 3,
+          "explanation": "Buy-in confirms the scope, the success criteria, and the main data flows. Database details matter only if they serve those goals. Agreeing early corrects course while the diagram is cheap. It doesn't mean the design is frozen: if a deep dive reveals a problem, feed it back and adjust.",
+          "ref": "Q03-02"
+        },
+        {
+          "id": "c03-02-02",
+          "type": "order",
+          "prompt": "Put the main path of the feed publishing flow in order",
+          "items": [
+            "The client submits the post",
+            "Post text and media references go into the database",
+            "After the commit, a fan-out task is created",
+            "The post ID is pushed into followers’ inboxes"
+          ],
+          "explanation": "Write to the authoritative store first, then reliably create the fan-out task after the commit succeeds, so that “published” has a clear meaning. If you fan out before writing, a failed write leaves followers seeing a post that doesn't exist.",
+          "ref": "Q03-05"
+        },
+        {
+          "id": "c03-02-03",
+          "type": "judge",
+          "prompt": "Getting buy-in means pausing after every box you draw and waiting for the interviewer's approval before continuing.",
+          "answer": false,
+          "explanation": "Buy-in means agreeing on the scope, the main path, and the key assumptions. It is not box-by-box approval, and it doesn't mean the design can't change later. Confirm direction as you draw, and treat the interviewer as a teammate instead of handing over the decision.",
+          "ref": "Q03-02"
+        },
+        {
+          "id": "c03-02-04",
+          "type": "single",
+          "prompt": "Why is it recommended to mark “who writes, who reads, and where the data rests” before choosing a database or queue in the high-level design?",
+          "options": [
+            "So that you can skip the capacity estimation",
+            "Technology names don't matter, so you can leave them out",
+            "The design logic still holds if the tech stack changes",
+            "Interviewers only look at data flow and ignore technology choices"
+          ],
+          "answer": 2,
+          "explanation": "The data flow is the skeleton of the design and the technology choices are the parts that fill it. You need to discuss both, just in that order. If you draw the arrows first, then when the interviewer asks “could we use a different database?”, you can say which paths stay the same and which constraints to re-check.",
+          "ref": "Example: News Feed System"
+        },
+        {
+          "id": "c03-02-05",
+          "type": "match",
+          "prompt": "Match each component in the feed's high-level design with its responsibility",
+          "pairs": [
+            [
+              "Database",
+              "Authoritative store for post text"
+            ],
+            [
+              "Fan-out task",
+              "Sends the post ID to followers after publishing"
+            ],
+            [
+              "Follower inbox",
+              "Stores each person's list of post IDs to read"
+            ],
+            [
+              "Object storage + CDN",
+              "Stores images and videos, serves them nearby"
+            ]
+          ],
+          "explanation": "The publish flow writes the post to the database and fills the friends' feeds. The fetch flow takes IDs from the inbox, then aggregates the post text, and media goes through object storage and the CDN. Each component is a stop on the data flow.",
+          "ref": "Example: News Feed System"
+        },
+        {
+          "id": "c03-02-06",
+          "type": "single",
+          "prompt": "The requirements turn out to be an internal activity feed for only a few hundred thousand users, yet the candidate starts sharding the database right away. What is the main problem?",
+          "options": [
+            "It adds needless migration, cross-shard queries, and operational burden",
+            "It should use NoSQL, which scales horizontally by nature",
+            "The shard count is too low, so resharding will be needed later",
+            "It should split into microservices first, then shard"
+          ],
+          "answer": 0,
+          "explanation": "This is over-engineering: a few hundred thousand users are nowhere near a single database's limit, so sharding only brings migration, cross-shard queries, and operational cost early. The shard count isn't the issue. Switching to NoSQL or splitting into microservices would also solve a scale problem the question doesn't have.",
+          "ref": "Q03-02"
+        },
+        {
+          "id": "c03-02-07",
+          "type": "judge",
+          "prompt": "When the interviewer doesn't give numbers yet, you can state labeled working assumptions, keep reasoning, and say which conclusion is most sensitive to them.",
+          "answer": true,
+          "explanation": "Labeled assumptions let the reasoning continue and let the interviewer correct you at any time. Stating the sensitivity shows you know what needs validating. But silence must not be taken to mean that the assumptions have all been confirmed.",
+          "ref": "Q03-02"
+        },
+        {
+          "id": "c03-02-08",
+          "type": "fill",
+          "prompt": "Complete the step 2 method",
+          "text": "After drawing the blueprint, do a [[back-of-the-envelope]] estimate to check that request volume, storage, and bandwidth hold up, then [[walk through use cases]] to validate the design's assumptions.",
+          "distractors": [
+            "deep dive",
+            "write table schemas",
+            "wrap up"
+          ],
+          "explanation": "Estimation checks scale and use cases check logic: walking through the core flows and edge cases reveals paths the blueprint missed. Both belong in the high-level design phase, not something to patch in during the deep dive.",
+          "ref": "Step 2: Propose High-Level Design and Get Buy-In"
+        },
+        {
+          "id": "c03-02-09",
+          "type": "single",
+          "prompt": "A candidate says: “I'll design for 10 million users, read-heavy, sorted by time. If you care more about real time, I'll adjust. Is this scope OK?” What is the main purpose of this?",
+          "options": [
+            "To stall for time until the interviewer gives hints",
+            "To hand the decision to the interviewer and avoid making a call",
+            "To prove they memorized the standard feed answer",
+            "To state assumptions so the interviewer can correct course early"
+          ],
+          "answer": 3,
+          "explanation": "It gives its own judgment and assumptions first, says how it will adjust if conditions change, and finally asks the interviewer to confirm the scope. That is getting buy-in. The candidate still leads the design instead of pushing the judgment onto the interviewer.",
+          "ref": "Example: News Feed System"
+        }
+      ]
+    },
+    {
+      "id": "c03-03",
+      "title": "Deep Dive",
+      "summary": "Pick key components; quantify bottlenecks, failures",
+      "exercises": [
+        {
+          "id": "c03-03-01",
+          "type": "match",
+          "prompt": "Match each question with the focus most worth a deep dive",
+          "pairs": [
+            [
+              "URL shortener",
+              "Hashing and short code generation"
+            ],
+            [
+              "Chat system",
+              "Lower latency; online/offline status"
+            ],
+            [
+              "News feed",
+              "Publish and fetch flows"
+            ],
+            [
+              "Payment system",
+              "Correctness over seconds-level propagation"
+            ]
+          ],
+          "explanation": "A deep dive should focus on the components most relevant to the question: for a short URL it is short code generation, for chat it is latency and online status, and for a feed it is the publish and read flows. A payment system can't copy the feed's “seconds-level propagation is fine.” Its focus is correctness.",
+          "ref": "Example Topics"
+        },
+        {
+          "id": "c03-03-02",
+          "type": "single",
+          "prompt": "A feed worker can process 20,000 inbox updates per second, but for one minute 30,000 per second arrive. How much does the backlog grow?",
+          "options": [
+            "1,200,000 messages",
+            "10,000 messages",
+            "1,800,000 messages",
+            "600,000 messages"
+          ],
+          "answer": 3,
+          "explanation": "The backlog grows at arrival rate minus processing rate, which is 10,000 per second, and multiplying by 60 seconds gives 600,000. 1,800,000 is the total that arrived and 1,200,000 is the total processed. What matters is the difference.",
+          "ref": "Q03-03"
+        },
+        {
+          "id": "c03-03-03",
+          "type": "single",
+          "prompt": "When fan-out workers can't keep up and the backlog keeps growing, what happens if you only add stateless API servers?",
+          "options": [
+            "The backlog grows half as fast but still can't be stopped",
+            "Workers automatically scale along with the API",
+            "The backlog keeps growing; the bottleneck is the workers or a hot shard",
+            "The API absorbs some traffic, so the backlog gradually shrinks"
+          ],
+          "answer": 2,
+          "explanation": "Add capacity where the resource runs out first. The API only accepts requests, while the backlog builds up in the workers and the hot shard. Unless you raise worker capacity or switch celebrities to merging on read, the backlog keeps growing.",
+          "ref": "Q03-03"
+        },
+        {
+          "id": "c03-03-04",
+          "type": "multi",
+          "prompt": "When deep-diving a hotspot component, which of these questions must you answer?",
+          "options": [
+            "Which resource runs out first: CPU, connections, or locks",
+            "How it degrades and recovers under overload or failure",
+            "How its classes and packages are organized",
+            "Which popular frameworks exist in the same category",
+            "How much work reaches it at peak"
+          ],
+          "answers": [
+            0,
+            1,
+            4
+          ],
+          "explanation": "How much traffic comes in, how much resource is left, what happens when it breaks, and how long recovery takes decide whether the component holds up. Spending the time on class names and framework lists is exactly the failure mode the chapter calls out.",
+          "ref": "Q03-03"
+        },
+        {
+          "id": "c03-03-05",
+          "type": "judge",
+          "prompt": "When calculating how many instances you need, use the load-test capacity at the target latency, not a best result measured on throughput alone.",
+          "answer": true,
+          "explanation": "A throughput-only best result is often reached when latency is already bad. If you size machines by it, P99 will exceed the target in production. Also check whether a single key, shard, or serial critical section can scale horizontally.",
+          "ref": "Q03-03"
+        },
+        {
+          "id": "c03-03-06",
+          "type": "judge",
+          "prompt": "In the deep dive, covering every technology you might use shows the most depth.",
+          "answer": false,
+          "explanation": "A deep dive should prioritize key components, discuss bottlenecks, and keep detail under control. Listing every technology crowds out time for the core flows and doesn't explain why you chose them or what they cost. Depth comes from quantifying and weighing trade-offs on the critical path.",
+          "ref": "Step 3: Design Deep Dive"
+        },
+        {
+          "id": "c03-03-07",
+          "type": "single",
+          "prompt": "After adding a cache to a hot read endpoint, which failure question must you still answer in the deep dive?",
+          "options": [
+            "Can the cache replace the database as durable storage?",
+            "After a cache hit, must the database still be queried again?",
+            "Should the cache be switched to disk-based storage?",
+            "If the whole cache is invalidated, can the database handle the load that falls through?"
+          ],
+          "answer": 3,
+          "explanation": "A cache shields hot reads, but when it is invalidated it exposes the backend's limit: once the hit rate drops, database load can multiply. Every measure has a cost: replicas bring replication lag, sharding brings migration cost, and caching brings fall-through bursts.",
+          "ref": "Q03-03"
+        },
+        {
+          "id": "c03-03-08",
+          "type": "fill",
+          "prompt": "Complete two of the four deep-dive questions",
+          "text": "What are this component's [[capacity limit]] and failure modes? When must the design be upgraded, and what is the [[migration path]]?",
+          "distractors": [
+            "class names",
+            "table columns",
+            "code style"
+          ],
+          "explanation": "The four deep-dive questions: the primary key and access pattern, the capacity limit and failure modes, the consequences of lost, duplicated, or delayed data, and when to upgrade plus the migration path. They force you to state boundaries instead of stopping at table columns and class names.",
+          "ref": "Step 3: Design Deep Dive"
+        },
+        {
+          "id": "c03-03-09",
+          "type": "single",
+          "prompt": "When monitoring the feed fan-out queue, besides the backlog size, which metric most directly shows how long followers wait to see a new post?",
+          "options": [
+            "Average message size",
+            "Age of the oldest message",
+            "Number of consumer processes",
+            "New messages enqueued per second"
+          ],
+          "answer": 1,
+          "explanation": "The oldest message's age is how long the slowest message has already waited, which maps directly to the propagation-delay promise. A large backlog doesn't always mean long waits if processing is fast. The enqueue rate only says how much arrives, and the consumer count is just a means. Read it with P95/P99 and the error rate.",
+          "ref": "Q03-03"
+        }
+      ]
+    },
+    {
+      "id": "c03-04",
+      "title": "Wrap-Up and Pacing",
+      "summary": "Time budget, the 5-minute close, the 90-second answer",
+      "exercises": [
+        {
+          "id": "c03-04-01",
+          "type": "single",
+          "prompt": "At minute 40 of a 45-minute interview, you suddenly think of a new component that would improve performance. What is the best move?",
+          "options": [
+            "Say nothing and perfect it on paper first",
+            "Scrap the current design and redo it around the new component",
+            "Draw the new component immediately and explain it in detail",
+            "Stop adding components and start reviewing failures and trade-offs"
+          ],
+          "answer": 3,
+          "explanation": "The wrap-up gets only 3–5 minutes, so you should stop adding components before minute 40. Mention the new idea in one sentence as a “next step.” A redo can't be finished in time, and silence violates the principle of communicating continuously.",
+          "ref": "Time Management"
+        },
+        {
+          "id": "c03-04-02",
+          "type": "order",
+          "prompt": "Only 5 minutes are left. Put the wrap-up content in the recommended order",
+          "items": [
+            "Restate the goal and core assumptions",
+            "Walk the key write and read paths on the diagram",
+            "Summarize trade-offs, top bottleneck, failure safeguards",
+            "Give upgrade triggers and a validation plan"
+          ],
+          "explanation": "Restate the goal first so the interviewer knows what you covered. Then walk the diagram to prove the design works. Then explain why you chose it and where it can break. Only then say when to upgrade, leaving room for follow-ups. A wrap-up is not a list of technology names, nor “we'll optimize the rest later.”",
+          "ref": "Q03-04"
+        },
+        {
+          "id": "c03-04-03",
+          "type": "judge",
+          "prompt": "You only notice at the end that the design could oversell, but to wrap up neatly on time you can skip it and list it as a later optimization.",
+          "answer": false,
+          "explanation": "Correctness gaps such as losing money, overselling, or leaking permissions must be admitted on the spot, and the success criteria must be fixed. Only performance enhancements that don't affect the main path can be listed for later. Important errors belong in the current conclusion.",
+          "ref": "Q03-04"
+        },
+        {
+          "id": "c03-04-04",
+          "type": "single",
+          "prompt": "In the 90-second answer you say, “Publishing succeeds when the post is saved; it doesn't guarantee every follower has received it.” What does this sentence do?",
+          "options": [
+            "It means follower inboxes never need to be written",
+            "It says fan-out failures never need to be retried",
+            "It says the system uses strongly consistent replication",
+            "It defines when a write succeeds and that propagation is async"
+          ],
+          "answer": 3,
+          "explanation": "It makes clear when you can return success: once the post is written to the main store, fan-out runs asynchronously, and a brief propagation delay is allowed. This is not strong consistency, nor does it mean fan-out can be ignored: async tasks must still be retryable and deduplicated, and inboxes still get written.",
+          "ref": "Q03-05"
+        },
+        {
+          "id": "c03-04-05",
+          "type": "multi",
+          "prompt": "Which of these should you do in a system design interview?",
+          "options": [
+            "Think out loud continuously",
+            "Clarify ambiguity before moving to the design",
+            "The earlier you give a full design, the more skilled you look",
+            "Treat the interviewer as a collaborator and iterate together",
+            "Stay silent when stuck so you don't say something wrong"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "Asking, communicating, and iterating are all things to do. Silence and giving a design too early are on the “don't” list: the former leaves the interviewer unable to assess your thinking, and the latter often goes off track before the requirements are clear.",
+          "ref": "Best Practices"
+        },
+        {
+          "id": "c03-04-06",
+          "type": "judge",
+          "prompt": "When you don't know a piece of middleware well, stating your assumptions, the interface semantics, failure handling, and how you'd verify them is also a skill.",
+          "answer": true,
+          "explanation": "Saying clearly what you don't know beats covering the gap with unverified jargon. Interviewers evaluate your reasoning and trade-offs, and clearly marking what is uncertain makes the design more credible.",
+          "ref": "Best Practices"
+        },
+        {
+          "id": "c03-04-07",
+          "type": "single",
+          "prompt": "In the last 5 minutes, which way of wrapping up is best?",
+          "options": [
+            "Say what you covered, why you chose it, where it breaks, when to upgrade",
+            "Rattle off a string of technology names to show broad knowledge",
+            "Add search and recommendation services to make the design look complete",
+            "Say “the rest can be optimized later” and end there"
+          ],
+          "answer": 0,
+          "explanation": "The wrap-up should prove the design works, make the trade-offs explicit, put boundaries on failures, and name a conditional next step. Adding components now can't be explained in time, “optimize later” carries no information, and a pile of names doesn't show why the design holds.",
+          "ref": "Q03-04"
+        },
+        {
+          "id": "c03-04-08",
+          "type": "fill",
+          "prompt": "Complete the sample sentence that summarizes a trade-off",
+          "text": "Precomputing the feed buys [[low read latency]] at the cost of extra [[fan-out writes]] and a brief propagation delay.",
+          "distractors": [
+            "strong consistency",
+            "storage savings",
+            "zero latency"
+          ],
+          "explanation": "State trade-offs in pairs: what you gain and what you pay. Fan-out on write moves the computation to publish time, and reading just takes a ready-made list, so reads are fast. The cost is many inbox writes per post, and followers may see it a little later.",
+          "ref": "Q03-04"
+        },
+        {
+          "id": "c03-04-09",
+          "type": "single",
+          "prompt": "If the question changes to a payment system, can you reuse the feed's 90-second answer as is?",
+          "options": [
+            "Yes, copy it verbatim, including seconds-level propagation",
+            "Add an idempotency key and keep the rest of the feed design",
+            "No structure carries over; payments must be explained from zero",
+            "The storyline carries over; swap in payment's correctness needs"
+          ],
+          "answer": 3,
+          "explanation": "The storyline “requirements, path, bottleneck, trade-off, evolution” is universal, but every step must answer this question's constraints. Payments can't copy the feed's seconds-level propagation and fan-out, and an idempotency key alone isn't enough: success conditions and ordering must follow payment's correctness needs.",
+          "ref": "Q03-05"
+        }
+      ]
+    }
+  ]
+}

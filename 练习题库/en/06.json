@@ -1,0 +1,590 @@
+{
+  "chapter": 6,
+  "title": "Key-Value Store",
+  "fullTitle": "Chapter 6: Design a Key-Value Store",
+  "intro": [
+    "A CRUD API you already know still exists on many machines, but it brings four new questions: **which machine holds a key, how many copies to keep, how many copies to wait for before reporting success, and how to catch up after a machine breaks**. This chapter answers them in that order.",
+    "Keep this in mind first: partitioning adds capacity, replication survives failures, and the coordination rules decide consistency and latency. Two common mistakes are assuming that “three replicas means you always read the latest value,” and designing only normal reads and writes without designing failure recovery."
+  ],
+  "keyPoints": [
+    "In a network partition you can’t have both linearizability and availability; P is a given, so decide per operation: reject, or allow stale reads.",
+    "Partitioning splits data for capacity; replication copies it to survive failures, and replicas must span machines and failure domains.",
+    "`W+R>N` only guarantees that read and write sets overlap; linearizability also needs version comparison, write-back on reads, and handling of failed writes.",
+    "A vector clock only tells ordered from concurrent; siblings are merged by business rules or the user, never by picking the larger sum.",
+    "Handle failures in layers: gossip only suspects a failure, sloppy quorum with hinted handoff covers temporary ones, and Merkle trees do anti-entropy.",
+    "Writes go through the commit log, memtable, and SSTable; reads use a Bloom filter to skip files, and “possibly present” still needs an exact lookup."
+  ],
+  "refs": {
+    "Characteristics of the Design": "设计特征（Characteristics of the Design）",
+    "Limitation": "限制（Limitation）",
+    "CAP Theorem": "CAP 定理（CAP Theorem）",
+    "System Types": "系统类型（System Types）",
+    "Data Replication": "2. 数据复制（Data Replication）",
+    "Handling Data Center Outages": "6. 数据中心故障（Handling Data Center Outages）",
+    "Quorum Consensus": "Quorum 读写法定人数",
+    "Consistency Models": "一致性模型（Models）",
+    "Vector Clock": "向量时钟（Vector Clock）",
+    "Gossip Protocol": "Gossip 协议",
+    "Failure Detection": "a. 故障检测（Failure Detection）",
+    "Sloppy Quorum": "Sloppy Quorum（宽松法定人数）",
+    "Hinted Handoff": "Hinted Handoff（提示移交）",
+    "Working": "工作原理（Working）",
+    "Advantages": "优点（Advantages）",
+    "Write Path": "1. 写路径：参考 Cassandra 架构（Write Path）",
+    "Read Path": "2. 读路径（Read Path）",
+    "Final Architecture": "最终架构（Final Architecture）"
+  },
+  "lessons": [
+    {
+      "id": "c06-01",
+      "title": "CAP and Trade-offs",
+      "summary": "API semantics, single-node limits, partition choices",
+      "exercises": [
+        {
+          "id": "c06-01-01",
+          "type": "multi",
+          "prompt": "Before designing a distributed key-value store, which interface semantics should you clarify with the interviewer?",
+          "options": [
+            "Which join algorithm multi-table queries use",
+            "Whether deletes and expiration are needed",
+            "How foreign key constraints cascade deletes",
+            "Whether putting the same key again overwrites or keeps versions",
+            "Whether conditional updates are needed"
+          ],
+          "answers": [
+            1,
+            3,
+            4
+          ],
+          "explanation": "It works like a huge Map spread across machines: overwrite versus multiple versions, deletes and expiration, and conditional updates all shape the rest of the design. It does not provide SQL joins, foreign keys, or multi-row transactions, so those are not part of this interface.",
+          "ref": "Characteristics of the Design"
+        },
+        {
+          "id": "c06-01-02",
+          "type": "single",
+          "prompt": "An in-memory hash table on one machine already compresses its data and moves cold data to disk. Why still go distributed?",
+          "options": [
+            "One server’s capacity has a ceiling, so optimizations only delay the problem",
+            "Once cold data is on disk, it can no longer be read by key",
+            "With more data, hash table lookups degrade into scanning one by one",
+            "A hash table has fixed slots and can’t insert new keys once full"
+          ],
+          "answer": 0,
+          "explanation": "Compression and spilling cold data to disk buy time, but one machine’s capacity is capped, so larger data sets must be spread across servers. A hash table can resize and lookups stay close to constant time, and data on disk can still be read by key; the bottleneck is single-machine capacity.",
+          "ref": "Limitation"
+        },
+        {
+          "id": "c06-01-03",
+          "type": "single",
+          "prompt": "During a network partition, a healthy node returns 503 for every request. By the CAP definition of availability, does it count as available?",
+          "options": [
+            "Yes: the node is up and responds, so it is available",
+            "No: availability requires all nodes to hold consistent data",
+            "Yes: the client can keep retrying and will eventually succeed",
+            "No: a non-failed node must eventually return a non-error response"
+          ],
+          "answer": 3,
+          "explanation": "In CAP, A requires that a request to a non-failed node eventually gets a non-error response. Returning 503 gives up availability to protect consistency. Treating “it responds” as available, or mixing consistency into the definition of availability, are common misreadings.",
+          "ref": "CAP Theorem"
+        },
+        {
+          "id": "c06-01-04",
+          "type": "judge",
+          "prompt": "A distributed system deployed across a network can choose CA and still guarantee both consistency and availability when a network partition happens.",
+          "answer": false,
+          "explanation": "P is the environment, not a feature switch: the network can break. Real network failures are unavoidable, and once a partition happens you can only trade between C and A; a CA assumption guarantees nothing about behavior during a partition.",
+          "ref": "System Types"
+        },
+        {
+          "id": "c06-01-05",
+          "type": "judge",
+          "prompt": "A more accurate reading of “pick two of three” is: when a network partition happens, you can’t guarantee both linearizability and CAP-style availability.",
+          "answer": true,
+          "explanation": "CAP is about the trade-off during a partition: either reject some requests to stay consistent, or keep responding and risk inconsistency. Without a partition, a system can be both consistent and available, so don’t recite “pick two of three” mechanically.",
+          "ref": "CAP Theorem"
+        },
+        {
+          "id": "c06-01-06",
+          "type": "single",
+          "prompt": "Three replicas n1, n2, n3, and n3 is cut off from n1/n2. The system coordinates by majority and favors consistency for this operation. What most likely happens during the partition?",
+          "options": [
+            "n3 keeps accepting writes and overwrites n1/n2 after recovery",
+            "All three nodes stop reads and writes until the network recovers",
+            "The n1/n2 majority keeps serving reads and writes, and n3 refuses service",
+            "Reads are allowed only on n3, and all writes are blocked"
+          ],
+          "answer": 2,
+          "explanation": "CP doesn’t have to stop everything: n1/n2 are still a majority and can keep reading and writing safely, while the minority n3 can’t confirm the latest state and must refuse. Which side gets blocked depends on the protocol; the textbook example of blocking writes on n1/n2 is only a simplification.",
+          "ref": "System Types"
+        },
+        {
+          "id": "c06-01-07",
+          "type": "single",
+          "prompt": "Three replicas n1, n2, n3, and n3 is cut off from n1/n2. If this operation favors availability, what happens during the partition?",
+          "options": [
+            "All writes queue up and run after the network recovers",
+            "All requests to n3 are rejected to avoid returning stale values",
+            "Both sides keep reading and writing, may return stale values, and merge afterward",
+            "The system automatically picks the one correct value, so no conflicts occur"
+          ],
+          "answer": 2,
+          "explanation": "AP keeps serving during a partition: n3 may return stale values, and the new writes on both sides are synced after the network recovers, with conflicts resolved by versions and merge rules. Rejecting requests is what CP does; queueing without responding doesn’t meet availability either.",
+          "ref": "System Types"
+        },
+        {
+          "id": "c06-01-08",
+          "type": "fill",
+          "prompt": "Complete the exact meanings of C and A in CAP",
+          "text": "C usually means operations appear to take effect instantaneously in [[real-time order]]; A requires that requests to [[non-failed nodes]] eventually get a non-error response.",
+          "distractors": [
+            "commit order",
+            "all nodes",
+            "majority nodes"
+          ],
+          "explanation": "Linearizability requires operations to appear to take effect instantaneously, in real-time order; availability concerns non-failed nodes, and a crashed node is outside the requirement. Reading A as “every node must respond” is a common misreading.",
+          "ref": "CAP Theorem"
+        },
+        {
+          "id": "c06-01-09",
+          "type": "judge",
+          "prompt": "One system can choose its trade-off per operation: a balance deduction demands stricter consistency, while display data tolerates briefly stale reads.",
+          "answer": true,
+          "explanation": "You can’t call a whole system CP just because the business is “banking.” In an interview, state for each operation what is allowed during a partition: a debit should be rejected rather than overdrawn, while display data that is briefly stale is usually acceptable.",
+          "ref": "System Types"
+        }
+      ]
+    },
+    {
+      "id": "c06-02",
+      "title": "Replicas & Quorums",
+      "summary": "Partitioning, replica placement, and N/W/R trade-offs",
+      "exercises": [
+        {
+          "id": "c06-02-01",
+          "type": "single",
+          "prompt": "3 TB of logical data, and one machine can safely store only 1 TB. You store 3 copies of the full 3 TB on 3 machines. What happens?",
+          "options": [
+            "It fits: replication automatically splits the data into three pieces",
+            "It doesn’t fit: each machine still has to hold the full 3 TB",
+            "It fits, but writes must sync three copies, so latency is high",
+            "It fits: 3 machines together have 3 TB of space"
+          ],
+          "answer": 1,
+          "explanation": "Replication stores the same data several times, so each machine still holds the full 3 TB. To make it fit, you must partition first; replication solves “the data survives a machine failure.” Fitting the data and surviving failures are two separate problems.",
+          "ref": "Q06-01"
+        },
+        {
+          "id": "c06-02-02",
+          "type": "single",
+          "prompt": "3 TB of logical data is split into 3 partitions, each stored as 3 replicas. Ignoring indexes and headroom, roughly how much physical space does it use?",
+          "options": [
+            "About 3 TB",
+            "About 27 TB",
+            "About 1 TB",
+            "About 9 TB"
+          ],
+          "answer": 3,
+          "explanation": "Each partition is 1 TB, and 3 replicas make 3 TB; the three partitions total about 9 TB. 27 TB multiplies the full data’s 3 copies by 3 again; 3 TB is just the logical size, without replicas.",
+          "ref": "Q06-01"
+        },
+        {
+          "id": "c06-02-03",
+          "type": "single",
+          "prompt": "With virtual nodes, you take the first N positions clockwise on the ring as replicas. What else should you watch for?",
+          "options": [
+            "Skip virtual nodes on the same machine and spread across data centers",
+            "Put replicas in the same rack to lower write latency",
+            "The N positions must be adjacent so replicas can sync quickly",
+            "The more virtual nodes, the larger N has to be"
+          ],
+          "answer": 0,
+          "explanation": "Adjacent virtual nodes may belong to the same physical machine, so one failure could take several replicas with it; pick distinct physical servers and, where possible, different data centers. A shared rack saves latency but loses all replicas together when the rack loses power.",
+          "ref": "Data Replication"
+        },
+        {
+          "id": "c06-02-04",
+          "type": "judge",
+          "prompt": "Three replicas on three different machines in the same data center can also survive a power outage of the whole data center.",
+          "answer": false,
+          "explanation": "Spreading replicas across machines only survives single-machine failures; a data center power outage makes all three unavailable. To withstand a data center failure, replicate across multiple data centers and plan for traffic switching, DNS, and spare capacity.",
+          "ref": "Handling Data Center Outages"
+        },
+        {
+          "id": "c06-02-05",
+          "type": "match",
+          "prompt": "Match each quorum configuration with its characteristic",
+          "pairs": [
+            [
+              "R=1, W=N",
+              "Favors fast reads"
+            ],
+            [
+              "W=1, R=N",
+              "Favors fast writes"
+            ],
+            [
+              "N=3, W=R=2",
+              "Both wait for a majority; a common compromise"
+            ],
+            [
+              "W+R≤N",
+              "A read may miss the latest acknowledged write"
+            ]
+          ],
+          "explanation": "The more replicas a side waits for, the slower that side is: with R=1 reads are fast but writes wait for all N copies, and W=1 is the reverse. N=3, W=R=2 makes both wait for a majority, a common compromise. When W+R≤N, the read and write sets may not overlap.",
+          "ref": "Quorum Consensus"
+        },
+        {
+          "id": "c06-02-06",
+          "type": "single",
+          "prompt": "N=3, W=2, R=2. For any write-acknowledgement set and any read set, how many replicas do they share at minimum?",
+          "options": [
+            "0 replicas",
+            "3 replicas",
+            "1 replica",
+            "2 replicas"
+          ],
+          "answer": 2,
+          "explanation": "The two sets have 2+2=4 slots but there are only 3 replicas, so they overlap in at least `2+2−3=1`. The reader therefore touches at least one node that holds the completed write, but it must still identify which version is newer.",
+          "ref": "Q06-02"
+        },
+        {
+          "id": "c06-02-07",
+          "type": "judge",
+          "prompt": "As long as `W+R>N` holds, every read is guaranteed to return the latest, linearizable result.",
+          "answer": false,
+          "explanation": "The inequality only guarantees that the read and write sets overlap. Linearizability also needs correct version comparison, ordering of concurrent writes, handling of failed writes, read repair, and membership changes; without them you can still read a new value and then read the old one back.",
+          "ref": "Q06-02"
+        },
+        {
+          "id": "c06-02-08",
+          "type": "single",
+          "prompt": "Initially A/B/C all hold x=0. The write x=1 reaches only A and has not gathered W=2. Read 1 queries A and B, returns 1, and does not write it back; then read 2 queries B and C and returns 0. What does this show?",
+          "options": [
+            "A network partition caused this, and it won’t happen after the partition heals",
+            "Replica A is corrupted and should be restored from B and C",
+            "R was set wrong; with R=1 you would read the new value",
+            "Overlap isn’t enough; linearizability also needs steps like write-back on reads"
+          ],
+          "answer": 3,
+          "explanation": "Both reads satisfy R=2, yet after seeing 1 the system goes back to 0, which violates linearizability. Some protocols have a read write the chosen version back to a majority before returning, closing this regression. R=1 would only make it worse, and there was no partition or corruption in the process.",
+          "ref": "Q06-02"
+        },
+        {
+          "id": "c06-02-09",
+          "type": "multi",
+          "prompt": "Which of these data can usually accept eventual consistency?",
+          "options": [
+            "Like counts shown on a post",
+            "View counts shown on a product page",
+            "Account balance deduction that prevents overdrafts",
+            "Order status that must be visible right after placing the order"
+          ],
+          "answers": [
+            0,
+            1
+          ],
+          "explanation": "Like and view counts being briefly off doesn’t affect correctness, so eventual consistency is fine and buys lower latency. Order status must be readable right after the write, and a balance deduction can’t overdraw, so both need stronger read/write semantics.",
+          "ref": "Consistency Models"
+        },
+        {
+          "id": "c06-02-10",
+          "type": "fill",
+          "prompt": "Complete the cost of raising R and W",
+          "text": "Raising R and W means waiting for [[more replicas]]: consistency is stronger, but [[latency]] is higher, and requests fail more easily when nodes are down.",
+          "distractors": [
+            "fewer replicas",
+            "storage capacity",
+            "throughput"
+          ],
+          "explanation": "Choosing W, R, and N is a trade-off between latency and consistency: waiting for more is safer but slower, and when some replicas fail you can’t gather enough responses, so requests fail.",
+          "ref": "Consistency Models"
+        }
+      ]
+    },
+    {
+      "id": "c06-03",
+      "title": "Conflict & Failure",
+      "summary": "Vector clocks, failure detection, temporary failures",
+      "exercises": [
+        {
+          "id": "c06-03-01",
+          "type": "match",
+          "prompt": "Vectors are written as (A’s count, B’s count). Decide the relationship between each pair of versions",
+          "pairs": [
+            [
+              "(1,1) vs (2,1)",
+              "The first is an ancestor of the second"
+            ],
+            [
+              "(3,2) vs (2,2)",
+              "The second is an ancestor of the first"
+            ],
+            [
+              "(2,1) vs (1,2)",
+              "Concurrent conflict (siblings)"
+            ],
+            [
+              "(2,2) vs (2,2)",
+              "The same version"
+            ]
+          ],
+          "explanation": "A version is an ancestor only when every entry is ≤ the other’s and at least one is <; all equal means the same version; one larger and one smaller means concurrent. (2,1) and (1,2) have equal sums, but each has an update the other lacks, so the sum can’t decide the winner.",
+          "ref": "Vector Clock"
+        },
+        {
+          "id": "c06-03-02",
+          "type": "single",
+          "prompt": "A name was originally “Zhang Min” with vector (A:1,B:1). While disconnected, A changes it to “Zhang Ming” (2,1) and B concurrently changes it to “Li Min” (1,2). What can the vector clock do?",
+          "options": [
+            "Pick the version with the larger vector sum as the correct name",
+            "Take one character from each and merge them into “Li Ming”",
+            "Detect the concurrent conflict and hand it to business rules or the user",
+            "Compare the strings and pick the newer one"
+          ],
+          "answer": 2,
+          "explanation": "A vector clock only judges causality: (2,1) and (1,2) don’t dominate each other, so they are siblings. Which name is correct is a business question for the user or an explicit rule; summing, comparing strings, or splicing characters are not valid merges.",
+          "ref": "Q06-03"
+        },
+        {
+          "id": "c06-03-03",
+          "type": "single",
+          "prompt": "Vectors are written as (A’s count, B’s count). A and B concurrently write two conflicting versions, (2,1) and (1,2). The user picks the value of (2,1), and A performs the merge write. What is the new version’s vector?",
+          "options": [
+            "(4,3)",
+            "(2,2)",
+            "(3,3)",
+            "(3,2)"
+          ],
+          "answer": 3,
+          "explanation": "First take the entry-wise maximum of the two branches to get (2,2), showing that both sides’ updates were seen; then A, the node doing the write, increments its own count to get (3,2). (2,2) misses the “whoever writes increments” step.",
+          "ref": "Q06-03"
+        },
+        {
+          "id": "c06-03-04",
+          "type": "judge",
+          "prompt": "Pruning entries to cap a vector clock’s length can lose causal information.",
+          "answer": true,
+          "explanation": "Vectors grow as more participants appear, so a pruning policy is needed to limit their size. After entries are dropped, orderings that could once be determined may become ambiguous; that is the price of bounding the size.",
+          "ref": "Vector Clock"
+        },
+        {
+          "id": "c06-03-05",
+          "type": "single",
+          "prompt": "In gossip-based failure detection, what makes a node conclude that a member is offline?",
+          "options": [
+            "Its heartbeat messages weren’t sent to all nodes",
+            "Its heartbeat counter has stopped increasing for a preset period",
+            "Its heartbeat counter is much smaller than the other members’",
+            "A single node reported losing contact with it more than once"
+          ],
+          "answer": 1,
+          "explanation": "Each node periodically increments its own heartbeat counter and sends it to a random set of nodes; only when a member’s counter stays flat for a long time is it considered offline. Counter values aren’t comparable across nodes, and a single report isn’t enough to conclude.",
+          "ref": "Gossip Protocol"
+        },
+        {
+          "id": "c06-03-06",
+          "type": "multi",
+          "prompt": "Which practices help avoid mistaking a slow node for a failed one?",
+          "options": [
+            "Treat a timeout as a suspicion first, and confirm with retries",
+            "Add measures to stop nodes from flapping online and offline",
+            "Confirm with at least two independent sources before marking a failure",
+            "Treat timeouts caused by GC pauses as a crash outright",
+            "Remove a node immediately when one node reports losing contact"
+          ],
+          "answers": [
+            0,
+            1,
+            2
+          ],
+          "explanation": "Slow machines, network congestion, and GC pauses can all drop heartbeats, so a timeout is a suspicion, not proof. Multi-source confirmation, retries, and damping flapping reduce false positives; removing a node on a single report turns brief stalls into frequent membership changes.",
+          "ref": "Failure Detection"
+        },
+        {
+          "id": "c06-03-07",
+          "type": "single",
+          "prompt": "N=3, and the 2nd node on a key’s preference list is down. Under the Dynamo paper’s sloppy quorum, how is a write handled?",
+          "options": [
+            "Send it to the first 3 healthy nodes on the preference list and collect W acks",
+            "Send it to every healthy node on the ring and succeed only after all ack",
+            "Write only to the 2 remaining original replicas, and fail if 3 can’t be reached",
+            "Wait for the down node to recover so only the original replicas are written"
+          ],
+          "answer": 0,
+          "explanation": "Dynamo skips the down node and sends the request to the first N healthy nodes on the preference list; the write returns once W acks arrive, and the coordinator’s local write counts as one. Saying the write goes to the first W healthy nodes is a simplification.",
+          "ref": "Sloppy Quorum"
+        },
+        {
+          "id": "c06-03-08",
+          "type": "judge",
+          "prompt": "With sloppy quorum enabled, as long as `W+R>N` still holds, the read and write sets always overlap.",
+          "answer": false,
+          "explanation": "A stand-in node may not be one of the original N replicas: if the write lands on a stand-in and the read goes to the original replicas, the two sets can miss each other. The overlap proof relies on a fixed set of N replicas, and no longer applies directly once that is relaxed.",
+          "ref": "Sloppy Quorum"
+        },
+        {
+          "id": "c06-03-09",
+          "type": "single",
+          "prompt": "While node C is down, stand-in node D accepted writes that belong to C. What happens when C recovers?",
+          "options": [
+            "D pushes the changes back to C based on its saved hints",
+            "D permanently replaces C as the key’s replica",
+            "D’s data is discarded, and clients retry the write to C",
+            "C copies all of D’s data in full"
+          ],
+          "answer": 0,
+          "explanation": "Hinted handoff has the stand-in record “who this data belongs to” and hand the changes back when the original node recovers, restoring consistency gradually. It relies on hints being stored reliably and returned promptly, and is no substitute for full replica repair.",
+          "ref": "Hinted Handoff"
+        },
+        {
+          "id": "c06-03-10",
+          "type": "single",
+          "prompt": "Two replicas use a Merkle tree for anti-entropy repair and find different root hashes. What should happen next?",
+          "options": [
+            "Declare a hash collision and recompute the root hash",
+            "Overwrite the whole tree with the side that has the newer version",
+            "Compare child nodes level by level and sync only the differing buckets",
+            "Give up comparing and copy the entire replica"
+          ],
+          "answer": 2,
+          "explanation": "Different roots mean a difference exists somewhere: compare downward level by level, skip subtrees with equal hashes, and finally transfer only the differing buckets. A full copy is exactly what a Merkle tree avoids; it only locates differences and doesn’t decide which version is correct.",
+          "ref": "Working"
+        }
+      ]
+    },
+    {
+      "id": "c06-04",
+      "title": "Repair & I/O Paths",
+      "summary": "Merkle repair, the write path, and Bloom filter reads",
+      "exercises": [
+        {
+          "id": "c06-04-01",
+          "type": "single",
+          "prompt": "An implementation builds its Merkle tree by hashing only keys. The same key has different values on two replicas. What does the comparison show?",
+          "options": [
+            "It is detected, as long as both sides use the same bucket boundaries",
+            "The root hashes differ, but the specific bucket can’t be located",
+            "The difference is found at the matching leaf and synced",
+            "It isn’t detected: the value never enters the fingerprint"
+          ],
+          "answer": 3,
+          "explanation": "If only keys are hashed and both sides have the same key set, the fingerprints are identical. Real systems hash a canonical encoding of key, value, version, and so on together, and every replica must use the same bucket boundaries.",
+          "ref": "Advantages"
+        },
+        {
+          "id": "c06-04-02",
+          "type": "multi",
+          "prompt": "Which statements about using Merkle trees for replica repair are correct?",
+          "options": [
+            "It can tell which of two versions is correct",
+            "Equal root hashes are a judgment based on a very low collision probability",
+            "All replicas must use the same bucket boundaries",
+            "When root hashes differ, a full sync is required",
+            "It can also serve routine anti-entropy, not just permanent failures"
+          ],
+          "answers": [
+            1,
+            2,
+            4
+          ],
+          "explanation": "Without matching buckets you can’t compare bucket by bucket; equal hashes mean only a very low collision probability, not mathematically no difference; and the tree suits continuous anti-entropy. Deciding which version is correct takes versions and conflict rules, and when the roots differ you sync only the differing buckets.",
+          "ref": "Advantages"
+        },
+        {
+          "id": "c06-04-03",
+          "type": "order",
+          "prompt": "Put the steps of handling one write on a single storage node in order",
+          "items": [
+            "Append the write to the commit log",
+            "Write it to the in-memory memtable",
+            "The memtable reaches its threshold",
+            "Flush it to an immutable SSTable on disk",
+            "Background compaction merges old versions"
+          ],
+          "explanation": "Log first, so the write can be recovered after a crash; then memory, for speed; when memory fills, flush to a sorted, immutable SSTable; compaction later merges and cleans up old versions.",
+          "ref": "Write Path"
+        },
+        {
+          "id": "c06-04-04",
+          "type": "single",
+          "prompt": "In the write path, what are the commit log and the memtable each responsible for?",
+          "options": [
+            "The log stores indexes, and the memtable stores Bloom filters",
+            "Both handle persistence and back each other up",
+            "The log speeds up reads, and the memtable handles persistence",
+            "The log is for crash recovery, and the memtable is for fast writes"
+          ],
+          "answer": 3,
+          "explanation": "After a crash the log can be replayed to recover writes that were only in memory; the memtable lets a write land in memory and finish quickly. Persistence comes from the log and the SSTables flushed later, not from the memtable.",
+          "ref": "Write Path"
+        },
+        {
+          "id": "c06-04-05",
+          "type": "judge",
+          "prompt": "Appending to the commit log first guarantees that an acknowledged write is never lost on power failure.",
+          "answer": false,
+          "explanation": "Whether the log has really been flushed to disk before the write is acknowledged depends on the durability settings; if it is still in a buffer when the power goes out, the write is lost. You can’t conclude anything just from “it uses a log.”",
+          "ref": "Write Path"
+        },
+        {
+          "id": "c06-04-06",
+          "type": "single",
+          "prompt": "An 8-bit Bloom filter: inserting alpha sets bits 1 and 4, and inserting beta sets bits 4 and 6. gamma, never inserted, maps to bits 1 and 6. What does the query return?",
+          "options": [
+            "Definitely absent, so this SSTable can be skipped",
+            "Possibly present, and you must check the SSTable to learn it isn’t there",
+            "Bits 1 and 6 belong to different keys, so it counts as absent",
+            "Definitely present, so the value can be returned directly"
+          ],
+          "answer": 1,
+          "explanation": "Bits 1 and 6 were already set to 1 by other keys, so gamma happens to hit every checked bit, a false positive: the only answer is “possibly present,” and only reading the SSTable reveals that gamma is missing. The filter records bits, not who set them; only seeing a 0 proves absence.",
+          "ref": "Q06-04"
+        },
+        {
+          "id": "c06-04-07",
+          "type": "fill",
+          "prompt": "Complete how a Bloom filter answers",
+          "text": "A Bloom filter answers only “definitely absent” or “[[possibly present]]”; it can give [[false positives]], but when maintained correctly it never misses a key that was inserted.",
+          "distractors": [
+            "definitely present",
+            "false negatives",
+            "exact location"
+          ],
+          "explanation": "Several keys share bits, so a key that was never inserted may hit all of its bits by chance, a false positive; every bit of an inserted key is always 1, so it is never missed. The filter only helps rule out files and doesn’t locate the exact record.",
+          "ref": "Read Path"
+        },
+        {
+          "id": "c06-04-08",
+          "type": "judge",
+          "prompt": "When deleting a key, you can clear its bits in an ordinary Bloom filter.",
+          "answer": false,
+          "explanation": "Those bits may also have been set to 1 by other keys; clearing them makes those keys look “definitely absent,” causing false negatives. For an immutable SSTable, build a matching filter when the table is created.",
+          "ref": "Q06-04"
+        },
+        {
+          "id": "c06-04-09",
+          "type": "judge",
+          "prompt": "In an LSM structure, one key can appear in several SSTables, so a read must apply version and tombstone rules instead of returning at the first file it hits.",
+          "answer": true,
+          "explanation": "Updates and deletes both write new records, so old versions and tombstones are scattered across SSTables until compaction cleans them up. A read has to merge versions and recognize deletions to return the right result.",
+          "ref": "Read Path"
+        },
+        {
+          "id": "c06-04-10",
+          "type": "single",
+          "prompt": "In the final architecture, data nodes have equal responsibilities and are decentralized. Can you conclude that the whole deployment has no single point of failure?",
+          "options": [
+            "Yes: nodes are peers, so there is no single point at all",
+            "Yes: any data with N≥3 replicas has no single point",
+            "No: the coordinator sits on one machine, so it is always a single point",
+            "No: config services, bootstrap addresses, and the like may still be shared dependencies"
+          ],
+          "answer": 3,
+          "explanation": "Peer design only avoids a fixed single point among data nodes; bootstrap addresses, the config service, the network, or credential services may still be shared by all nodes, so check the real dependency graph. Calling the coordinator “always” a single point is also wrong: the design stresses equal roles.",
+          "ref": "Final Architecture"
+        }
+      ]
+    }
+  ]
+}

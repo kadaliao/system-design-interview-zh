@@ -8,6 +8,27 @@ const order=[];
 const live=new Set();
 const ABORT={abort:true};
 const STORE='sd-labs:v1';
+/* ---------- 界面语言：页面在加载本脚本前设 window.LAB_LANG='en' 即切换英文；缺省为中文（行为不变）。
+   固定界面文字都经 i18n()：英文字典以中文原文为键，找不到时原样返回。 ---------- */
+const LANG=(window.LAB_LANG||(window.SDQ_CONFIG&&window.SDQ_CONFIG.lang))==='en'?'en':'zh';
+const LOCALE=LANG==='en'?'en-US':'zh-CN';
+const EN={
+  '推进一步（至多 1 秒实验时间）':'Advance one step (up to 1 s of lab time)','下一步':'Next step','速度':'Speed','看观察 ↑':'See takeaway ↑',
+  '播放控制':'Playback controls','暂停':'Pause','播放':'Play','连续播放':'Play continuously',
+  '场景播放中':'Scenario playing','场景结束 · 已暂停':'Scenario finished · paused','播放中':'Playing','已暂停':'Paused',
+  '已开始 · 点「下一步」推进':'Started · press “Next step” to advance',
+  '重置':'Reset','恢复初始参数与状态':'Restore the initial parameters and state','动手实验':'Hands-on lab','交互实验：':'Interactive lab: ',
+  '教学模型：':'Teaching model: ','事件日志':'Event log','实验加载失败：':'Lab failed to load: ',
+  '预设场景':'Preset scenarios','预设场景：先预测，再逐步运行':'Preset scenarios: predict first, then step through',
+  '预设场景：先预测，再运行':'Preset scenarios: predict first, then run','展开这个场景；再点一次收起':'Open this scenario; click again to close',
+  '参数由预设场景设定':'Parameters are set by the scenario','收起场景，手动调整':'Close scenario and adjust manually',
+  '观察：':'Takeaway: ','开始后停住，由底部「下一步」逐步推进':'Starts paused; use “Next step” below to advance',
+  '逐步开始':'Step through','自动播放':'Autoplay','运行场景':'Run scenario','收起场景，回到手动调整':'Close scenario and return to manual controls',
+  '收起':'Close','先猜：':'Predict first: ','从头逐步':'Restart stepping','从头自动播放':'Restart autoplay','运行中…':'Running…',
+  '再运行一次':'Run again','场景完成：':'Scenario complete: ','运行出错，请重置后再试':'Something went wrong. Reset and try again.',
+  '毫秒':'ms','秒':'s','分钟':'min','小时':'h','天':'d','年':'yr',
+};
+const i18n=s=>LANG==='en'&&EN[s]!==undefined?EN[s]:s;
 const colors={ink:'#23352f',muted:'#66756d',line:'#dbe2da',soft:'#f0f4ed',soft2:'#e6eee2',card:'#fff',paper:'#fcfaf5',accent:'#176b52',accentSoft:'#d4e8d7',ok:'#2f8f5b',okSoft:'#dcefe2',bad:'#c2413b',badSoft:'#f7dedb',warn:'#b7791f',warnSoft:'#f6ead2',info:'#2f6fb3',infoSoft:'#dde9f6',series:['#2f6fb3','#c98a16','#2f8f5b','#b8477a','#1f8a8a','#7b5cb8']};
 
 /* ---------- 本地进度：自测自评与答案草稿（浏览器存储不可用时静默降级） ---------- */
@@ -56,10 +77,10 @@ const util={
   rng(seed=1){let a=seed>>>0;const r=()=>{a=a+0x6D2B79F5>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296};r.int=(lo,hi)=>lo+Math.floor(r()*(hi-lo+1));r.pick=arr=>arr[Math.floor(r()*arr.length)];r.normal=()=>{let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};return r},
   /** FNV-1a 32 位哈希，返回无符号整数。 */
   hash(str){let x=0x811c9dc5;for(let i=0;i<str.length;i++){x^=str.charCodeAt(i);x=Math.imul(x,0x01000193)}return x>>>0},
-  fmt(n,d=0){if(!Number.isFinite(n))return String(n);return n.toLocaleString('zh-CN',{maximumFractionDigits:d,minimumFractionDigits:0})},
+  fmt(n,d=0){if(!Number.isFinite(n))return String(n);return n.toLocaleString(LOCALE,{maximumFractionDigits:d,minimumFractionDigits:0})},
   pct(x,d=1){return Number.isFinite(x)?(x*100).toFixed(d).replace(/\.0+$/,'')+'%':'—'},
-  bytes(b,d=1){if(!Number.isFinite(b))return '—';const u=['B','KB','MB','GB','TB','PB','EB'];let i=0;while(Math.abs(b)>=1000&&i<u.length-1){b/=1000;i++}return (Math.round(b*10**d)/10**d).toLocaleString('zh-CN')+' '+u[i]},
-  duration(sec){if(!Number.isFinite(sec))return '—';const a=Math.abs(sec);if(a<1)return (sec*1000).toFixed(a<0.01?2:0)+' 毫秒';if(a<120)return (+sec.toFixed(1))+' 秒';if(a<7200)return (+(sec/60).toFixed(1))+' 分钟';if(a<172800)return (+(sec/3600).toFixed(1))+' 小时';if(a<86400*730)return (+(sec/86400).toFixed(1))+' 天';return (+(sec/86400/365).toFixed(1))+' 年'},
+  bytes(b,d=1){if(!Number.isFinite(b))return '—';const u=['B','KB','MB','GB','TB','PB','EB'];let i=0;while(Math.abs(b)>=1000&&i<u.length-1){b/=1000;i++}return (Math.round(b*10**d)/10**d).toLocaleString(LOCALE)+' '+u[i]},
+  duration(sec){if(!Number.isFinite(sec))return '—';const a=Math.abs(sec);if(a<1)return (sec*1000).toFixed(a<0.01?2:0)+' '+i18n('毫秒');if(a<120)return (+sec.toFixed(1))+' '+i18n('秒');if(a<7200)return (+(sec/60).toFixed(1))+' '+i18n('分钟');if(a<172800)return (+(sec/3600).toFixed(1))+' '+i18n('小时');if(a<86400*730)return (+(sec/86400).toFixed(1))+' '+i18n('天');return (+(sec/86400/365).toFixed(1))+' '+i18n('年')},
   range:(n)=>Array.from({length:n},(_,i)=>i),
   sleep:(ms)=>new Promise(r=>setTimeout(r,ms)),
 };
@@ -118,12 +139,12 @@ class Instance{
   buildTransport(){
     const inst=this;
     const toggle=h('button',{type:'button','data-act':'toggle',onclick:()=>inst.setMode(inst.mode==='play'?'pause':'play')});
-    const step=h('button',{type:'button','data-act':'step',title:'推进一步（至多 1 秒实验时间）',onclick:()=>inst.stepOnce()});step.innerHTML=ICON.step+'<span>下一步</span>';
+    const step=h('button',{type:'button','data-act':'step',title:i18n('推进一步（至多 1 秒实验时间）'),onclick:()=>inst.stepOnce()});step.innerHTML=ICON.step+'<span>'+i18n('下一步')+'</span>';
     const spd=new Map(SPEEDS.map(v=>[v,h('button',{type:'button',onclick:()=>setSpeedPref(v)},v+'×')]));
     const status=h('span',{class:'tst','aria-live':'polite'});
     // 场景结束时「观察」出现在场景卡里；手机上场景卡往往已滚出屏幕，给一个回去看的入口
-    const insight=h('button',{type:'button','data-act':'insight',hidden:true,onclick:()=>inst.scen?.insightEl?.scrollIntoView({behavior:'smooth',block:'center'})},'看观察 ↑');
-    const el=h('div',{class:'sdl-transport',role:'group','aria-label':'播放控制'},toggle,step,h('span',{class:'spd'},h('span',{class:'lbl'},'速度'),[...spd.values()]),insight,status);
+    const insight=h('button',{type:'button','data-act':'insight',hidden:true,onclick:()=>inst.scen?.insightEl?.scrollIntoView({behavior:'smooth',block:'center'})},i18n('看观察 ↑'));
+    const el=h('div',{class:'sdl-transport',role:'group','aria-label':i18n('播放控制')},toggle,step,h('span',{class:'spd'},h('span',{class:'lbl'},i18n('速度')),[...spd.values()]),insight,status);
     this.transport={el,toggle,step,spd,status,insight};
     // 暂停时在实验里点按钮、拖滑块，时间不动，但重画一次界面
     this.frame.addEventListener('input',()=>{if(inst.mode==='pause'&&!inst.stepping)requestAnimationFrame(()=>inst.renderPass())});
@@ -135,12 +156,12 @@ class Instance{
     const show=this.spec.transport!==false&&(this.loops.size>0||this.waits.length>0||!!(S&&S.active));
     t.el.hidden=!show;if(!show)return;
     const playing=this.mode==='play';
-    t.toggle.innerHTML=(playing?ICON.pause:ICON.play)+'<span>'+(playing?'暂停':'播放')+'</span>';
-    t.toggle.setAttribute('aria-pressed',String(playing));t.toggle.title=playing?'暂停':'连续播放';
+    t.toggle.innerHTML=(playing?ICON.pause:ICON.play)+'<span>'+i18n(playing?'暂停':'播放')+'</span>';
+    t.toggle.setAttribute('aria-pressed',String(playing));t.toggle.title=i18n(playing?'暂停':'连续播放');
     t.step.disabled=this.stepping||!this.hasWork();
     for(const [v,b] of t.spd)b.setAttribute('aria-pressed',String(v===this.speed));
     t.insight.hidden=!(S&&S.done&&S.insightEl&&!S.insightEl.hidden);
-    t.status.textContent=S&&S.running?(playing?'场景播放中':(S.steps?`已推进 ${S.steps} 步 · 点「下一步」继续`:'已开始 · 点「下一步」推进')):S&&S.done?'场景结束 · 已暂停':(playing?'播放中':'已暂停');
+    t.status.textContent=S&&S.running?(playing?i18n('场景播放中'):(S.steps?(LANG==='en'?`${S.steps} step${S.steps>1?'s':''} done · press “Next step” to continue`:`已推进 ${S.steps} 步 · 点「下一步」继续`):i18n('已开始 · 点「下一步」推进'))):S&&S.done?i18n('场景结束 · 已暂停'):i18n(playing?'播放中':'已暂停');
   }
   abort(){this.token++;const w=this.waits;this.waits=[];for(const x of w)x.reject(ABORT)}
   destroy(){
@@ -153,9 +174,9 @@ class Instance{
     const spec=this.spec,host=this.host,inst=this;
     this.mode='play';this.stepping=false;this.scen=null;this.clock=0;this.ctrlEls=[];
     host.classList.add('sdl-mounted');host.replaceChildren();
-    const resetBtn=h('button',{type:'button',title:'恢复初始参数与状态',onclick:()=>inst.remount()},'重置');
+    const resetBtn=h('button',{type:'button',title:i18n('恢复初始参数与状态'),onclick:()=>inst.remount()},i18n('重置'));
     const head=h('header',{class:'sdl-head'},h('div',{class:'sdl-head-text'},
-      h('p',{class:'sdl-kicker'},'动手实验'+(spec.chapter?' · 第 '+spec.chapter+' 章':'')),
+      h('p',{class:'sdl-kicker'},i18n('动手实验')+(spec.chapter?(LANG==='en'?' · Chapter '+spec.chapter:' · 第 '+spec.chapter+' 章'):'')),
       h('div',{class:'sdl-title',role:'heading','aria-level':'3'},spec.title),
       spec.summary?h('p',{class:'sdl-summary'},spec.summary):null),resetBtn);
     const scen=h('div',{class:'sdl-scen',hidden:true});
@@ -164,14 +185,14 @@ class Instance{
     const body=h('div',{class:'sdl-body'},controls,stage);
     const stats=h('div',{class:'sdl-stats'});
     const sr=h('div',{class:'sdl-sr','aria-live':'polite',style:{position:'absolute',width:'1px',height:'1px',overflow:'hidden',clip:'rect(0 0 0 0)'}});
-    const frame=h('section',{class:'sdl-frame','aria-label':'交互实验：'+spec.title},head,scen,body,stats,sr);
-    if(spec.caveat)frame.append(h('footer',{class:'sdl-foot'},'教学模型：'+spec.caveat));
+    const frame=h('section',{class:'sdl-frame','aria-label':i18n('交互实验：')+spec.title},head,scen,body,stats,sr);
+    if(spec.caveat)frame.append(h('footer',{class:'sdl-foot'},i18n('教学模型：')+spec.caveat));
     host.append(frame);
     this.frame=frame;frame.__sdl=this;
     frame.append(this.buildTransport());
     if(io)io.observe(frame);
     let logBox=null;
-    const ensureLog=()=>{if(!logBox){const ol=h('ol',{reversed:true});logBox=h('details',{class:'sdl-log',open:!!spec.logOpen},h('summary',null,spec.logTitle||'事件日志'),ol);frame.insertBefore(logBox,frame.querySelector('.sdl-foot'));logBox.ol=ol}return logBox};
+    const ensureLog=()=>{if(!logBox){const ol=h('ol',{reversed:true});logBox=h('details',{class:'sdl-log',open:!!spec.logOpen},h('summary',null,spec.logTitle||i18n('事件日志')),ol);frame.insertBefore(logBox,frame.querySelector('.sdl-foot'));logBox.ol=ol}return logBox};
     // 控件 API 建出的元素都登记下来：选中预设场景时要锁住放在控件区以外的那些
     const place=(el,parent)=>{(parent||controls).append(el);inst.ctrlEls.push(el);return el};
     const ctx={
@@ -241,7 +262,7 @@ class Instance{
     this.ctx=ctx;
     live.add(this);
     try{const ret=spec.mount(ctx);if(ret&&typeof ret.destroy==='function')this.cleanups.push(ret.destroy)}
-    catch(e){console.error('[SDLab]',spec.id,e);frame.append(h('div',{class:'sdl-error'},'实验加载失败：'+(e&&e.message||e)))}
+    catch(e){console.error('[SDLab]',spec.id,e);frame.append(h('div',{class:'sdl-error'},i18n('实验加载失败：')+(e&&e.message||e)))}
     this.updateTransport();
   }
 }
@@ -250,18 +271,18 @@ function renderScenarios(inst,box,list){
   box.hidden=false;box.replaceChildren();
   const stepping=inst.spec.transport!==false;
   const controls=inst.ctx.controls;
-  const chips=h('div',{class:'sdl-chips',role:'group','aria-label':'预设场景'});
+  const chips=h('div',{class:'sdl-chips',role:'group','aria-label':i18n('预设场景')});
   const card=h('div',{class:'sdl-card',hidden:true});
-  box.append(h('p',{class:'sdl-scen-label'},stepping?'预设场景：先预测，再逐步运行':'预设场景：先预测，再运行'),chips,card);
+  box.append(h('p',{class:'sdl-scen-label'},i18n(stepping?'预设场景：先预测，再逐步运行':'预设场景：先预测，再运行')),chips,card);
   const S=inst.scen={active:null,running:false,done:false,steps:0};
   const btns=list.map(sc=>{
-    const b=h('button',{type:'button','aria-pressed':'false',title:'展开这个场景；再点一次收起',onclick:()=>S.active===sc?deselect():select(sc)},sc.label);
+    const b=h('button',{type:'button','aria-pressed':'false',title:i18n('展开这个场景；再点一次收起'),onclick:()=>S.active===sc?deselect():select(sc)},sc.label);
     chips.append(b);return b;
   });
   /* 场景自己设定策略和参数：选中场景时收起控件区、锁住放在舞台里的控件，
      免得手动选择与场景互相打架；收起场景后恢复，参数停在场景留下的值。 */
   inst.lockNote?.remove();
-  const lockNote=inst.lockNote=h('div',{class:'sdl-lock',hidden:true},h('span',null,'参数由预设场景设定'),h('button',{type:'button',onclick:()=>deselect()},'收起场景，手动调整'));
+  const lockNote=inst.lockNote=h('div',{class:'sdl-lock',hidden:true},h('span',null,i18n('参数由预设场景设定')),h('button',{type:'button',onclick:()=>deselect()},i18n('收起场景，手动调整')));
   controls.before(lockNote);
   function lock(on){
     inst.frame.classList.toggle('sdl-scen-on',on);
@@ -279,18 +300,18 @@ function renderScenarios(inst,box,list){
     btns.forEach((b,i)=>b.setAttribute('aria-pressed',String(list[i]===sc)));
     lock(true);
     const status=h('span',{class:'status'});
-    const insight=S.insightEl=h('p',{class:'insight',hidden:true},h('b',null,'观察：'),sc.insight||'');
+    const insight=S.insightEl=h('p',{class:'insight',hidden:true},h('b',null,i18n('观察：')),sc.insight||'');
     // 默认逐步：开始后停在第一步，由「下一步」推进；「自动播放」按当前倍速连续运行
-    const stepBtn=stepping?h('button',{type:'button',class:'primary','data-act':'start',title:'开始后停住，由底部「下一步」逐步推进'},'逐步开始'):null;
-    const playBtn=h('button',{type:'button',class:stepping?null:'primary','data-act':'play'},stepping?'自动播放':'运行场景');
+    const stepBtn=stepping?h('button',{type:'button',class:'primary','data-act':'start',title:i18n('开始后停住，由底部「下一步」逐步推进')},i18n('逐步开始')):null;
+    const playBtn=h('button',{type:'button',class:stepping?null:'primary','data-act':'play'},i18n(stepping?'自动播放':'运行场景'));
     card.replaceChildren();delete card.dataset.state;
-    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,'先猜：'),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},stepBtn,playBtn,status,h('button',{type:'button',class:'sdl-card-close',title:'收起场景，回到手动调整',onclick:deselect},'收起')),insight]);
+    add(card,[sc.ask?h('p',{class:'ask'},h('b',null,i18n('先猜：')),sc.ask):null,sc.setup?h('p',null,sc.setup):null,h('div',{class:'row'},stepBtn,playBtn,status,h('button',{type:'button',class:'sdl-card-close',title:i18n('收起场景，回到手动调整'),onclick:deselect},i18n('收起'))),insight]);
     card.hidden=false;inst.updateTransport();
     async function start(mode){
       inst.abort();const token=inst.token;
       Object.assign(S,{running:true,done:false,steps:0});card.dataset.state='running';
       insight.hidden=true;status.textContent='';
-      if(stepBtn)stepBtn.textContent='从头逐步';playBtn.textContent=stepping?'从头自动播放':'运行中…';
+      if(stepBtn)stepBtn.textContent=i18n('从头逐步');playBtn.textContent=i18n(stepping?'从头自动播放':'运行中…');
       if(!stepping)playBtn.disabled=true;
       inst.setMode(mode);inst.updateTransport();
       try{
@@ -302,9 +323,9 @@ function renderScenarios(inst,box,list){
         Object.assign(S,{running:false,done:true});card.dataset.state='done';
         if(stepping)inst.setMode('pause');   // 定格在结束状态，方便对照「观察」
         insight.hidden=!sc.insight;
-        inst.ctx.announce('场景完成：'+sc.label);
-      }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent='运行出错，请重置后再试';card.dataset.state='error'}}
-      finally{if(token===inst.token){S.running=false;if(!stepping){playBtn.disabled=false;playBtn.textContent='再运行一次'}inst.updateTransport()}}
+        inst.ctx.announce(i18n('场景完成：')+sc.label);
+      }catch(e){if(e!==ABORT){console.error('[SDLab]',inst.spec.id,sc.id,e);status.textContent=i18n('运行出错，请重置后再试');card.dataset.state='error'}}
+      finally{if(token===inst.token){S.running=false;if(!stepping){playBtn.disabled=false;playBtn.textContent=i18n('再运行一次')}inst.updateTransport()}}
     }
     /** 手机上场景卡和舞台隔得远：点了开始就把舞台滚进视野，边点「下一步」边看变化。 */
     function reveal(){const st=inst.ctx.stage;if(narrow.matches&&st.getBoundingClientRect().top>innerHeight*0.4)st.scrollIntoView({behavior:'smooth',block:'start'})}
@@ -469,7 +490,7 @@ function activate(article){
   if(m){const n=+m[1];if(n>=1&&n<=28)chapterPractice(article,n);else if(n===29)reviewMode(article)}
 }
 
-window.SDLab={define,mountAll,mountEl,activate,badge,refreshBadges,questions,colors,util,el:h,svgEl:s,
+window.SDLab={lang:LANG,t:i18n,define,mountAll,mountEl,activate,badge,refreshBadges,questions,colors,util,el:h,svgEl:s,
   /** ctx.wait 被重置/切换场景中断时抛出的信号；自己 catch 异步流程时用它区分真正的错误。 */
   isAbort:e=>e===ABORT,
   get specs(){return order.map(id=>specs.get(id))},progress:()=>JSON.parse(JSON.stringify(store))};

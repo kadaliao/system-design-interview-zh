@@ -1,0 +1,588 @@
+{
+  "chapter": 21,
+  "title": "Ad Click Aggregation",
+  "fullTitle": "Chapter 21: Ad Click Event Aggregation",
+  "intro": [
+    "Think of the system as “collecting click receipts, then settling the bill by ad and minute”. The hard part is not `COUNT(*)`: receipts arrive late, arrive twice, arrive out of order, and machines crash midway. Remember this first: **keep the raw events, let windows decide which bucket an event belongs to, restore state and progress together, and make results reconcilable and recomputable.** These four phrases matter more than any big-data product name."
+  ],
+  "keyPoints": [
+    "Keep raw clicks and serve queries from aggregates: the former can be recomputed and reconciled, the latter is small and fast, so store both.",
+    "Decouple stages with Kafka: Map routes, Aggregate counts, Reduce merges. Gather each ad on one node before choosing Top N.",
+    "Billing needs accuracy: use event time and fire when the watermark passes the window end. Longer waits are more accurate but slower; reconcile stragglers.",
+    "Exactly-once means each event is counted once: commit offset, state, and output atomically, or write downstream idempotently by version.",
+    "Split hot ads into local counts, then merge. A snapshot must match its offset, or recovery misses or recounts events.",
+    "Reconcile daily by recomputing from raw data on the same rules. Following Kappa, recomputation reuses the streaming logic and writes back with versions."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Scope": "第一步：理解问题并确定范围",
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Query API Design": "查询 API 设计",
+    "Data Model": "数据模型",
+    "High-Level Design": "高层设计",
+    "Streaming vs. Batching": "流式与批处理（Streaming vs. Batching）",
+    "Time": "时间（Time）",
+    "Aggregation Window": "聚合窗口（Aggregation Window）",
+    "Data Deduplication": "数据去重（Data Deduplication）",
+    "Scale the System": "扩展系统（Scale the System）",
+    "Fault Tolerance": "容错（Fault Tolerance）",
+    "Data Monitoring and Correctness": "数据监控与正确性"
+  },
+  "lessons": [
+    {
+      "id": "c21-01",
+      "title": "Scoping and Data",
+      "summary": "Requirements, traffic estimates, and two data sets",
+      "exercises": [
+        {
+          "id": "c21-01-01",
+          "type": "single",
+          "prompt": "Each day brings 1 billion ad clicks, and peak traffic is estimated at 5 times the average QPS. Roughly what is the peak write rate?",
+          "options": [
+            "About 5,000 QPS",
+            "About 50,000 QPS",
+            "About 500,000 QPS",
+            "About 11,574 QPS"
+          ],
+          "answer": 1,
+          "explanation": "1 billion ÷ 86,400 ≈ 11,574; rounded to an average of 10,000 QPS, times 5 gives a peak of about 50,000. 11,574 is just the exact average, before the peak factor is applied. 5,000 and 500,000 are each off by an order of magnitude.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c21-01-02",
+          "type": "fill",
+          "prompt": "Complete the storage estimate for raw clicks",
+          "text": "At 0.1 KB per event, 1 billion clicks take about [[100 GB]] per day and about [[3 TB]] per month, before replicas and indexes.",
+          "distractors": [
+            "10 GB",
+            "1 TB",
+            "30 TB"
+          ],
+          "explanation": "1 billion × 0.1 KB = 100 million KB ≈ 100 GB per day; times 30 days is about 3 TB. This figure leaves out replicas, indexes, and extra fields, so real capacity planning has to add headroom on top.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c21-01-03",
+          "type": "judge",
+          "prompt": "Click aggregation tolerates a few minutes of end-to-end delay, so real-time bidding (RTB) can relax to minutes as well.",
+          "answer": false,
+          "explanation": "RTB usually has to finish within one second, while click aggregation serves billing and reports and can accept a few minutes of delay. They are different requirements on different paths, so do not merge them into one latency target.",
+          "ref": "Step 1: Understand the Problem and Establish Scope"
+        },
+        {
+          "id": "c21-01-04",
+          "type": "single",
+          "prompt": "The dashboard only queries the aggregate table. Why does the system still keep the raw click events?",
+          "options": [
+            "After an aggregation bug is fixed, you can re-filter, recompute, and reconcile",
+            "Raw data takes less storage space than aggregated data",
+            "Raw data is faster to query than the aggregate table, so it suits the dashboard",
+            "The aggregate table cannot store counts at per-minute granularity"
+          ],
+          "answer": 0,
+          "explanation": "Aggregates are small and fast but have already lost detail. When the aggregation logic is wrong or the filter rules change, only the raw events let you recompute. Raw data is the large, slow-to-query side, which is exactly why it can go to cold storage instead of serving the dashboard.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c21-01-05",
+          "type": "multi",
+          "prompt": "Besides parameter names such as `from`, `to`, and `filter`, what semantics should the query API settle up front?",
+          "options": [
+            "Which time zone times are interpreted in",
+            "Whether the aggregation service uses threads or processes",
+            "Whether a returned result can still be revised by late events",
+            "Whether the time range is half-open `[from,to)`",
+            "Whether aggregation nodes use a heap or a sort for Top N"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Boundaries are part of the API: whether the interval is open or closed, the time zone, and whether late events can still revise a result all change the numbers each side computes. The Top N algorithm and the choice of threads or processes are server-side details that callers do not need to agree on.",
+          "ref": "Query API Design"
+        },
+        {
+          "id": "c21-01-06",
+          "type": "single",
+          "prompt": "Raw clicks arrive at 10,000 QPS on average and 50,000 at peak, and are rarely looked at except when troubleshooting. Why does the design pick Cassandra for them?",
+          "options": [
+            "The workload is write-heavy and read-light, so it needs writes that scale out easily",
+            "Analysis needs frequent multi-table JOINs with the advertiser table",
+            "Billing settlement needs cross-row ACID transactions",
+            "Troubleshooting needs ad hoc OLAP analysis on any field"
+          ],
+          "answer": 0,
+          "explanation": "Raw clicks are a classic write-heavy, read-light workload. A relational database could work, but scaling its writes is hard, so a store that scales writes easily is the better pick. Append-only clicks need no cross-row transactions or JOINs, and Cassandra does not automatically fit ad hoc OLAP, so that is no reason to choose it.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c21-01-07",
+          "type": "match",
+          "prompt": "Match each table to its role in the system",
+          "pairs": [
+            [
+              "Raw click table",
+              "Full fidelity, but large and slow to query"
+            ],
+            [
+              "Minute aggregate table",
+              "Counts by ad, minute, and filter"
+            ],
+            [
+              "Top N table",
+              "Precomputed hot ad IDs per window"
+            ],
+            [
+              "filter_id",
+              "One ID standing for a set of filters"
+            ]
+          ],
+          "explanation": "Raw data is faithful but large; the aggregate table stores counts by (ad_id, click_minute, filter_id), which is small and fast. The most_clicked_ads table precomputes the Top N ad IDs per window. filter_id encodes a combination of region, IP, and user_id as one ID, and `*` means that dimension is not filtered.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c21-01-08",
+          "type": "judge",
+          "prompt": "Raw click data is mostly used for troubleshooting and recomputation, so it can move to cold storage to save cost.",
+          "answer": true,
+          "explanation": "Raw data exists to debug and repair aggregation errors and is rarely read, so cold storage fits. Fast queries are served by the aggregate data, so moving raw data to a cheaper tier does not hurt dashboard performance.",
+          "ref": "Data Model"
+        },
+        {
+          "id": "c21-01-09",
+          "type": "judge",
+          "prompt": "Since Cassandra stores the aggregates, it can directly and efficiently support any dimensional OLAP query.",
+          "answer": false,
+          "explanation": "Cassandra does not automatically fit arbitrary OLAP. Tables and partition keys must still be designed around the queries you actually run: by ad, by minute, by filter. Picking a database is only the start; the data model decides whether queries are efficient.",
+          "ref": "Data Model"
+        }
+      ]
+    },
+    {
+      "id": "c21-02",
+      "title": "Pipeline Design",
+      "summary": "Queue decoupling, MapReduce, and Top N",
+      "exercises": [
+        {
+          "id": "c21-02-01",
+          "type": "single",
+          "prompt": "If the click ingestion service calls the aggregation service synchronously and then writes to the database synchronously, what is the main risk?",
+          "options": [
+            "It slows real-time bidding past its one-second limit",
+            "Synchronous calls rewrite event time into processing time",
+            "Any slow or failing downstream stage blocks the whole chain",
+            "Synchronous calls cannot group by ad_id"
+          ],
+          "answer": 2,
+          "explanation": "Input and output are both unbounded event streams, so with synchronous writes, one failing consumer stalls the upstream. Decoupling stages with Kafka lets each one scale and recover independently. RTB is a separate sub-second path, and neither grouping nor time semantics depend on sync versus async.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-02",
+          "type": "fill",
+          "prompt": "Complete what each of the two queues stores",
+          "text": "The first queue holds [[raw click events]]; the second queue holds the per-minute [[aggregated counts]] and Top N, used for end-to-end atomic commit.",
+          "distractors": [
+            "offset snapshots",
+            "reconciliation reports",
+            "filter rules"
+          ],
+          "explanation": "The first queue carries raw fields such as ad_id, timestamp, user_id, ip, and country. The aggregation service computes per-minute counts and Top N, writes them to the second queue, and from there they go to the database. Offset snapshots belong to fault tolerance and do not travel through the queues.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-03",
+          "type": "judge",
+          "prompt": "Putting one more Kafka queue between the aggregation service and the database automatically gives exactly-once counts.",
+          "answer": false,
+          "explanation": "An extra queue does not automatically give exactly-once. Input progress and output results must sit in the same transaction or recoverable checkpoint, and the final database write must be idempotent or transactional. Otherwise a crash and replay still duplicates or loses counts.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-04",
+          "type": "single",
+          "prompt": "If upstream can write each ad_id to the same Kafka partition and aggregation nodes consume it directly, why might you still need a separate Map node?",
+          "options": [
+            "It accumulates click counts per minute in memory",
+            "It commits the final offset to Kafka",
+            "It cleans events and re-routes by ad_id when upstream partitions are uncontrolled",
+            "It merges the local Top N lists from the aggregation nodes"
+          ],
+          "answer": 2,
+          "explanation": "Map reads, filters, transforms, and routes events by ad_id. When you cannot control upstream partitioning and one ad’s clicks are scattered across partitions, it gathers them onto the same aggregation node, and it is a convenient place to clean data. Merging lists is Reduce’s job; per-minute counting is Aggregate’s.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-05",
+          "type": "match",
+          "prompt": "Match each component in the aggregation pipeline to its job",
+          "pairs": [
+            [
+              "Map node",
+              "Reads, filters, routes by ad_id"
+            ],
+            [
+              "Aggregate node",
+              "Counts clicks per minute in memory"
+            ],
+            [
+              "Reduce node",
+              "Merges node results into the final value"
+            ],
+            [
+              "Second queue",
+              "Buffers aggregates for atomic commit"
+            ],
+            [
+              "Raw database",
+              "Kept for troubleshooting and recompute"
+            ]
+          ],
+          "explanation": "Map, Aggregate, and Reduce form a DAG: route first, count locally, then merge. The second queue decouples aggregated results from the downstream database write and is one link in the end-to-end atomic commit. The raw database takes no part in real-time computation; it is kept for lookup and recomputation.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-06",
+          "type": "judge",
+          "prompt": "Map routes clicks to 3 aggregation nodes by `ad_id % 3`, so all clicks for one ad land on the same node.",
+          "answer": true,
+          "explanation": "The remainder depends only on ad_id, so one ad always gets the same remainder and its count accumulates on a single node. This is what makes merging local Top N lists valid later. The cost is that a popular ad turns its node into a hotspot.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-07",
+          "type": "single",
+          "prompt": "Each of 3 aggregation nodes picks a local Top 3, and Reduce merges them into a global Top 3. What must hold for the result to be correct?",
+          "options": [
+            "Each ad’s count is fully accumulated on a single node",
+            "All nodes commit their local results at the same moment",
+            "The nodes process roughly equal numbers of events",
+            "The Reduce node also merges with a heap"
+          ],
+          "answer": 0,
+          "explanation": "If an ad’s clicks are spread across 3 nodes, each holds only part of the count and the ad may miss every local Top 3, so the merge drops a true global winner. Load balancing, commit timing, and using a heap cannot fix counts that were never combined.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-08",
+          "type": "judge",
+          "prompt": "If you store the Top N for every single minute, you can compute the exact Top N for any last M minutes.",
+          "answer": false,
+          "explanation": "An ad may rank N+1 in every minute, never entering a per-minute list, yet make the top N once M minutes are summed. Storing only per-minute lists discards those counts, so a sliding-window ranking cannot be recovered exactly. You need to keep each ad’s per-minute counts.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-09",
+          "type": "order",
+          "prompt": "Put the data flow for “the 100 most-clicked ads in the past 1 minute” in order",
+          "items": [
+            "Map routes clicks to aggregation nodes by ad_id",
+            "Aggregation nodes count each ad’s clicks this minute",
+            "Each aggregation node picks a local Top 100 with a heap",
+            "Reduce merges node candidates into the global list",
+            "The result goes to the second queue, then the database"
+          ],
+          "explanation": "Route by ad first so each ad is counted on one node only. Local Top 100 can be picked only after counting is done. Reduce merges the candidates into the global result, and finally it goes through the second queue into the aggregate database for the dashboard to read.",
+          "ref": "High-Level Design"
+        },
+        {
+          "id": "c21-02-10",
+          "type": "single",
+          "prompt": "To support filtering by country, the system pre-aggregates by (ad_id, minute, country). If ip and user_id are added as dimensions too and every combination is precomputed, what is the main cost?",
+          "options": [
+            "Filtered queries get slower and must rescan raw data",
+            "Top N results become inaccurate",
+            "Dimension combinations multiply, so buckets and records explode",
+            "The aggregation service cannot be reused and must be rewritten"
+          ],
+          "answer": 2,
+          "explanation": "Pre-aggregating by dimension makes filters fast and reuses the same aggregation service. The downside is that more conditions mean more buckets. ip and user_id take huge numbers of values, so the combinations multiply and storage explodes; you cannot precompute for arbitrary conditions. Slower queries is backwards.",
+          "ref": "High-Level Design"
+        }
+      ]
+    },
+    {
+      "id": "c21-03",
+      "title": "Time and Windows",
+      "summary": "Stream vs. batch, event time, watermarks, windows",
+      "exercises": [
+        {
+          "id": "c21-03-01",
+          "type": "match",
+          "prompt": "Match each processing style to its characteristic",
+          "pairs": [
+            [
+              "Online service",
+              "Answers users; needs availability, low latency"
+            ],
+            [
+              "Batch processing",
+              "Bounded datasets; throughput matters"
+            ],
+            [
+              "Lambda architecture",
+              "Batch and stream paths, two codebases"
+            ],
+            [
+              "Kappa architecture",
+              "One stream engine; replay uses the same logic"
+            ]
+          ],
+          "explanation": "Online services reply to users at once; batch processing works on bounded datasets and values throughput; stream processing handles unbounded streams. Lambda runs both paths, with two codebases. Kappa keeps only stream processing and replays history through the same logic, as this chapter’s recomputation does.",
+          "ref": "Streaming vs. Batching"
+        },
+        {
+          "id": "c21-03-02",
+          "type": "single",
+          "prompt": "You fixed a serious aggregation bug and need to backfill last week’s results. Following this chapter’s Kappa approach, what is the best way?",
+          "options": [
+            "Pause the real-time aggregation instances and let them replay last week’s data first",
+            "Recompute from raw storage on separate instances running the same logic",
+            "Adjust the affected counts in the aggregate table proportionally",
+            "Write a separate batch SQL job to recompute and overwrite the streaming results"
+          ],
+          "answer": 1,
+          "explanation": "Kappa replays historical data through the same aggregation code. Separate instances avoid competing with real-time processing for resources, and results update the database through the second queue. A separate SQL job means two sets of logic, pausing real-time hurts production, and proportional adjustment has no basis.",
+          "ref": "Streaming vs. Batching"
+        },
+        {
+          "id": "c21-03-03",
+          "type": "judge",
+          "prompt": "When recomputed results are written back, they should carry a batch or version number so an old recompute cannot overwrite a newer, more complete result.",
+          "answer": true,
+          "explanation": "Recomputation and real-time aggregation may write the same window one after the other. With versions, the downstream accepts only newer ones, so a late old batch cannot wash out the correct result. Reusing the same code does not mean results can be overwritten freely.",
+          "ref": "Streaming vs. Batching"
+        },
+        {
+          "id": "c21-03-04",
+          "type": "single",
+          "prompt": "A click happens at 12:00:50, but network and queue delays mean the aggregation service only processes it at 12:01:20. What happens if you aggregate by minute using processing time?",
+          "options": [
+            "It is dropped for being late and never counted",
+            "It is counted in the 12:01 minute, the wrong window",
+            "It is counted in the 12:00 minute, the right window",
+            "It is counted in both the 12:00 and 12:01 windows"
+          ],
+          "answer": 1,
+          "explanation": "Processing time is when the server handles the event, so a 30-second delay puts this click in the next minute. Billing values accuracy, so this design uses event time, at the cost of handling late events explicitly.",
+          "ref": "Time"
+        },
+        {
+          "id": "c21-03-05",
+          "type": "judge",
+          "prompt": "One cost of aggregating by event time is that the timestamp comes from the client, which may be inaccurate or even maliciously forged.",
+          "answer": true,
+          "explanation": "Event time makes results match when the click really happened, but it comes from the client clock, which can be wrong or tampered with. Processing time uses the server clock, which is easier to control but does not reflect when the click happened. The design still uses event time, with fraud controls and reconciliation.",
+          "ref": "Time"
+        },
+        {
+          "id": "c21-03-06",
+          "type": "single",
+          "prompt": "Which statement about a watermark is accurate?",
+          "options": [
+            "It guarantees all events for the window have arrived when it fires",
+            "It estimates how far event time has advanced; windows fire once it passes their end",
+            "It is the extra waiting time added to extend a window",
+            "It is the largest committed offset in Kafka"
+          ],
+          "answer": 1,
+          "explanation": "A watermark estimates event-time progress in the stream; it is not the extra stretch that lengthens a window. The window stays fixed, such as [12:00,12:01), and fires once the watermark passes 12:01. It is only an estimate and does not guarantee that all events have arrived, so you also need allowed lateness and corrections.",
+          "ref": "Time"
+        },
+        {
+          "id": "c21-03-07",
+          "type": "single",
+          "prompt": "What is the most likely effect of raising out-of-order tolerance from 15 seconds to 2 minutes?",
+          "options": [
+            "No late event will ever be missed again",
+            "Fewer late clicks are missed, but results come out more slowly",
+            "Firing time stays the same, but more events go to the side output",
+            "Results come out faster and fewer late clicks are missed"
+          ],
+          "answer": 1,
+          "explanation": "A larger tolerance makes the watermark advance more conservatively and delays window firing. Late events are more likely to make it in, so accuracy improves but output slows, and fewer events go to the side output. However long you wait, very late events can still arrive, so zero misses is never guaranteed.",
+          "ref": "Time"
+        },
+        {
+          "id": "c21-03-08",
+          "type": "fill",
+          "prompt": "Complete window firing and late-event handling",
+          "text": "A window [[fires]] only once the watermark passes its end; events later than the [[allowed lateness]] go to a side output or are recomputed.",
+          "distractors": [
+            "discard",
+            "snapshot",
+            "rebalance"
+          ],
+          "explanation": "The window itself is fixed; the watermark decides when it is computed. Allowed lateness lets a window keep accepting late events for a while after it fires and correct its result. Later events are not silently discarded but go to the side output, for recomputation and reconciliation.",
+          "ref": "Time"
+        },
+        {
+          "id": "c21-03-09",
+          "type": "match",
+          "prompt": "Match each window concept to its meaning",
+          "pairs": [
+            [
+              "Tumbling window",
+              "No overlap; a separate ledger per minute"
+            ],
+            [
+              "Sliding window",
+              "Looks at the last M minutes by step; can overlap"
+            ],
+            [
+              "Session window",
+              "Closes after a gap with no activity"
+            ],
+            [
+              "Side output",
+              "Collects events beyond allowed lateness"
+            ]
+          ],
+          "explanation": "This chapter counts per minute with tumbling windows, uses sliding windows for the Top N of the last M minutes, and session windows split by activity gaps. Frameworks name hopping and sliding windows differently, so in an interview the safest approach is to state the window length and slide step directly.",
+          "ref": "Aggregation Window"
+        },
+        {
+          "id": "c21-03-10",
+          "type": "judge",
+          "prompt": "As long as the watermark waits long enough, every late click is guaranteed to be counted, so billing no longer needs reconciliation.",
+          "answer": false,
+          "explanation": "A bounded wait only lowers the chance of missing events. Something later can always arrive, and waiting too long slows results. You still need a correction mechanism: events past the limit go to the side output or are recomputed, and daily reconciliation fixes billing results.",
+          "ref": "Time"
+        }
+      ]
+    },
+    {
+      "id": "c21-04",
+      "title": "Fault Tolerance",
+      "summary": "Exactly-once, hotspots, snapshots, reconciliation",
+      "exercises": [
+        {
+          "id": "c21-04-01",
+          "type": "single",
+          "prompt": "An aggregation node has sent the result for offset 100 downstream, then crashes before it can get an acknowledgement and commit the offset. What most likely happens after recovery?",
+          "options": [
+            "This batch’s result is lost for good; downstream never receives it",
+            "Kafka automatically detects and drops the duplicate result",
+            "Processing restarts from the old progress and the result is sent again",
+            "Downstream is guaranteed to record it only once, unaffected"
+          ],
+          "answer": 2,
+          "explanation": "Upstream got no acknowledgement, so it assumes the batch was not finished. After recovery it redoes the batch from the old offset and sends it again, and a downstream that applies +count will double count. Kafka does not detect business-level duplicate results for you.",
+          "ref": "Data Deduplication"
+        },
+        {
+          "id": "c21-04-02",
+          "type": "single",
+          "prompt": "To prevent duplicates, the node first saves the processed offset to HDFS/S3 and then sends the result downstream. If it crashes between the two steps, what happens?",
+          "options": [
+            "After recovery it starts from the new progress, and the batch’s result is never sent",
+            "After recovery it redoes the batch from the old progress, and the result is sent twice",
+            "Downstream times out and pulls the batch’s result itself",
+            "Progress is already durable, so the result is unaffected"
+          ],
+          "answer": 0,
+          "explanation": "Progress already says “offset 100 processed”, but the result never went out. Recovery resumes at 101, so those counts are never produced. Send-then-record duplicates and record-then-send loses, so saving progress and committing the result must happen atomically.",
+          "ref": "Data Deduplication"
+        },
+        {
+          "id": "c21-04-03",
+          "type": "multi",
+          "prompt": "Which practices help ensure each real click contributes exactly one count?",
+          "options": [
+            "Exact dedup at input using a stable event_id",
+            "Count only one click per IP per minute",
+            "Downstream writes absolute values keyed by (ad, window, filter, version)",
+            "Make saving the offset and committing the result downstream one atomic step",
+            "Require the network to deliver each message only once"
+          ],
+          "answers": [
+            0,
+            2,
+            3
+          ],
+          "explanation": "Exactly-once is about result semantics: duplicate transport is allowed, and atomic commits, idempotent writes of absolute results by a unique key, and exact dedup by event_id make each event count once. Merging by IP wrongly merges different users behind a shared egress IP, and network retries cannot be avoided.",
+          "ref": "Data Deduplication"
+        },
+        {
+          "id": "c21-04-04",
+          "type": "judge",
+          "prompt": "A Bloom filter saves memory and checks for duplicates quickly, so it can be used on its own to dedup billable clicks.",
+          "answer": false,
+          "explanation": "A Bloom filter has false positives: it can wrongly report a click it has never seen as “seen”. Using it for billing dedup would drop real clicks and undercharge advertisers. Billing needs exact dedup based on a stable event_id.",
+          "ref": "Data Deduplication"
+        },
+        {
+          "id": "c21-04-05",
+          "type": "single",
+          "prompt": "To grow the aggregation consumers in one consumer group from 50 to 200, what must you ensure beforehand?",
+          "options": [
+            "The total Kafka log size is trimmed small enough first",
+            "Producer instances are scaled to 200 as well",
+            "The topic has enough partitions, at least 200",
+            "Each consumer is put in a different consumer group"
+          ],
+          "answer": 2,
+          "explanation": "Within a consumer group, one partition goes to one consumer, so extra consumers sit idle when partitions run short; reserve enough partitions. Separate consumer groups would each receive every message and process it twice. The number of producers has nothing to do with consumption parallelism.",
+          "ref": "Scale the System"
+        },
+        {
+          "id": "c21-04-06",
+          "type": "judge",
+          "prompt": "If the total log size in Kafka keeps growing, the aggregation consumers must be falling behind.",
+          "answer": false,
+          "explanation": "Kafka is a durable commit log: messages are kept for the retention period even after consumption, so growth in total size is normal. To tell whether consumers keep up, watch consumer lag such as `records-lag`. Only when lag jumps do you diagnose the cause and add aggregation resources if needed.",
+          "ref": "Data Monitoring and Correctness"
+        },
+        {
+          "id": "c21-04-07",
+          "type": "single",
+          "prompt": "One ad suddenly goes viral and the aggregation node responsible for it is overloaded. What does this chapter suggest?",
+          "options": [
+            "Move all ads onto one bigger machine to aggregate",
+            "Split its events across several nodes for local counts, then merge",
+            "Lengthen the watermark wait so the node can work through it slowly",
+            "Drop clicks on that ad above a threshold to protect the node"
+          ],
+          "answer": 1,
+          "explanation": "In the example, the node asks the resource manager for more resources, splits 300 events into three groups of 100 to process in parallel, then merges the partial results. Dropping clicks undercharges, a longer watermark only delays output, and a bigger machine does not solve the single-hotspot scaling problem.",
+          "ref": "Scale the System"
+        },
+        {
+          "id": "c21-04-08",
+          "type": "judge",
+          "prompt": "After splitting a hotspot, metrics like count and sum merge easily, while a metric like distinct users is more complex to merge.",
+          "answer": true,
+          "explanation": "Counts from each shard simply add up, but the same user may appear in several shards, so distinct-user counts cannot just be summed. When splitting, also keep the source shard and window identifiers so a retried merge does not add the same part twice.",
+          "ref": "Scale the System"
+        },
+        {
+          "id": "c21-04-09",
+          "type": "single",
+          "prompt": "The latest snapshot’s window state covers up to offset 100, but the takeover node resumes consuming from offset 120. What is the result?",
+          "options": [
+            "Events 101–119 are missed",
+            "Events 101–119 are counted twice",
+            "No effect; the snapshot already holds all the state",
+            "Events 80–100 are counted twice"
+          ],
+          "answer": 0,
+          "explanation": "The snapshot only has counts through 100, so resuming at 120 skips 101–119. Resuming from 80 would instead recount 80–100. A checkpoint must keep state, input position, and committed output consistent with each other; you cannot stitch together the “latest” value of each.",
+          "ref": "Fault Tolerance"
+        },
+        {
+          "id": "c21-04-10",
+          "type": "order",
+          "prompt": "Put the steps of daily reconciliation in order",
+          "items": [
+            "A batch job reads the day’s events from raw storage",
+            "Recompute with the same time zone, filter, dedup rules",
+            "Compare with the aggregate database item by item",
+            "Record reviewed differences and correct billing results"
+          ],
+          "explanation": "Reconciliation is an independent recomputation from raw data, compared against the streaming result. Both sides must share time zone, filter rules, lateness range, dedup, and version, or the differences mean nothing. Once differences are found, there must be a review and a correction record, not just an alert.",
+          "ref": "Data Monitoring and Correctness"
+        }
+      ]
+    }
+  ]
+}

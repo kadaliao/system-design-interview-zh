@@ -1,0 +1,556 @@
+{
+  "chapter": 19,
+  "title": "Distributed Message Queue",
+  "fullTitle": "Chapter 19: Distributed Message Queue",
+  "intro": [
+    "**How to read this chapter**: Think of a queue as an ordered, page-by-page work log: producers write pages, and consumers remember where they stopped reading. Keep four concepts in mind: **topics split by business, partitions split parallelism, brokers store data, and consumer groups track progress.** The chapter is about where ordering is guaranteed and where to redo work after a crash, not just about calling `send()`."
+  ],
+  "keyPoints": [
+    "Topics split by business, partitions split parallelism, brokers store data, consumer groups track progress. Order holds only within a partition.",
+    "In a group, a partition belongs to one consumer at a time, so active consumers never exceed partitions. Groups share the log but keep separate offsets.",
+    "An append-only segmented log, sequential I/O, and batching give high throughput. Expiry reclaims whole segments; batch size trades latency for throughput.",
+    "A message is committed once all ISR replicas have it. A stricter ACK is slower and safer; ACK=all also needs a minimum in-sync replica count.",
+    "Committing the offset after processing is at-least-once; use event IDs or unique constraints for idempotency. Exactly-once needs transactions too.",
+    "A rebalance is a shift handover, and the old consumer must stop. Adding partitions changes key mapping, so ordering for the same key needs a transition."
+  ],
+  "refs": {
+    "Introduction": "引言",
+    "Messaging Models": "消息模型（Messaging Models）",
+    "Consumer Groups": "消费组（Consumer Groups）",
+    "Topics, Partitions, and Brokers": "Topic、Partition 与 Broker",
+    "High-Level Architecture": "高层架构",
+    "Data Storage": "数据存储",
+    "Message Data Structure": "消息数据结构",
+    "Batching": "批处理（Batching）",
+    "Producer Flow": "生产者流程",
+    "Step 3: Design Deep Dive": "第三步：深入设计",
+    "Consumer Flow": "消费者流程",
+    "Consumer Rebalancing": "消费者重平衡（Rebalancing）",
+    "State Storage": "状态存储（State Storage）",
+    "ZooKeeper": "ZooKeeper",
+    "In-Sync Replicas (ISR)": "同步副本（In-Sync Replicas，ISR）",
+    "Broker": "Broker",
+    "Partition": "分区（Partition）",
+    "Delayed and Scheduled Messages": "延迟消息与定时消息",
+    "At-most-once": "最多一次（At-most-once）",
+    "At-least-once": "至少一次（At-least-once）",
+    "Exactly-once": "恰好一次（Exactly-once）",
+    "Message Filtering": "消息过滤（Message Filtering）"
+  },
+  "lessons": [
+    {
+      "id": "c19-01",
+      "title": "Queue Model",
+      "summary": "Topics, partitions, groups, ordering",
+      "exercises": [
+        {
+          "id": "c19-01-01",
+          "type": "multi",
+          "prompt": "What benefits does a message queue bring when placed between two services?",
+          "options": [
+            "Producers and consumers scale independently with their own traffic",
+            "Duplicate messages are automatically processed only once",
+            "Producers do not wait for consumers to finish processing",
+            "All messages automatically get a global order",
+            "Producers can keep writing while consumers are briefly down"
+          ],
+          "answers": [0, 2, 4],
+          "explanation": "A queue brings performance (no waiting on downstream), scalability (each side scales independently), availability (one side can fail while the other still uses the queue), and decoupling. Global order is not free: it holds only within one partition. At-least-once delivery can duplicate messages, so handlers must be idempotent.",
+          "ref": "Introduction"
+        },
+        {
+          "id": "c19-01-02",
+          "type": "single",
+          "prompt": "A scenario requires keeping messages for two weeks and letting different consumers read them repeatedly. Why can’t the classic point-to-point model do this?",
+          "options": [
+            "A message is deleted once acknowledged, so it cannot be replayed",
+            "Point-to-point does not allow competing consumers",
+            "Point-to-point cannot persist messages to disk",
+            "Point-to-point needs consumers online, or messages are lost"
+          ],
+          "answer": 0,
+          "explanation": "In point-to-point, one consumer processes each message and it is deleted once acknowledged, so acknowledged data is not retained. It does allow competing consumers, and messages wait while consumers are offline. This scenario needs long retention and replay, so it uses publish/subscribe with consumer-group offsets.",
+          "ref": "Messaging Models"
+        },
+        {
+          "id": "c19-01-03",
+          "type": "judge",
+          "prompt": "When an order group and a statistics group subscribe to the same topic, the broker physically copies the message log for each consumer group.",
+          "answer": false,
+          "explanation": "“Each group reads the full stream” is a logical statement: the data log is shared, and only the read position (offset) is independent per group. So a slow order group does not affect the statistics group, and storage does not double.",
+          "ref": "Consumer Groups"
+        },
+        {
+          "id": "c19-01-04",
+          "type": "single",
+          "prompt": "A topic has 4 partitions, and a consumer group starts 6 consumers. Once things settle, how many are actually consuming?",
+          "options": [
+            "4, and the other 2 sit idle",
+            "6, with two partitions each read by two consumers at once",
+            "6, with partitions split and shared",
+            "2, each responsible for 2 partitions"
+          ],
+          "answer": 0,
+          "explanation": "Within one group, a partition goes to only one consumer at a time; otherwise ordering within the partition cannot be guaranteed. So active consumers max out at the partition count, and the extra 2 stand by to take over if another fails. To raise parallelism, add partitions.",
+          "ref": "Consumer Groups"
+        },
+        {
+          "id": "c19-01-05",
+          "type": "single",
+          "prompt": "Events for the same user must be processed in the order they happened, and the topic needs several partitions for throughput. What is the most reasonable approach?",
+          "options": [
+            "Let one consumer process a partition’s messages with multiple threads",
+            "Use user_id as the partition key so a user lands in one partition",
+            "Give messages a global increasing ID and write to random partitions",
+            "Write round-robin to partitions and re-sort by timestamp when consuming"
+          ],
+          "answer": 1,
+          "explanation": "Order is guaranteed only within a single partition. Sending the same key to the same partition keeps the parallelism of many partitions while preserving each user’s order. Re-sorting across partitions after round-robin writes is hard and unreliable, and concurrent threads scramble the completion order within a partition.",
+          "ref": "Topics, Partitions, and Brokers"
+        },
+        {
+          "id": "c19-01-06",
+          "type": "judge",
+          "prompt": "After a topic is split into several partitions, consumers still see messages in a global order across partitions.",
+          "answer": false,
+          "explanation": "Each partition is an independent FIFO log, and there is no inherent ordering between partitions. Messages that need an order should go to the same partition through the partition key. Order holds only within a single partition.",
+          "ref": "Topics, Partitions, and Brokers"
+        },
+        {
+          "id": "c19-01-07",
+          "type": "fill",
+          "prompt": "Complete the core queue concepts",
+          "text": "A [[topic]] splits messages by business, [[partitions]] set the parallelism, and a [[broker]] is a server hosting partitions.",
+          "distractors": ["offset", "replica", "segment"],
+          "explanation": "Mnemonic: topics split by business, partitions split parallelism, brokers store data, consumer groups track progress. An offset is a message’s position in a partition, a replica is a partition copy for fault tolerance, and a segment is a file chunk cut from the partition log.",
+          "ref": "Topics, Partitions, and Brokers"
+        },
+        {
+          "id": "c19-01-08",
+          "type": "match",
+          "prompt": "Match each high-level architecture component with its job",
+          "pairs": [
+            ["Data storage", "Stores the messages in partitions"],
+            ["State storage", "Stores each group’s consumption progress"],
+            ["Metadata storage", "Holds config: partition count, retention"],
+            ["Coordination service", "Service discovery, live brokers, leader election"]
+          ],
+          "explanation": "Messages land in data storage. Consumption progress goes in state storage, so consumers resume from it after a failure. Topic config lives in metadata storage. The coordination service handles service discovery, keeps the list of live brokers, elects leaders, and helps with partition assignment.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c19-01-09",
+          "type": "single",
+          "prompt": "A consumer fetches a batch of messages from one partition and hands them to a thread pool to process concurrently. What is this most likely to break?",
+          "options": [
+            "The processing order of messages within the same partition",
+            "The offsets of other consumer groups",
+            "Replica consistency across brokers",
+            "The producer’s mapping from partition key to partition"
+          ],
+          "answer": 0,
+          "explanation": "The queue guarantees only in-order delivery within a partition; what happens after delivery is up to the application. Concurrent processing scrambles the order in which business effects complete, for example a “cancel order” taking effect before “create order”. The application has to cooperate to preserve order.",
+          "ref": "Consumer Groups"
+        },
+        {
+          "id": "c19-01-10",
+          "type": "judge",
+          "prompt": "The partition key decides which partition a message goes to, but whether data is spread evenly across partitions depends on how the keys themselves are distributed.",
+          "answer": true,
+          "explanation": "The same key always goes to the same partition. If one key is especially hot, say one large customer produces half the events, its partition becomes a hotspot, and adding more partitions cannot split a single key.",
+          "ref": "Topics, Partitions, and Brokers"
+        }
+      ]
+    },
+    {
+      "id": "c19-02",
+      "title": "Logs and Producing",
+      "summary": "Segmented log, message format, batching",
+      "exercises": [
+        {
+          "id": "c19-02-01",
+          "type": "single",
+          "prompt": "Why does a message queue store messages in an append-only log (WAL) instead of a general-purpose database?",
+          "options": [
+            "A general-purpose database cannot replicate across nodes",
+            "Messages are often queried by content, which logs handle better",
+            "An append-only log can build secondary indexes on any field",
+            "Messages are never updated or deleted singly, and mostly accessed sequentially"
+          ],
+          "answer": 3,
+          "explanation": "Messages are immutable and accessed in order, so a database’s indexes, transactions, and random access add cost without helping. An append-only log makes writes sequential and uses the page cache well. Logs are poor at content queries and secondary indexes, and general-purpose databases can replicate across nodes.",
+          "ref": "Data Storage"
+        },
+        {
+          "id": "c19-02-02",
+          "type": "judge",
+          "prompt": "Hard disks are slow at random seeks, so they are unsuitable for storing a message queue’s logs.",
+          "answer": false,
+          "explanation": "HDDs are slow at random seeks, but sequential throughput is much better, and an append-only log is exactly sequential access. The OS page cache also reduces actual disk reads. As long as access stays sequential, a hard disk is up to the job.",
+          "ref": "Data Storage"
+        },
+        {
+          "id": "c19-02-03",
+          "type": "single",
+          "prompt": "A partition log is cut into segments, and only the newest one is writable. When retention expires, what is the simplest way to delete messages older than two weeks?",
+          "options": [
+            "Reclaim whole expired old segment files directly",
+            "Move unexpired messages to a new segment, then delete the old file",
+            "Run delete on each message, then compact the file",
+            "Mark each message deleted and skip it on reads"
+          ],
+          "answer": 0,
+          "explanation": "Old segments are read-only and ordered by time, so a whole segment expires together, and deleting the file reclaims the space without any per-message deletes. Segmenting also keeps any single file from growing too large.",
+          "ref": "Data Storage"
+        },
+        {
+          "id": "c19-02-04",
+          "type": "single",
+          "prompt": "One message has an empty key, and another has the same key as an earlier message. Which statement is correct?",
+          "options": [
+            "Both are valid: the key picks the partition and may repeat or be empty",
+            "Keys must be unique, and a duplicate overwrites the old message",
+            "The broker drops messages with an empty key",
+            "Two messages with the same key are merged into one"
+          ],
+          "answer": 0,
+          "explanation": "A message key is not a primary key as in a KV database. Its job is to choose the partition, so messages from the same user should share a key. A message is located by the (topic, partition, offset) triple, not by its key.",
+          "ref": "Message Data Structure"
+        },
+        {
+          "id": "c19-02-05",
+          "type": "fill",
+          "prompt": "Complete the roles of two fields in the message structure",
+          "text": "By default the partition is chosen by hash([[key]]) % numPartitions, and the [[CRC]] field verifies message integrity.",
+          "distractors": ["offset", "value", "timestamp"],
+          "explanation": "The key is hashed and taken modulo the partition count to pick the partition, and a producer can override the default strategy; the value is the payload. The CRC detects corruption in transit or storage. The offset is only known after the write lands in a partition, so it cannot choose the partition.",
+          "ref": "Message Data Structure"
+        },
+        {
+          "id": "c19-02-06",
+          "type": "single",
+          "prompt": "One queue runs both log aggregation (throughput first) and payment notifications (low latency required). How should batch size be tuned?",
+          "options": [
+            "Small batches for logs, to limit loss per batch",
+            "Large batches for logs, small batches for payment notifications",
+            "Small batches for both, and make up the throughput with multithreaded consumers",
+            "Large batches for both, and remove the latency by adding partitions"
+          ],
+          "answer": 1,
+          "explanation": "A large batch moves more data per network round trip and writes more sequentially, so throughput is high, but it waits to fill up. A small batch is sent sooner, so latency is low but throughput suffers. Adding partitions spreads disk load and raises throughput, but it cannot remove the batching delay.",
+          "ref": "Batching"
+        },
+        {
+          "id": "c19-02-07",
+          "type": "judge",
+          "prompt": "If a producer only sends once “1,000 messages are collected”, messages in low-traffic periods may wait a long time to be sent.",
+          "answer": true,
+          "explanation": "At low traffic, a batch may take very long to fill. In practice you set both a size threshold and a maximum wait, and send when either is met: large batches build up at peak, and nothing waits forever in the troughs.",
+          "ref": "Batching"
+        },
+        {
+          "id": "c19-02-08",
+          "type": "order",
+          "prompt": "With a separate routing layer, put the path of a message from send to commit in order",
+          "items": [
+            "The routing layer caches the replica plan in advance",
+            "The producer sends the message to the routing layer",
+            "The routing layer forwards it to the partition’s leader",
+            "Followers pull the new message from the leader",
+            "Enough replicas sync, then the leader commits and replies"
+          ],
+          "explanation": "The routing layer reads and caches the replica plan from metadata beforehand, so when a message arrives it knows which leader to forward to. Writes always go to the leader first, and followers pull to replicate. Only after enough replication acknowledgements does it commit and reply to the producer.",
+          "ref": "Producer Flow"
+        },
+        {
+          "id": "c19-02-09",
+          "type": "single",
+          "prompt": "The chapter finally puts routing logic inside the producer instead of keeping a separate routing layer. What is the main benefit?",
+          "options": [
+            "One less network hop; the producer picks the partition and batches more",
+            "The producer no longer needs to know where the partition leader is",
+            "A separate routing layer cannot batch at all and can only forward one by one",
+            "Replication can be skipped and acknowledged directly"
+          ],
+          "answer": 0,
+          "explanation": "Client-side routing saves a network hop: the producer decides which partition to target and accumulates a batch in memory before sending it at once. A separate routing layer can batch too, but it adds state and coordination complexity. This is an engineering trade-off.",
+          "ref": "Producer Flow"
+        },
+        {
+          "id": "c19-02-10",
+          "type": "multi",
+          "prompt": "To support high throughput and long retention, what storage choices does this chapter make?",
+          "options": [
+            "Immutable messages, which reduce copying",
+            "A B+ tree index on every message",
+            "A structure suited to sequential disk access and the page cache",
+            "Deleting each message in place right after consumption",
+            "Batched writes, which reduce small I/Os"
+          ],
+          "answers": [0, 2, 4],
+          "explanation": "Sequential access, immutable messages, and batched writes are the chapter’s three choices. Indexing every message would turn sequential writes into many random writes. Deleting on consumption defeats long retention and repeated consumption; history should be reclaimed by whole segment.",
+          "ref": "Step 3: Design Deep Dive"
+        }
+      ]
+    },
+    {
+      "id": "c19-03",
+      "title": "Groups and State",
+      "summary": "Pull, rebalance, offsets, metadata",
+      "exercises": [
+        {
+          "id": "c19-03-01",
+          "type": "single",
+          "prompt": "Consumers vary in processing power, and sometimes fall far behind the production rate. The chapter picks the pull model. What is the key reason?",
+          "options": [
+            "Consumers pull at their own pace, so a slow one is not overwhelmed",
+            "Pull never produces empty polls, so no wasted requests",
+            "Push cannot send in batches, so throughput stays low",
+            "Pull has the lowest latency, delivering as soon as a message arrives"
+          ],
+          "answer": 0,
+          "explanation": "With push, the broker sends as soon as a message arrives, so a slow consumer is overwhelmed. Push can batch too, so throughput is not the issue. With pull, consumers fetch at their own pace, a slow one can scale out to catch up, and big batches fit naturally. Its costs, latency and empty polls, are softened by long polling.",
+          "ref": "Consumer Flow"
+        },
+        {
+          "id": "c19-03-02",
+          "type": "judge",
+          "prompt": "The pull model sends empty requests when there are no new messages, and long polling can reduce this waste.",
+          "answer": true,
+          "explanation": "With long polling, a request with no data waits on the broker and returns when a message arrives or a timeout hits. This reduces idle requests and also shortens the wait for new messages.",
+          "ref": "Consumer Flow"
+        },
+        {
+          "id": "c19-03-03",
+          "type": "single",
+          "prompt": "A new consumer wants to join Group 1. How does it find the group coordinator for that group?",
+          "options": [
+            "Connect to any broker, which broadcasts to all members",
+            "Connect to ZooKeeper, where the global coordination service assigns partitions directly",
+            "Hash the group name to find one broker, and all group members connect to it",
+            "Connect to the leader of the topic’s partition with the largest offset"
+          ],
+          "answer": 2,
+          "explanation": "The group coordinator is a role played by one broker, chosen by hashing the group name, so all members of a group necessarily connect to the same broker. It is not the global coordination service that ZooKeeper provides; in the chapter’s design, ZooKeeper handles metadata and leader election.",
+          "ref": "Consumer Flow"
+        },
+        {
+          "id": "c19-03-04",
+          "type": "order",
+          "prompt": "Consumer B joins a group that only had A. Put the rebalance steps in order",
+          "items": [
+            "B asks the coordinator to join",
+            "The coordinator signals a rebalance via heartbeats",
+            "Members rejoin, and the coordinator picks a group leader",
+            "Group leader computes the plan; coordinator broadcasts it",
+            "All members start consuming under the new assignment"
+          ],
+          "explanation": "A learns of the rebalance through its heartbeat response. After all members rejoin, the coordinator picks a group leader. The group leader computes the assignment and the coordinator broadcasts it, while the other members wait. Finally each consumes its new partitions.",
+          "ref": "Consumer Rebalancing"
+        },
+        {
+          "id": "c19-03-05",
+          "type": "multi",
+          "prompt": "Which events trigger a consumer-group rebalance?",
+          "options": [
+            "The topic gains new partitions",
+            "A single message fails to process",
+            "A new consumer joins",
+            "The producer adds an instance",
+            "A consumer sends no heartbeat for a long time"
+          ],
+          "answers": [0, 2, 4],
+          "explanation": "A rebalance decides who owns which partition, so members joining, leaving, or timing out on heartbeats, or partitions being added or removed, all change the assignment. Scaling out producers does not affect partition ownership, and a single failed message is a retry issue that does not reassign partitions.",
+          "ref": "Consumer Rebalancing"
+        },
+        {
+          "id": "c19-03-06",
+          "type": "single",
+          "prompt": "A rebalance hands partition 3 from consumer A to B, but A, stalled, is still processing partition 3 messages. What goes wrong?",
+          "options": [
+            "The coordinator automatically rolls back A’s results",
+            "A and B may both write business results, causing duplicates or conflicts",
+            "The broker deletes the messages of partition 3",
+            "B re-consumes all history from offset 0"
+          ],
+          "answer": 1,
+          "explanation": "A rebalance is like a shift handover: the old consumer must stop processing partitions it no longer owns, or old and new instances write at the same time. B continues from the committed offset, not from 0, and the coordinator does not roll back business results.",
+          "ref": "Consumer Rebalancing"
+        },
+        {
+          "id": "c19-03-07",
+          "type": "single",
+          "prompt": "Group 1 committed offset 6 on a partition (meaning the next position to read). After a consumer crashes and restarts, where should it read from?",
+          "options": [
+            "From offset 6",
+            "From the partition’s latest message",
+            "From offset 0 again",
+            "From offset 7"
+          ],
+          "answer": 0,
+          "explanation": "The committed value is defined as “the next position to read”, so everything before 6 has been processed, and it resumes at 6. Starting at 7 would skip message 6, and starting from 0 or from the latest would re-read or skip large amounts of messages, respectively.",
+          "ref": "State Storage"
+        },
+        {
+          "id": "c19-03-08",
+          "type": "judge",
+          "prompt": "ZooKeeper is an irreplaceable component of this design; without it, metadata cannot be stored and leaders cannot be elected.",
+          "answer": false,
+          "explanation": "The chapter’s design uses ZooKeeper to store metadata and consumption state and to help elect leaders, but other consensus or coordination implementations can do the same, and systems with built-in consensus-based metadata need not deploy it. What to remember is the responsibilities: who stores metadata, and who elects leaders.",
+          "ref": "ZooKeeper"
+        },
+        {
+          "id": "c19-03-09",
+          "type": "single",
+          "prompt": "State storage holds each group’s consumption offsets. What is its access pattern?",
+          "options": [
+            "Small data, frequent reads and writes, random access, consistency matters",
+            "Written once and read many times, suitable for caching on a CDN",
+            "Rarely changes, small data, eventual consistency is acceptable",
+            "Large data, append-only writes, sequential batch reads"
+          ],
+          "answer": 0,
+          "explanation": "Offsets are tiny, updated constantly, accessed randomly by group and partition, and need consistency: a wrong value means missed or repeated messages. Append-only sequential reads fit the message log; rare changes fit metadata. The chapter’s design uses a ZooKeeper-like store, but Kafka keeps offsets in an internal topic.",
+          "ref": "State Storage"
+        },
+        {
+          "id": "c19-03-10",
+          "type": "fill",
+          "prompt": "Complete the two roles in a rebalance",
+          "text": "All group members connect to the same [[group coordinator]]; when membership changes, it picks a [[group leader]], which computes the partition assignment.",
+          "distractors": ["ZooKeeper", "partition leader", "routing layer"],
+          "explanation": "The group coordinator is a broker that organizes the process and broadcasts the result. The group leader is one of the consumers in the group and computes the assignment. The partition leader is a replication concept and has nothing to do with consumer-group assignment.",
+          "ref": "Consumer Rebalancing"
+        }
+      ]
+    },
+    {
+      "id": "c19-04",
+      "title": "Replicas, Delivery",
+      "summary": "ISR, ACK, scaling, delivery semantics",
+      "exercises": [
+        {
+          "id": "c19-04-01",
+          "type": "single",
+          "prompt": "Replica 4 fell too far behind and was removed from the ISR. Replicas 2 and 3 have copied the leader’s two new messages. Are those two messages committed?",
+          "options": [
+            "No, they must wait for replica 4 to catch up",
+            "No, they must wait for every broker in the cluster to acknowledge",
+            "Yes, a write to the leader’s local disk counts as committed",
+            "Yes, only the replicas in the ISR must all be in sync"
+          ],
+          "answer": 3,
+          "explanation": "A message is committed once it is synced to all replicas in the ISR. Replica 4 has left the ISR and no longer holds up commits; that is the ISR’s trade-off between performance and durability. Acknowledging once the leader writes locally is the ACK=1 behavior and does not mean the message is committed.",
+          "ref": "In-Sync Replicas (ISR)"
+        },
+        {
+          "id": "c19-04-02",
+          "type": "match",
+          "prompt": "Match each acknowledgement setting with its trade-off",
+          "pairs": [
+            ["ACK=0", "No wait for ack: fastest, failures go unseen"],
+            ["ACK=1", "Leader-only ack; loses data if it crashes first"],
+            ["ACK=all", "Waits for all ISR replicas: slower, more durable"],
+            ["Min in-sync replicas", "Rejects writes when too few replicas in sync"]
+          ],
+          "explanation": "The stricter the ACK, the slower it is and the less likely data is lost. ACK=all has a loophole: when the ISR shrinks to just the leader, it can still acknowledge. So pair it with a minimum in-sync replica count that rejects writes when replicas are too few, accepting brief unavailability rather than pretending to be safe.",
+          "ref": "In-Sync Replicas (ISR)"
+        },
+        {
+          "id": "c19-04-03",
+          "type": "judge",
+          "prompt": "Even with ACK=all, if the ISR has only the leader left, a message may be acknowledged with just one copy stored.",
+          "answer": true,
+          "explanation": "ACK=all waits for all replicas in the ISR, and when the ISR shrinks to just the leader, it waits only for itself. To truly prevent loss, combine it with a minimum in-sync replica count and forbid unsafe leader election.",
+          "ref": "In-Sync Replicas (ISR)"
+        },
+        {
+          "id": "c19-04-04",
+          "type": "order",
+          "prompt": "The broker hosting a partition’s leader goes down. Put the partition’s recovery steps in order",
+          "items": [
+            "The coordination service notices the broker is lost",
+            "A new leader is chosen from the remaining ISR replicas",
+            "Another broker rebuilds the replica and catches up",
+            "The new replica joins the ISR once caught up"
+          ],
+          "explanation": "The coordination service keeps the live-broker list, so it detects the failure first. A new leader is then elected at once from the remaining in-sync replicas so the partition keeps serving. The missing replica is rebuilt on another broker as a follower pulling from the new leader, and joins the ISR only once caught up.",
+          "ref": "Broker"
+        },
+        {
+          "id": "c19-04-05",
+          "type": "single",
+          "prompt": "A topic for orders is partitioned by `hash(key) % N` and grows from 4 to 6 partitions. What most needs extra handling?",
+          "options": [
+            "Nothing for producers: the partition count only matters on the broker",
+            "Nothing for consumer groups: new partitions can go unconsumed for now",
+            "A key’s old and new messages may split across partitions, so ordering needs a transition",
+            "History in old partitions must be moved to new partitions immediately"
+          ],
+          "answer": 2,
+          "explanation": "Once N changes, the same key may map to a new partition while its old messages remain in the old one, so there is no ordering guarantee across them. New partitions receive only new messages, and old data is not moved. Producers must be told, and a consumer-group rebalance assigns the new partitions.",
+          "ref": "Partition"
+        },
+        {
+          "id": "c19-04-06",
+          "type": "judge",
+          "prompt": "A delayed message can first go into temporary broker storage (such as a dedicated topic) and be moved into the target partition for consumers to read once it is due.",
+          "answer": true,
+          "explanation": "For example, a task that checks payment status after 30 minutes is stored in a temporary topic, timed with a delay queue or hierarchical timing wheel, and moved to the target partition when due. If the move succeeds but its acknowledgement fails, the message may be delivered twice, so consumers must still be idempotent.",
+          "ref": "Delayed and Scheduled Messages"
+        },
+        {
+          "id": "c19-04-07",
+          "type": "single",
+          "prompt": "A consumer fetches a message, commits the offset immediately, and crashes while processing it. What happens to the message after the restart?",
+          "options": [
+            "The broker redelivers it automatically, exactly once",
+            "It is read and processed again (at-least-once)",
+            "It is never processed again, effectively lost (at-most-once)",
+            "It automatically goes to a retry topic to be tried later"
+          ],
+          "answer": 2,
+          "explanation": "The offset has already moved past this message, so after the restart reading begins at the next one and this message is lost. That is at-most-once. Committing only after successful processing would make a crash cause a re-read: at-least-once. A retry topic needs the application to route there; it is not automatic.",
+          "ref": "At-most-once"
+        },
+        {
+          "id": "c19-04-08",
+          "type": "multi",
+          "prompt": "A payment service consumes at-least-once. To avoid double charges without losing messages, which approaches work?",
+          "options": [
+            "Add a unique constraint on charge records",
+            "Commit the offset before charging",
+            "Record processed messages in a transaction",
+            "Change the producer ACK from all to 1",
+            "Check idempotency by event ID"
+          ],
+          "answers": [0, 2, 4],
+          "explanation": "At-least-once means a crash after processing but before the commit causes a re-read, so handlers must be idempotent: use event IDs, unique constraints, or transactional records to recognize processed messages. Committing first becomes at-most-once and may skip a charge. ACK affects only write durability, not duplicates.",
+          "ref": "At-least-once"
+        },
+        {
+          "id": "c19-04-09",
+          "type": "judge",
+          "prompt": "Committing the offset after processing and having producers retry on failure is enough to achieve end-to-end exactly-once.",
+          "answer": false,
+          "explanation": "That combination gives at-least-once: a crash after processing but before the commit still causes duplicates, and producer retries can write duplicates too. Queue transactions can make a read-process-write cycle commit exactly once, but an external database or payment API still needs transactional coordination or idempotency.",
+          "ref": "Exactly-once"
+        },
+        {
+          "id": "c19-04-10",
+          "type": "single",
+          "prompt": "A consumer cares only about “refund” messages in a partition. Someone proposes a separate topic for each message type. What is the main problem?",
+          "options": [
+            "A consumer cannot subscribe to multiple topics at once",
+            "After splitting topics, ordering within each topic’s partitions is lost too",
+            "The data is stored more than once, and producers must change with consumer needs",
+            "A queue supports only a few dozen topics, which is not enough"
+          ],
+          "answer": 2,
+          "explanation": "A topic per subset duplicates storage and wastes resources, and forces producers to change whenever consumer needs change. Better to tag messages, let consumers declare the tags they subscribe to, and have the server filter. Filtering on the payload can run into encryption or serialization that is hard to parse.",
+          "ref": "Message Filtering"
+        }
+      ]
+    }
+  ]
+}

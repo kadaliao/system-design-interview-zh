@@ -1,0 +1,549 @@
+{
+  "chapter": 4,
+  "title": "Rate Limiter",
+  "fullTitle": "Chapter 4: Design a Rate Limiter",
+  "intro": [
+    "If you only know CRUD, start by thinking of a rate limiter as a doorman: when too many requests arrive, it stops them at the door so the database and business services do not get crushed. By the end, you should be able to explain where to place the limiter, how to choose an algorithm, and how distributed counting avoids errors.",
+    "Remember three questions first: **who to limit** (user, IP, or API), **how much** (per second or per minute), and **what happens on overflow** (reject, queue, or degrade). Common mistakes are limiting only in the frontend, counting only in single-machine memory, or treating “read the count, then add one” as an atomic operation."
+  ],
+  "keyPoints": [
+    "Answer three questions first: who to limit, how much, and what happens on overflow. Decide in advance whether a failing limiter allows or rejects.",
+    "A frontend limit is only a UX hint. The gate must sit on the server or gateway, and counting keys must use a verified identity.",
+    "Token bucket capacity governs bursts; the rate governs the long-term average. A leaking bucket smooths output but needs a queue limit and a maximum wait.",
+    "A fixed window has boundary bursts, a sliding log is exact but memory-hungry, and a sliding window counter saves memory but has approximation error.",
+    "With multiple gateways, run read, refill, check, and deduct in one atomic script on the same Redis. Async sync across regions can briefly oversell.",
+    "Return 429 with Retry-After; clients use backoff plus jitter. Keep monitoring allows, rejects, latency, and false positives."
+  ],
+  "refs": {
+    "Study Guide": "学习导读",
+    "Requirements": "要求（Requirements）",
+    "Step 2: High-Level Design": "第 2 步：高层设计（High-Level Design）",
+    "Benefits of Rate Limiting": "限流的好处（Benefits of Rate Limiting）",
+    "2. Leaking Bucket": "2. 漏桶（Leaking Bucket）",
+    "Step 3: Rate Limiting Algorithms": "第 3 步：限流算法（Rate Limiting Algorithms）",
+    "1. Token Bucket": "1. 令牌桶（Token Bucket）",
+    "3. Fixed Window Counter": "3. 固定窗口计数（Fixed Window Counter）",
+    "4. Sliding Window Log": "4. 滑动窗口日志（Sliding Window Log）",
+    "5. Sliding Window Counter": "5. 滑动窗口计数（Sliding Window Counter）",
+    "Quick Reference: Choosing an Algorithm": "批注：选择算法的速记表",
+    "Distributed Environments": "分布式环境（Distributed Environments）",
+    "Performance Optimizations": "性能优化（Performance Optimizations）",
+    "High-Level Architecture": "高层架构（High-Level Architecture）",
+    "Monitoring": "监控（Monitoring）"
+  },
+  "lessons": [
+    {
+      "id": "c04-01",
+      "title": "Needs & Placement",
+      "summary": "Who to limit, how much, what on excess, where",
+      "exercises": [
+        {
+          "id": "c04-01-01",
+          "type": "fill",
+          "prompt": "Complete what each of the three rate-limiting questions decides",
+          "text": "Who to limit decides the [[counting key]] (user, IP, or API key), how much decides the [[window and quota]], and what happens on overflow decides the [[overflow action]] (reject, queue, or degrade).",
+          "distractors": [
+            "storage choice",
+            "deployment location"
+          ],
+          "explanation": "Who to limit decides what you count by, how much decides the time window and quota, and what happens on overflow decides whether you return 429, queue, or degrade. Until all three are settled, no algorithm choice has a basis; storage and deployment location are implementation choices that come later.",
+          "ref": "Study Guide"
+        },
+        {
+          "id": "c04-01-02",
+          "type": "single",
+          "prompt": "A web page allows at most 10 requests per minute: the button is grayed out, a countdown is shown, and the count is stored in localStorage. Why does this not stop someone from hammering the API?",
+          "options": [
+            "The browser periodically clears the countdown automatically",
+            "Users can skip the page and call the API directly with a script",
+            "localStorage is too small to hold the count",
+            "Graying out the button hurts legitimate users"
+          ],
+          "answer": 1,
+          "explanation": "Users control the browser and scripts: they can edit JavaScript, clear localStorage, or skip the page and call the API directly. A frontend limit only improves the experience for well-behaved users. The button is a hint; the server is the gate.",
+          "ref": "Q04-01"
+        },
+        {
+          "id": "c04-01-03",
+          "type": "judge",
+          "prompt": "When a gateway limits by userId, it can use the userId that the client sends in the request parameters as the counting key.",
+          "answer": false,
+          "explanation": "Client parameters can be forged freely, so changing the userId bypasses the limit. Only a verified identity (an authenticated account, an API key, and so on) makes a trustworthy counting key.",
+          "ref": "Q04-01"
+        },
+        {
+          "id": "c04-01-04",
+          "type": "single",
+          "prompt": "Thousands of employees at one company reach your service through the same egress IP. If you limit only by IP, what is the most likely problem?",
+          "options": [
+            "Legitimate users behind the same egress get blocked together",
+            "The gateway automatically splits the count per employee",
+            "IPs cannot be spoofed, so this is the most precise dimension",
+            "Each employee is counted separately and none affects the others"
+          ],
+          "answer": 0,
+          "explanation": "With per-IP counting, all employees share one quota; when a few use a lot, everyone else gets rejected. Company and campus networks often look like this, so choose the counting dimension together with a verified account or API key.",
+          "ref": "Q04-01"
+        },
+        {
+          "id": "c04-01-05",
+          "type": "single",
+          "prompt": "The Redis behind your rate limiter goes down. For an ordinary product query and a paid risk-control API, which policies make the most sense, respectively?",
+          "options": [
+            "Lean toward allowing queries and toward rejecting on the risk-control API",
+            "Reject both, to be safe",
+            "Allow both, to stay available",
+            "Lean toward rejecting queries and toward allowing on the risk-control API"
+          ],
+          "answer": 0,
+          "explanation": "Whether to allow (fail-open) or reject (fail-closed) depends on the business. Letting a few extra ordinary queries through does little harm, so availability can come first. For a paid or risk-control API, losing control is costly, so protecting the resource comes first. Agree on this during the requirements stage.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c04-01-06",
+          "type": "match",
+          "prompt": "Match each way of implementing rate limiting with its characteristic",
+          "pairs": [
+            [
+              "Client",
+              "Can be modified or bypassed, so unreliable"
+            ],
+            [
+              "Server",
+              "Checked inside the service, strongest control"
+            ],
+            [
+              "API gateway",
+              "One central entry point for microservices"
+            ],
+            [
+              "Commercial solution",
+              "Option when team resources are limited"
+            ]
+          ],
+          "explanation": "The client is in the user's hands, so it can only give hints for the user experience. The server has the strongest control. A microservice architecture can use an API gateway to limit centrally. If the team has no capacity to build its own, consider a commercial solution.",
+          "ref": "Step 2: High-Level Design"
+        },
+        {
+          "id": "c04-01-07",
+          "type": "judge",
+          "prompt": "With application-layer rate limiting in place, you can defend on its own against an attack that exhausts network bandwidth.",
+          "answer": false,
+          "explanation": "By the time a request reaches the application layer, the bandwidth is already used up. Application-layer limiting can stop excessive calls and protect the database and billable services, but it is only one layer of defense and cannot handle a bandwidth-exhaustion attack alone.",
+          "ref": "Benefits of Rate Limiting"
+        },
+        {
+          "id": "c04-01-08",
+          "type": "judge",
+          "prompt": "The same endpoint can have two rules at once: “10 requests per user per minute” and “1,000 requests per second site-wide.”",
+          "answer": true,
+          "explanation": "The per-user rule stops a single user from hammering the endpoint, and the site-wide rule protects overall capacity. They target different risks, and a request must satisfy both to pass. This is what “support multiple throttling rules” means in the requirements.",
+          "ref": "Requirements"
+        },
+        {
+          "id": "c04-01-09",
+          "type": "multi",
+          "prompt": "When designing a rate limiter, which of the following should you clarify early as requirements?",
+          "options": [
+            "Variable names inside the Lua script",
+            "Whether to combine per-user and site-wide rules",
+            "Whether to allow or reject when the limiter fails",
+            "What identifies callers before and after authentication",
+            "Prefix naming for Redis counter keys"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "Multiple rules, the failure policy, and the limiting identifier (plus allowlists and hot rule updates) all change the design directly. Key prefixes and variable names are implementation details you settle while coding; you do not need to clarify them with the interviewer in the requirements stage.",
+          "ref": "Requirements"
+        }
+      ]
+    },
+    {
+      "id": "c04-02",
+      "title": "Bucket Algorithms",
+      "summary": "Burst capacity, average rate, steady queueing",
+      "exercises": [
+        {
+          "id": "c04-02-01",
+          "type": "single",
+          "prompt": "A token bucket has B=20 and r=5 per second. After the bucket is emptied, it sits idle for a full minute, and then 100 requests arrive at the same instant. How many can be allowed immediately?",
+          "options": [
+            "5 requests",
+            "300 requests",
+            "20 requests",
+            "100 requests"
+          ],
+          "answer": 2,
+          "explanation": "Extra tokens stop accumulating once the bucket is full: an empty bucket refills 20 tokens in about 4 seconds, and no matter how long it then idles, it holds only 20, not 5×60=300. The rate r governs the long-term average; the capacity B caps the instantaneous burst.",
+          "ref": "Q04-02"
+        },
+        {
+          "id": "c04-02-02",
+          "type": "single",
+          "prompt": "A token bucket has B=20 and r=5 per second, with continuous refill. About how long does it take to go from empty to full?",
+          "options": [
+            "About 0.2 seconds",
+            "About 1 second",
+            "About 4 seconds",
+            "About 20 seconds"
+          ],
+          "answer": 2,
+          "explanation": "20 tokens ÷ 5 per second = 4 seconds; with continuous refill, one token is added every 0.2 seconds. 0.2 seconds is only the gap between two tokens, and 20 seconds comes from wrongly assuming just 1 token per second.",
+          "ref": "Q04-02"
+        },
+        {
+          "id": "c04-02-03",
+          "type": "judge",
+          "prompt": "Setting a token bucket to r=5 per second guarantees that no one-second period ever lets through more than 5 requests.",
+          "answer": false,
+          "explanation": "A full bucket can release B requests in an instant. Over a period of length Δt, you can use at most about B + r×Δt tokens. The rate r only bounds the long-term average and does not promise at most 5 per second, which is exactly what “allows short bursts” means for a token bucket.",
+          "ref": "Q04-02"
+        },
+        {
+          "id": "c04-02-04",
+          "type": "fill",
+          "prompt": "Complete the formula for refilling tokens based on request arrival time",
+          "text": "When a request arrives, compute tokens = min([[B]], tokens + [[r × elapsed]]); there is no need to start a timer every 0.2 seconds.",
+          "distractors": [
+            "r",
+            "B × elapsed",
+            "0"
+          ],
+          "explanation": "Multiply the elapsed time by the rate r to get the refill, then cap it at the bucket capacity B; once the bucket is full, the surplus is not saved. This lazy calculation means each key stores only a token count and the last timestamp, so memory use is tiny.",
+          "ref": "Q04-02"
+        },
+        {
+          "id": "c04-02-05",
+          "type": "single",
+          "prompt": "A downstream service can sustain 50 requests per second. If upstream traffic keeps exceeding that, which token bucket settings would leave the downstream overloaded for a long time?",
+          "options": [
+            "B=50, r=45 per second",
+            "B=100, r=40 per second",
+            "B=10, r=20 per second",
+            "B=100, r=80 per second"
+          ],
+          "answer": 3,
+          "explanation": "The long-term allow rate is set by r: r=80 exceeds the downstream’s sustained 50 per second, so as long as traffic stays above the limit, the downstream stays overloaded. B only affects how big one burst can be, but it must not be so large that a single burst overwhelms the downstream either.",
+          "ref": "Q04-02"
+        },
+        {
+          "id": "c04-02-06",
+          "type": "single",
+          "prompt": "The downstream is an old payment API that can only process requests at a steady pace. The rate hitting it should be as smooth as possible, and queueing is acceptable. Which algorithm fits best?",
+          "options": [
+            "Sliding window counter",
+            "Fixed window counter",
+            "Token bucket",
+            "Leaking bucket"
+          ],
+          "answer": 3,
+          "explanation": "A leaking bucket drains a FIFO queue at a fixed rate, so its output is the smoothest. A token bucket allows bursts, a fixed window has boundary bursts, and a sliding window counter only smooths the counting; none of them guarantees a steady output. The price of a leaking bucket is that new requests queue during a burst.",
+          "ref": "2. Leaking Bucket"
+        },
+        {
+          "id": "c04-02-07",
+          "type": "judge",
+          "prompt": "Some rate limiting libraries implement a leaking-bucket-style smooth rate with a blocking call, without necessarily maintaining a real request queue.",
+          "answer": true,
+          "explanation": "The essence of a leaking bucket is a constant output rate. An implementation can block the caller until the next point in time instead of queueing explicitly. Either way, you must cap the maximum wait time rather than queue forever.",
+          "ref": "2. Leaking Bucket"
+        },
+        {
+          "id": "c04-02-08",
+          "type": "match",
+          "prompt": "Match each bucket parameter with what it controls",
+          "pairs": [
+            [
+              "Token bucket capacity",
+              "Most requests allowed in one instant"
+            ],
+            [
+              "Token refill rate",
+              "How fast it allows on long-term average"
+            ],
+            [
+              "Leaking queue limit",
+              "Most requests allowed to wait in line"
+            ],
+            [
+              "Leaking max wait",
+              "Reject after waiting too long, not forever"
+            ]
+          ],
+          "explanation": "“The size of the bucket decides how hard you can sprint; the flow rate decides how long you can keep running.” A leaking bucket drains at a fixed rate and makes requests queue during a burst, so you must limit both the queue length and the maximum wait time. It is not an unbounded queue.",
+          "ref": "Step 3: Rate Limiting Algorithms"
+        },
+        {
+          "id": "c04-02-09",
+          "type": "multi",
+          "prompt": "Which of the following statements about a token bucket are correct?",
+          "options": [
+            "New requests wait in a queue for a long time during bursts",
+            "No tuning is needed; the defaults are fine",
+            "Refill, check, and deduct must run atomically",
+            "Extra tokens stop accumulating once the bucket is full",
+            "It allows a limited short burst"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "A token bucket is capped, allows bursts, and needs atomic deduction in a distributed setting. “Long queueing during bursts” is a drawback of the leaking bucket; the token bucket’s drawback is precisely that its parameters need careful tuning.",
+          "ref": "1. Token Bucket"
+        }
+      ]
+    },
+    {
+      "id": "c04-03",
+      "title": "Window Algorithms",
+      "summary": "Fixed window, sliding log, and sliding counter",
+      "exercises": [
+        {
+          "id": "c04-03-01",
+          "type": "single",
+          "prompt": "A fixed window allows 100 requests per calendar minute. A user sends 100 requests at 12:00:59.9 and another 100 at 12:01:00.1. What happens?",
+          "options": [
+            "The window slides automatically, so only 100 are allowed",
+            "Both batches pass: about 200 requests in roughly 0.2 seconds",
+            "Each batch gets 50 requests",
+            "The second batch is rejected entirely because 100 were just allowed"
+          ],
+          "answer": 1,
+          "explanation": "The two batches fall in two different fixed minutes, and neither exceeds its quota, so about 200 requests pass within roughly 0.2 seconds. A fixed window limits calendar-aligned windows, not any continuous 60 seconds: at the moment of reset, two quotas can pile up together.",
+          "ref": "Q04-03"
+        },
+        {
+          "id": "c04-03-02",
+          "type": "judge",
+          "prompt": "A fixed window letting through twice the quota near a boundary means the counter has a bug.",
+          "answer": false,
+          "explanation": "The counter is not miscounting. The algorithm only ever promised “100 per fixed minute,” not “at most 100 in any continuous 60 seconds.” If you need the latter, switch to an algorithm such as the sliding window log.",
+          "ref": "Q04-03"
+        },
+        {
+          "id": "c04-03-03",
+          "type": "single",
+          "prompt": "A sliding window counter allows 100 requests per minute. The previous minute had 80 requests, the current minute has 30 so far, and you are 25% into the current minute. About how many requests does the estimate say are in the rolling window?",
+          "options": [
+            "110 requests",
+            "90 requests",
+            "30 requests",
+            "50 requests"
+          ],
+          "answer": 1,
+          "explanation": "The rolling 60 seconds still covers 75% of the previous minute: 30 + 80 × 75% = 90, which is below 100, so the request is allowed. 110 counts the whole previous minute. The formula assumes the previous minute’s traffic was uniform, so it is only an approximation.",
+          "ref": "5. Sliding Window Counter"
+        },
+        {
+          "id": "c04-03-04",
+          "type": "judge",
+          "prompt": "A sliding window counter assumes traffic in the previous window was evenly distributed, so it can be off when traffic is extremely clustered.",
+          "answer": true,
+          "explanation": "The formula scales the previous window’s count proportionally. If all of that window’s requests were bunched at its start or end, the scaled result is too high or too low. That is why it saves memory and is fairly smooth, but may not satisfy a strictly exact quota.",
+          "ref": "5. Sliding Window Counter"
+        },
+        {
+          "id": "c04-03-05",
+          "type": "fill",
+          "prompt": "Complete the decision steps for a sliding window log",
+          "text": "On each request, first [[purge old entries]], then [[count what remains]], and finally decide whether to record this timestamp; these steps must run atomically.",
+          "distractors": [
+            "refill tokens",
+            "reset the counter",
+            "record the timestamp"
+          ],
+          "explanation": "Remove expired timestamps first, so the count reflects the current rolling window. If the steps are not atomic, concurrent requests may all think a slot is still free. You also need to define up front whether rejected requests are recorded in the log.",
+          "ref": "4. Sliding Window Log"
+        },
+        {
+          "id": "c04-03-06",
+          "type": "match",
+          "prompt": "Match each rate limiting algorithm with its main cost",
+          "pairs": [
+            [
+              "Token bucket",
+              "Capacity must match what downstream can absorb"
+            ],
+            [
+              "Leaking bucket",
+              "Queueing delay and a queue limit"
+            ],
+            [
+              "Fixed window",
+              "Bursts at window boundaries"
+            ],
+            [
+              "Sliding log",
+              "Timestamps cost memory"
+            ],
+            [
+              "Sliding window counter",
+              "Accepts approximation error"
+            ]
+          ],
+          "explanation": "No algorithm is free: a token bucket’s bursts must be survivable downstream; a leaking bucket buys smoothness with queueing; a fixed window is cheap but has boundary bursts; a sliding log is exact but uses memory per request; a sliding window counter saves memory but is only approximate.",
+          "ref": "Quick Reference: Choosing an Algorithm"
+        },
+        {
+          "id": "c04-03-07",
+          "type": "single",
+          "prompt": "The business strictly requires “at most 100 requests in any continuous 60 seconds,” and each user’s request volume is small. Which algorithm fits best?",
+          "options": [
+            "Sliding window counter",
+            "Sliding window log",
+            "Token bucket",
+            "Fixed window counter"
+          ],
+          "answer": 1,
+          "explanation": "Only the sliding log counts any rolling window exactly; the cost is memory proportional to the number of requests, which is fine when volume is small. A fixed window has boundary bursts, a sliding window counter is approximate, and a token bucket allows controlled bursts, so none of them equals an exact rolling window.",
+          "ref": "Q04-03"
+        },
+        {
+          "id": "c04-03-08",
+          "type": "single",
+          "prompt": "An open platform gives each API key 1,000 calls per day, reset at midnight on the calendar day, and can tolerate a burst across midnight. Which algorithm is the least effort?",
+          "options": [
+            "Leaking bucket",
+            "Sliding window log",
+            "Fixed window counter",
+            "Token bucket"
+          ],
+          "answer": 2,
+          "explanation": "Resetting per day is itself fixed-window semantics: one counter plus an expiry is the cheapest implementation. A sliding log stores a timestamp per call; a token bucket refills continuously and does not reset at midnight; a leaking bucket shapes the output rate, so it does not suit a quota such as a daily total.",
+          "ref": "3. Fixed Window Counter"
+        },
+        {
+          "id": "c04-03-09",
+          "type": "judge",
+          "prompt": "A sliding window log’s memory use grows with the number of requests, because it stores a timestamp for every request in the window.",
+          "answer": true,
+          "explanation": "The more requests in the window, the more timestamps to keep. That is the price of an exact rolling window. A sliding window counter stores only two counters, for the current and previous windows, so it saves memory.",
+          "ref": "4. Sliding Window Log"
+        }
+      ]
+    },
+    {
+      "id": "c04-04",
+      "title": "Distributed Counts",
+      "summary": "Atomic checks, regions, 429, and monitoring",
+      "exercises": [
+        {
+          "id": "c04-04-01",
+          "type": "single",
+          "prompt": "Only 1 token is left for a key. Gateways A and B both read it with GET at nearly the same time and see 1, each decides to allow the request, and each writes back 0. What is the result?",
+          "options": [
+            "Redis detects the conflict and rolls one of them back",
+            "Both requests are rejected",
+            "Both are allowed, spending one more unit of quota than exists",
+            "Only the one that writes back first is allowed"
+          ],
+          "answer": 2,
+          "explanation": "The read and the write run separately, so both gateways decide based on the same stale value, both allow the request, and both write back 0, spending the quota twice. Redis does not detect this kind of read-modify-write conflict for you; make the whole check one atomic operation.",
+          "ref": "Q04-04"
+        },
+        {
+          "id": "c04-04-02",
+          "type": "single",
+          "prompt": "Which approach guarantees that “refill, check, deduct” on the same key across multiple gateways never oversells?",
+          "options": [
+            "Put it in one Lua script on the same Redis instance",
+            "Add a distributed lock around the deduct step only",
+            "Each gateway runs GET to read the balance, then SET to write it back",
+            "Each region counts independently in its own Redis"
+          ],
+          "answer": 0,
+          "explanation": "A Lua script runs atomically on Redis: A finishes and deducts to 0 before B starts checking, so B is rejected. Locking only the deduct step still lets the check use a stale value, and independent regional counts each allow requests, so the global total can be exceeded.",
+          "ref": "Q04-04"
+        },
+        {
+          "id": "c04-04-03",
+          "type": "order",
+          "prompt": "Put the steps of an atomic distributed token bucket script in order",
+          "items": [
+            "The side that owns the key reads the current time",
+            "Compute elapsed time; a clock rollback counts as 0",
+            "Refill tokens, capped at capacity B",
+            "Check there are enough tokens, then deduct",
+            "Write back tokens and time, return the result"
+          ],
+          "explanation": "One side supplies the time, so gateway A’s fast clock does not refill early and B’s slow clock does not double-count; elapsed=max(0, now−last) guards against clock rollback. Refill, check, deduct, and write must all happen in one atomic script.",
+          "ref": "Q04-04"
+        },
+        {
+          "id": "c04-04-04",
+          "type": "judge",
+          "prompt": "Storing timestamps in a Redis sorted set automatically makes the whole “purge, count, check, write” flow atomic.",
+          "answer": false,
+          "explanation": "A sorted set is just a data structure that makes it convenient to store and purge by time. Each command still runs separately, and other gateways can slip in between commands. The whole flow has to go into an atomic operation such as a Lua script.",
+          "ref": "Distributed Environments"
+        },
+        {
+          "id": "c04-04-05",
+          "type": "judge",
+          "prompt": "A Lua script’s atomicity covers only the Redis instance it runs on and does not automatically make counts across regions strongly consistent.",
+          "answer": true,
+          "explanation": "The script runs serially on a single instance. When several regions each have their own Redis, they sync through replication, and a stale count after asynchronous replication can allow requests again. A strict global quota needs a single coordinating authority or non-overlapping regional quotas.",
+          "ref": "Q04-04"
+        },
+        {
+          "id": "c04-04-06",
+          "type": "single",
+          "prompt": "A global service must keep each user strictly within 1,000 requests per day, while every region should decide locally for low latency. Which approach meets the requirement?",
+          "options": [
+            "Pre-assign each region a non-overlapping share of the quota",
+            "Count only on the client to skip cross-region calls",
+            "Each region counts independently up to 1,000",
+            "Count locally in each region and sync totals asynchronously"
+          ],
+          "answer": 0,
+          "explanation": "Split the 1,000 among regions (such as 600+400); each decides locally and the sum never exceeds the total. The cost is utilization: a region that runs out rejects requests even while another has quota left. Async syncing briefly oversells, and independent counts let every region allow 1,000.",
+          "ref": "Performance Optimizations"
+        },
+        {
+          "id": "c04-04-07",
+          "type": "fill",
+          "prompt": "Complete the response and retry convention for rate-limited requests",
+          "text": "When over the limit, the server often returns HTTP [[429]] Too Many Requests and may include [[Retry-After]]; clients retry with backoff plus [[random jitter]].",
+          "distractors": [
+            "503",
+            "Location",
+            "fixed interval"
+          ],
+          "explanation": "429 means too many requests, and Retry-After tells the client how long to wait before trying again. If all clients retry at the same moment, they create a second wave of congestion, so backoff needs random jitter to spread the retries out.",
+          "ref": "High-Level Architecture"
+        },
+        {
+          "id": "c04-04-08",
+          "type": "multi",
+          "prompt": "After a rate limiter goes live, which of the following metrics should you keep monitoring to tune the rules?",
+          "options": [
+            "Extra latency added by the limiting check",
+            "Allowed and rejected request counts",
+            "Whether the frontend countdown displays accurately",
+            "Legitimate users who get rate limited by mistake",
+            "Unit test coverage of the limiter code"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "Allowed and rejected counts show whether the rules are too loose or too tight, extra latency maps to the low-latency requirement, and false positives (such as a shared IP) show whether the counting dimension is right. A frontend countdown is only a hint, and test coverage measures code quality, not rule fit.",
+          "ref": "Monitoring"
+        },
+        {
+          "id": "c04-04-09",
+          "type": "judge",
+          "prompt": "Syncing counts between data centers with eventual consistency lowers latency, at the cost of possibly overshooting the global quota for a while.",
+          "answer": true,
+          "explanation": "Each region first decides on its local count without waiting for cross-region sync, so it is fast; but until the sync arrives, every region thinks there is still quota left and they allow requests together. To be strict, you need central coordination or pre-allocated quotas, which cost latency or utilization.",
+          "ref": "Performance Optimizations"
+        }
+      ]
+    }
+  ]
+}

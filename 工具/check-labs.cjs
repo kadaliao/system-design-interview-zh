@@ -1,11 +1,13 @@
 /** 交互实验验收：逐个实验文件在桌面与手机宽度下挂载、运行全部预设场景，检查脚本错误、横向溢出和过小文字。
  * 用法：node 工具/check-labs.cjs [--file 04-rate-limiter.js[,05-...]] [--jobs 并行数] [--theme dark] [--out 截图目录] [--write]
+ * 英文版：加 --lang en 检查 交互实验/labs/en/ 下的文件（--file 仍写文件名，如 01-scaling.js）；额外检查残留汉字和 SVG 文字溢出框。
  * 需要 playwright 或 playwright-core（PLAYWRIGHT_MODULE 指定路径）；默认使用本机 Chrome。 */
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{pathToFileURL}=require('node:url');
 const arg=(k,d)=>{const i=process.argv.indexOf(k);return i>0?process.argv[i+1]:d};
 const root=path.resolve(__dirname,'..');
-const labDir=path.join(root,'交互实验','labs');
+const lang=arg('--lang','zh');
+const labDir=path.join(root,'交互实验','labs',lang==='en'?'en':'');
 const files=(arg('--file')||fs.readdirSync(labDir).filter(f=>f.endsWith('.js')).sort().join(',')).split(',').filter(Boolean);
 const out=arg('--out',path.join(os.tmpdir(),'sd-labs-check'));
 const scenarioTimeout=+arg('--timeout',60000);
@@ -27,7 +29,7 @@ fs.mkdirSync(out,{recursive:true});
         const errors=[];
         page.on('pageerror',e=>errors.push('pageerror: '+e.message));
         page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')errors.push(m.type()+': '+m.text())});
-        const url=pathToFileURL(path.join(root,'交互实验','preview.html')).href+'?file='+encodeURIComponent(file)+(theme?'&theme='+theme:'');
+        const url=pathToFileURL(path.join(root,'交互实验','preview.html')).href+'?file='+encodeURIComponent((lang==='en'?'en/':'')+file)+(lang==='en'?'&lang=en':'')+(theme?'&theme='+theme:'');
         await page.goto(url);
         await page.waitForFunction(()=>window.__labsReady===true,null,{timeout:15000});
         await page.waitForTimeout(400);
@@ -87,6 +89,25 @@ fs.mkdirSync(out,{recursive:true});
           }}
           return {pageScroll:document.documentElement.scrollWidth>innerWidth,overflow,tiny,tinySamples};
         });
+        // 英文版：不得残留汉字；SVG 里的文字不得超出所在的框（英文通常比中文更长）
+        const en=lang==='en'?await page.evaluate(()=>{
+          const han=/[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]/;
+          const hanTexts=[...document.querySelectorAll('.sdl-frame *')].filter(e=>[...e.childNodes].some(n=>n.nodeType===3&&han.test(n.textContent))).map(e=>e.textContent.trim().slice(0,30));
+          const over=[];
+          for(const svg of document.querySelectorAll('.sdl-frame svg')){
+            const rects=[...svg.querySelectorAll('rect')].filter(r=>r.getAttribute('width')>20&&r.getAttribute('height')>14).map(r=>r.getBBox());
+            for(const t of svg.querySelectorAll('text')){
+              if(!t.textContent.trim())continue;const b=t.getBBox();if(!b.width)continue;
+              const cx=b.x+b.width/2,cy=b.y+b.height/2;
+              const box=rects.filter(r=>cx>=r.x&&cx<=r.x+r.width&&cy>=r.y&&cy<=r.y+r.height).sort((a,c)=>a.width*a.height-c.width*c.height)[0];
+              if(box&&(b.x<box.x-1||b.x+b.width>box.x+box.width+1))over.push(t.textContent.trim().slice(0,30)+' ('+Math.round(b.x+b.width-box.x-box.width)+'px)');
+            }
+          }
+          return {hanTexts,over};
+        }):{hanTexts:[],over:[]};
+        if(en.hanTexts.length||en.over.length)failed=true;
+        for(const t of en.hanTexts.slice(0,5))errors.push('残留汉字: '+t);
+        for(const t of en.over.slice(0,8))errors.push('SVG 文字超出框: '+t);
         const shots=[];
         for(let li=0;li<labs.length;li++){const shot=path.join(out,labs[li].id+'-'+vp.name+(theme?'-'+theme:'')+'.png');await page.locator('.sd-lab').nth(li).screenshot({path:shot});shots.push(shot)}
         const shot=shots.join(',');
@@ -105,7 +126,7 @@ fs.mkdirSync(out,{recursive:true});
     await Promise.all(Array.from({length:workers},async()=>{while(next<jobs.length){const j=jobs[next++];try{await runJob(j)}catch(e){failed=true;report.push({file:j.file,viewport:j.vp.name,crash:String(e)});console.log(`✗ ${j.file} [${j.vp.name}] 检查中断：${e.message}`)}}}));
     report.sort((a,b)=>a.file.localeCompare(b.file)||a.viewport.localeCompare(b.viewport));
   }finally{await browser.close()}
-  if(process.argv.includes('--write')){
+  if(process.argv.includes('--write')&&lang==='zh'){
     const slim=report.map(r=>({...r,screenshot:r.screenshot.split(',').map(x=>path.basename(x))}));
     fs.writeFileSync(path.join(root,'校验','交互实验检查.json'),JSON.stringify(slim,null,2)+'\n');
   }

@@ -1,0 +1,619 @@
+{
+  "chapter": 18,
+  "title": "Google Maps",
+  "fullTitle": "Chapter 18: Google Maps",
+  "intro": [
+    "**How to read this chapter**: Split a map product into three independent paths: **location reporting, map tiles, and navigation routes**. Plain CRUD table queries still help, but a map can’t be downloaded whole, and routing can’t scan every road in the world each time. Remember three rules: cut images into tiles, cut roads into subgraphs, and store locations by time."
+  ],
+  "keyPoints": [
+    "A map splits into three paths: batched location reports, static tiles via a CDN, and routing over layered routing tiles, each sized to its own load.",
+    "Reporting QPS depends on the batch interval: 5 billion navigation minutes a day is about 200,000 QPS, peaking near 1 million. Size each path separately.",
+    "Location data is write-heavy and stales fast: Cassandra favors availability, the partition key adds a time bucket, and Kafka feeds traffic and ETA.",
+    "Each zoom level multiplies tiles by 4, yet a screen needs only ten or so. Static tiles are pre-generated and served by a CDN; vector tiles save bandwidth.",
+    "Image tiles are for seeing, routing tiles for computing. Long trips use high-level tiles; aim for accurate, reasonably fast routes, not global shortest.",
+    "To reroute around an incident, filter candidates with coarse tiles, then check the actual path. Use WebSocket for continuous traffic pushes."
+  ],
+  "refs": {
+    "Step 1: Understand the Problem and Establish Design Scope": "第一步：理解问题并确定范围",
+    "From 3D to 2D": "从三维到二维",
+    "Geocoding": "地理编码（Geocoding）",
+    "Map Rendering": "地图渲染（Map Rendering）",
+    "Processing Road Data into a Routing Graph": "将道路数据处理为导航图",
+    "Non-Functional Requirements": "非功能需求",
+    "Back-of-the-Envelope Estimation": "粗略估算",
+    "Location Service": "位置服务（Location Service）",
+    "Location Service#2": "位置服务",
+    "Map Rendering#2": "地图渲染",
+    "Map Rendering#3": "地图渲染#2",
+    "Navigation Service": "导航服务（Navigation Service）",
+    "Navigation Service#2": "导航服务",
+    "Routing Tiles": "路由瓦片",
+    "Geocoding Database": "地理编码数据库",
+    "Improvement: Dynamic ETA and Rerouting": "改进：动态 ETA 与重新规划",
+    "Data Delivery Protocol": "数据下发协议"
+  },
+  "lessons": [
+    {
+      "id": "c18-01",
+      "title": "Scope and Maps",
+      "summary": "Scope, projections, geocoding, and the road graph",
+      "exercises": [
+        {
+          "id": "c18-01-01",
+          "type": "single",
+          "prompt": "The interviewer asks whether business places, photos, and multi-stop routes are in scope. Given the scope this chapter sets, which of these **still needs** to be designed?",
+          "options": [
+            "Showing photos and reviews of business places",
+            "Planning a ride-hailing route through several stops in order",
+            "Estimating ETA with real-time traffic",
+            "Searching for restaurants near the user"
+          ],
+          "answer": 2,
+          "explanation": "The scope explicitly includes real-time traffic, because ETAs are inaccurate without it. Multi-stop routes are only a possible extension mentioned in the wrap-up, and business places and photos are excluded. Nearby restaurant search depends on business place data, so it is out of scope too.",
+          "ref": "Step 1: Understand the Problem and Establish Design Scope"
+        },
+        {
+          "id": "c18-01-02",
+          "type": "judge",
+          "prompt": "On a Web Mercator map, two points 1 cm apart on screen are the same real-world distance apart, whether near the equator or at high latitudes.",
+          "answer": false,
+          "explanation": "Projections almost always distort area and distance, and Mercator-style projections magnify more the closer you get to the poles. Compute exact distances from latitude and longitude with a suitable geographic algorithm, not by subtracting screen pixels.",
+          "ref": "From 3D to 2D"
+        },
+        {
+          "id": "c18-01-03",
+          "type": "fill",
+          "prompt": "Complete the two opposite conversions",
+          "text": "[[geocoding]] converts an address to latitude and longitude, and [[reverse geocoding]] converts latitude and longitude to an address.",
+          "distractors": [
+            "map projection",
+            "geohash",
+            "tile rendering"
+          ],
+          "explanation": "Users type addresses, but routing algorithms need coordinates, so you geocode before navigating. Showing a location fix as a street address takes reverse geocoding. Both can use a GIS mapping between streets and coordinates, then interpolate to estimate where an address falls.",
+          "ref": "Geocoding"
+        },
+        {
+          "id": "c18-01-04",
+          "type": "single",
+          "prompt": "Why does a map client split the world into tiles and download them on demand instead of downloading the whole map at once?",
+          "options": [
+            "Tiles carry the road graph, so the client can route offline",
+            "The full map is petabytes, so the client fetches only the few tiles in view",
+            "Tiles let the server render each request in real time",
+            "Tiling removes projection distortion, so distances are more accurate"
+          ],
+          "answer": 1,
+          "explanation": "The world’s tiles are estimated at about 70 PB, which a client can neither store nor should download; like a mosaic, it fetches only the few pieces on screen. Tiling does not change projection distortion, image tiles are only for “seeing”, and per-request real-time rendering is exactly what the chapter’s design did not choose.",
+          "ref": "Map Rendering"
+        },
+        {
+          "id": "c18-01-05",
+          "type": "match",
+          "prompt": "Match each concept with its meaning in a map system",
+          "pairs": [
+            [
+              "Intersection",
+              "A node in the road graph"
+            ],
+            [
+              "Road",
+              "An edge in the road graph"
+            ],
+            [
+              "Image tile",
+              "Pixels or vectors shown to the user"
+            ],
+            [
+              "Routing tile",
+              "Intersections, roads, and rules for routing"
+            ],
+            [
+              "Map projection",
+              "Turns spherical coordinates into a flat plane"
+            ]
+          ],
+          "explanation": "The road network is modeled as a graph: intersections are nodes and roads are edges. Image tiles are for “seeing” and routing tiles are for “computing”, so they are different things. A projection turns three-dimensional coordinates into a flat plane and almost always distorts some geometric properties.",
+          "ref": "Processing Road Data into a Routing Graph"
+        },
+        {
+          "id": "c18-01-06",
+          "type": "single",
+          "prompt": "Why doesn’t the navigation service run Dijkstra or A* directly on the complete global road graph?",
+          "options": [
+            "Search cost grows with graph size, so loading the whole graph each time is too expensive",
+            "One-way streets are directed edges, which Dijkstra cannot handle",
+            "The global road graph contains cycles, so the algorithm never terminates",
+            "Dijkstra and A* can only handle a graph within one city"
+          ],
+          "answer": 0,
+          "explanation": "The algorithms can handle large graphs; the problem is scale. Searching global roads for every request would exhaust memory and bandwidth, so the graph is split into routing tiles and only the subgraph for the route is loaded. Cycles do not stop Dijkstra from terminating, and one-way streets are just directed edges.",
+          "ref": "Processing Road Data into a Routing Graph"
+        },
+        {
+          "id": "c18-01-07",
+          "type": "judge",
+          "prompt": "Routing tiles store references to adjacent tiles, so a search can start from the tile containing the origin and load and stitch together neighboring tiles on demand.",
+          "answer": true,
+          "explanation": "That is exactly how routing tiles are used. Instead of preloading the whole graph, you stitch together the tiles you need along the search direction, loading only data relevant to the route and cutting memory and bandwidth.",
+          "ref": "Processing Road Data into a Routing Graph"
+        },
+        {
+          "id": "c18-01-08",
+          "type": "single",
+          "prompt": "You drive from Shanghai to Beijing. What goes wrong if the whole trip stitches together the finest-grained routing tiles, and how does the chapter’s design handle it?",
+          "options": [
+            "Fine tiles get directions wrong; compute routes from image tiles instead",
+            "Fine tiles cannot span provinces; load the full national road graph",
+            "Fine tiles lack highway data; compare geohashes directly",
+            "Too many fine tiles is costly; pick coarser routing tile levels by distance"
+          ],
+          "answer": 3,
+          "explanation": "Stitching many fine tiles over a long route is expensive, so routing tiles are prepared at several levels of detail and chosen by distance. It is like taking the highway first and expanding local roads only near the start and destination. Loading the full national road graph is exactly what routing tiles exist to avoid.",
+          "ref": "Processing Road Data into a Routing Graph"
+        },
+        {
+          "id": "c18-01-09",
+          "type": "judge",
+          "prompt": "During navigation, you can compute routes directly from the image tiles the client has already downloaded, with no separate routing tiles.",
+          "answer": false,
+          "explanation": "Image tiles hold only pixels or vector graphics for display. Routing needs intersections, road connections, and traffic rules, which live in routing tiles. The names are similar but the jobs differ: one is for “seeing”, the other for “computing”.",
+          "ref": "Processing Road Data into a Routing Graph"
+        },
+        {
+          "id": "c18-01-10",
+          "type": "multi",
+          "prompt": "Which of these are non-functional requirements in this chapter?",
+          "options": [
+            "Save mobile data and battery wherever possible",
+            "Strong consistency for all location data",
+            "Accuracy: never give the user wrong directions",
+            "Guarantee every route is the mathematically global shortest",
+            "Smooth map rendering"
+          ],
+          "answers": [
+            0,
+            2,
+            4
+          ],
+          "explanation": "The non-functional requirements are accuracy, smooth rendering, and saving data and battery, plus ordinary availability and scalability. Navigation only needs routes that are “reasonably fast”, not a guaranteed global shortest. Location data goes stale quickly, so the chapter picks availability over strong consistency.",
+          "ref": "Non-Functional Requirements"
+        }
+      ]
+    },
+    {
+      "id": "c18-02",
+      "title": "Location Reporting",
+      "summary": "Estimation, batch uploads, and Cassandra modeling",
+      "exercises": [
+        {
+          "id": "c18-02-01",
+          "type": "single",
+          "prompt": "With 1 billion DAU, each person uses navigation 35 minutes per week. How many minutes of navigation do all users accumulate per day?",
+          "options": [
+            "About 3.5 billion minutes",
+            "About 5 billion minutes",
+            "About 35 billion minutes",
+            "About 500 million minutes"
+          ],
+          "answer": 1,
+          "explanation": "1 billion × 35 minutes ÷ 7 days = 5 billion minutes per day. 35 billion is the weekly total, from forgetting to divide by 7; 500 million is off by a factor of 10. This number is the starting point for estimating the reporting QPS later.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c18-02-02",
+          "type": "single",
+          "prompt": "A map service logs about 5 billion minutes of navigation per day. If clients upload their locations in one batch every 15 seconds, and you approximate a day as 100,000 seconds, what is the average write QPS?",
+          "options": [
+            "About 200,000",
+            "About 50,000",
+            "About 3 million"
+          ],
+          "answer": 0,
+          "explanation": "That is 4 batches per minute, so 5 billion × 4 = 20 billion per day; ÷ 100,000 seconds ≈ 200,000 QPS, matching the chapter’s estimate. Uploading every second would give 5 billion × 60 ÷ 100,000 = 3 million QPS, and once a minute about 50,000, so the batch interval directly sets the QPS.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c18-02-03",
+          "type": "judge",
+          "prompt": "Location reporting QPS is determined only by DAU and usage time, regardless of how often clients submit a batch.",
+          "answer": false,
+          "explanation": "With the same usage time, uploading every second versus every 15 seconds changes the request count 15-fold. QPS depends on the batch interval and the number of points per batch, and the chapter’s estimate skips that derivation.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c18-02-04",
+          "type": "single",
+          "prompt": "The chapter’s estimate files GPS reporting under “navigation requests” and arrives at about 200,000 QPS, with a peak of about 1 million. What is the more rigorous approach?",
+          "options": [
+            "Estimate navigation requests, GPS reports, and tile downloads separately",
+            "Estimate only tile downloads; GPS volume can be ignored",
+            "Always take the peak as 10 times the average, with no need to split",
+            "Merge the three request types into one total QPS for planning"
+          ],
+          "answer": 0,
+          "explanation": "The three request types differ in frequency, payload, and the component that serves them: GPS reports go to the location service, tiles come from the CDN, and navigation requests need route computation. Lumping them together distorts capacity planning. The chapter’s peak is about 5 times the average, not a fixed 10 times.",
+          "ref": "Back-of-the-Envelope Estimation"
+        },
+        {
+          "id": "c18-02-05",
+          "type": "multi",
+          "prompt": "Why is Cassandra a reasonable choice for storing user locations?",
+          "options": [
+            "Locations go stale fast, so availability matters more than strong consistency",
+            "It supports cross-table transactions, so writes are absolutely accurate",
+            "It can look up latitude and longitude directly from an address",
+            "Write volume is huge, and Cassandra excels at high write throughput",
+            "Reads dominate writes, which suits a hot cache"
+          ],
+          "answers": [
+            0,
+            3
+          ],
+          "explanation": "The chapter gives just two reasons: location data is write-heavy and goes stale quickly, so a NoSQL store that excels at high write throughput and favors availability fits. Looking up coordinates by address and read-heavy access are traits of the Redis-backed geocoding database. Cross-table transactions are not needed here.",
+          "ref": "Location Service#2"
+        },
+        {
+          "id": "c18-02-06",
+          "type": "judge",
+          "prompt": "In a batch upload, every location point must carry its own timestamp, because the time the server receives the batch is not the time each point was captured.",
+          "answer": true,
+          "explanation": "The API takes an array of (latitude, longitude, timestamp) tuples. The client accumulates points for a while before uploading, so receipt time is later than capture time. Event time and receive time must be kept apart, or trajectories and traffic analysis get out of sync.",
+          "ref": "Location Service"
+        },
+        {
+          "id": "c18-02-07",
+          "type": "single",
+          "prompt": "The Cassandra location table uses `user_id` as the partition key and `timestamp` as the clustering key. Which query does this design support most directly?",
+          "options": [
+            "All users on a given road segment at one moment",
+            "Reading one user’s location trail in time order",
+            "Looking up latitude and longitude by address",
+            "Counting the vehicles currently in each tile"
+          ],
+          "answer": 1,
+          "explanation": "The partition key keeps one user’s data together and the clustering key orders it by time, so fetching one user’s trail over a time range is the most efficient query. Finding users by segment or tile needs a separate index or stream processing, and address lookup belongs to the geocoding database.",
+          "ref": "Location Service#2"
+        },
+        {
+          "id": "c18-02-08",
+          "type": "single",
+          "prompt": "If the location table uses only `user_id` as the partition key, what problem appears after several years, and what fix works?",
+          "options": [
+            "Too many partitions keep Kafka from consuming; use a single partition",
+            "The clustering key makes writes fail out of order; drop timestamp",
+            "Old users’ trails pile up into huge partitions; use a (user_id, day) time bucket",
+            "One user’s points scatter across nodes; use timestamp as the partition key"
+          ],
+          "answer": 2,
+          "explanation": "With the partition key unchanged, one user’s data keeps growing over the years into a huge partition. Adding a daily time bucket caps each partition’s size. Using only timestamp as the partition key would pile writes from the same moment into hot partitions, and reading one user’s trail would span many partitions.",
+          "ref": "Location Service#2"
+        },
+        {
+          "id": "c18-02-09",
+          "type": "fill",
+          "prompt": "Complete the key components of the location reporting path",
+          "text": "Clients upload location points [[in batches]] to cut request overhead; the server writes to [[Cassandra]], which excels at high write throughput, and streams locations downstream through [[Kafka]] for analysis.",
+          "distractors": [
+            "one by one",
+            "Redis",
+            "CDN"
+          ],
+          "explanation": "Batching cuts request overhead and battery use, Cassandra absorbs the high write rate, and Kafka fans the same location stream out to downstream services such as traffic and ETA. In this chapter Redis serves the read-heavy geocoding data, and the CDN distributes tiles.",
+          "ref": "Location Service"
+        },
+        {
+          "id": "c18-02-10",
+          "type": "order",
+          "prompt": "Put the flow of location data, from the phone to downstream analysis, in order",
+          "items": [
+            "The client accumulates several GPS points locally",
+            "One request uploads the batch to the location service",
+            "The location service writes the location stream to Kafka",
+            "Traffic, ETA, and other services consume the stream"
+          ],
+          "explanation": "The client first accumulates points, then calls POST /v1/locations with a batch. Besides persisting to Cassandra, the location service writes the data to Kafka, where the traffic update and ETA services each consume it to monitor road conditions and detect closures.",
+          "ref": "Location Service#2"
+        }
+      ]
+    },
+    {
+      "id": "c18-03",
+      "title": "Map Tiles",
+      "summary": "Tile counts, on-demand fetching, and CDN delivery",
+      "exercises": [
+        {
+          "id": "c18-03-01",
+          "type": "fill",
+          "prompt": "Complete the two basic tile numbers",
+          "text": "At the lowest zoom level, a single [[256×256]] tile covers the whole world; each zoom level up, the total number of tiles becomes [[4 times]] what it was.",
+          "distractors": [
+            "512×512",
+            "2 times",
+            "8 times"
+          ],
+          "explanation": "Each level up splits the map in half horizontally and vertically, so one tile becomes four: 4 times, not 2 times. That also shows why the tile count at high levels is enormous and tiles must be fetched on demand.",
+          "ref": "Map Rendering#3"
+        },
+        {
+          "id": "c18-03-02",
+          "type": "single",
+          "prompt": "Call the lowest zoom level level 0, where one tile covers the whole world. How many tiles are there at level 3?",
+          "options": [
+            "64 tiles",
+            "12 tiles",
+            "256 tiles",
+            "16 tiles"
+          ],
+          "answer": 0,
+          "explanation": "Each level multiplies by 4: level 0 has 1 tile, level 1 has 4, level 2 has 16, and level 3 has 64, which is 4^3. 12 treats the exponential growth as 4 × 3, and 16 counts one level too few.",
+          "ref": "Map Rendering#3"
+        },
+        {
+          "id": "c18-03-03",
+          "type": "single",
+          "prompt": "The total number of tiles in the world grows 4 times per zoom level. Why doesn’t client traffic explode along with it?",
+          "options": [
+            "Tiles at higher zoom levels have lower resolution and are smaller",
+            "The client downloads only the ten or so tiles the current view and level need",
+            "The CDN merges high-level tiles into one before sending",
+            "The client ships with tiles for every level preinstalled"
+          ],
+          "answer": 1,
+          "explanation": "The tile total covers the whole world, while the screen covers only a small piece of it, so any level needs just ten or so tiles. Every tile is 256×256, so tiles at higher levels are not smaller, just covering less ground. Preinstalling all tiles is impractical, since the total is petabytes.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-04",
+          "type": "multi",
+          "prompt": "Which actions make the client fetch new map tiles?",
+          "options": [
+            "The client reports a batch of GPS locations",
+            "The server re-ranks candidate routes",
+            "Navigation enters a new tile area",
+            "The user pans the map",
+            "The user zooms the map"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "Tiles are fetched on demand by position and zoom level. Zooming changes the level, and panning or moving along the route changes the position, so both need new tiles. GPS reporting goes to the location service and route ranking happens inside the navigation service; neither triggers a tile download.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-05",
+          "type": "single",
+          "prompt": "Why did the chapter’s design choose pre-generated static tiles over generating map images dynamically for each request?",
+          "options": [
+            "Static tiles can be cached and reused by the CDN, avoiding repeated rendering",
+            "Static tiles update automatically with live traffic, so data is fresher",
+            "Dynamically generated images distort the projection more, so are less precise",
+            "Static tiles spare the client from computing any tile identifiers"
+          ],
+          "answer": 0,
+          "explanation": "The same tile is requested by huge numbers of users. Pre-generated and cached on the CDN, it is served from a nearby edge node (POP). Dynamic rendering burns server time on every request and is hard to cache. Static tiles do not reflect traffic automatically, and they require a tile identifier to be computed first.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-06",
+          "type": "judge",
+          "prompt": "When the user pans the map back and forth, every tile to be displayed must go back to the origin server to be regenerated.",
+          "answer": false,
+          "explanation": "Tiles are pre-generated static files served from nearby CDN edge nodes, and when you pan back to an area you just viewed, the client may even use its local cache. Only dynamic generation would need to render every time.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-07",
+          "type": "single",
+          "prompt": "The team expects to change the tile numbering scheme later but cannot force every user to upgrade the app. Which way of determining tile URLs fits better?",
+          "options": [
+            "The client downloads every tile of that zoom level",
+            "A server API computes the tile URLs and returns them to the client",
+            "The client embeds the numbering algorithm; new rules ship in new versions",
+            "The server renders the whole map image on each request"
+          ],
+          "answer": 1,
+          "explanation": "Having the server compute URLs costs one extra request, but a rule change takes effect on the server alone. A built-in client algorithm saves a request, but old app versions linger, so the numbering rules must stay compatible forever. Real-time rendering and downloading a whole level are approaches already ruled out.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-08",
+          "type": "single",
+          "prompt": "The chapter loosely calls tile identifiers “geohash”. Which understanding is correct?",
+          "options": [
+            "With geohash you no longer need to distinguish zoom levels",
+            "Geohash and z/x/y are fully equivalent and interchangeable",
+            "Common web tiles are numbered z/x/y; what matters is that both ends agree",
+            "Once tiles are on the CDN, each client version can choose its own numbering"
+          ],
+          "answer": 2,
+          "explanation": "A geohash is an alphanumeric string from recursive quadrant splitting, while common tiles are numbered by z (zoom), x, and y, so the two are not equivalent. What matters is that client and server share one numbering system; CDN tiles are stored under one scheme, so a client choosing its own would fetch the wrong tiles.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-09",
+          "type": "match",
+          "prompt": "Match each tile delivery approach with its characteristic",
+          "pairs": [
+            [
+              "Dynamic rendering",
+              "Rendered per request; high load, hard to cache"
+            ],
+            [
+              "Static tiles",
+              "Pre-rendered images fetched by identifier"
+            ],
+            [
+              "CDN edge nodes",
+              "Serve tiles from nearby, cutting latency"
+            ],
+            [
+              "Vector tiles",
+              "Send paths and polygons; client renders"
+            ]
+          ],
+          "explanation": "Dynamic rendering burns server time and is hard to cache. Static tiles are pre-rendered images fetched by identifier. The CDN serves them from a nearby POP. Vector tiles send paths and polygons for the client to draw instead of whole images, saving significant bandwidth.",
+          "ref": "Map Rendering#2"
+        },
+        {
+          "id": "c18-03-10",
+          "type": "judge",
+          "prompt": "Large areas of similar tiles, such as deserts, compress very well, and the chapter’s estimate of about 70 PB of tile storage already accounts for this.",
+          "answer": true,
+          "explanation": "When estimating the world’s tiles, the chapter takes into account that tiles like deserts compress to very small sizes, arriving at about 70 PB. Metadata is comparatively tiny and can be ignored. Even compressed it is petabytes, so tiles stay on the server and are delivered on demand.",
+          "ref": "Back-of-the-Envelope Estimation"
+        }
+      ]
+    },
+    {
+      "id": "c18-04",
+      "title": "Navigation and ETA",
+      "summary": "Route services, dynamic ETA, and push updates",
+      "exercises": [
+        {
+          "id": "c18-04-01",
+          "type": "order",
+          "prompt": "Put the server-side steps of one navigation request in order",
+          "items": [
+            "Geocode the origin and destination addresses",
+            "Find the routing tiles for origin and destination",
+            "Load neighboring tiles on demand while searching",
+            "The ETA service times candidate routes with traffic"
+          ],
+          "explanation": "Routing algorithms need coordinates, so geocoding comes first. Next, spatial identifiers locate the origin and destination tiles. An A* variant traverses from the origin tile until it finds a good enough route to the destination tile. The route planner then calls the ETA service, which uses traffic and machine learning.",
+          "ref": "Navigation Service#2"
+        },
+        {
+          "id": "c18-04-02",
+          "type": "single",
+          "prompt": "For classic A* to guarantee an optimal route, what condition must the heuristic function (the estimate of remaining cost) satisfy?",
+          "options": [
+            "It must be computed from screen pixel distance",
+            "It must never overestimate the remaining cost to the destination",
+            "It must include live traffic",
+            "It must never underestimate the remaining cost to the destination"
+          ],
+          "answer": 1,
+          "explanation": "If the heuristic never overestimates, A* will not miss the truly optimal route by pricing a path too high; underestimating only expands more nodes. Traffic weights or hierarchical approximation usually lose this guarantee, so the chapter promises only routes that are “accurate and drivable, reasonably fast”.",
+          "ref": "Navigation Service#2"
+        },
+        {
+          "id": "c18-04-03",
+          "type": "judge",
+          "prompt": "This chapter’s navigation service promises to always return the mathematically globally shortest route.",
+          "answer": false,
+          "explanation": "The chapter tolerates a little latency, and routes need not be absolutely fastest, but directions and traffic rules must be accurate. Hierarchical routing tiles and weights that change with traffic are approximations, so the goal is stated as “accurate and drivable, reasonably fast”.",
+          "ref": "Navigation Service"
+        },
+        {
+          "id": "c18-04-04",
+          "type": "match",
+          "prompt": "Match each service in the navigation subsystem with its responsibility",
+          "pairs": [
+            [
+              "Geocoding service",
+              "Converts between addresses and coordinates"
+            ],
+            [
+              "Shortest path service",
+              "Runs an A* variant on routing tiles"
+            ],
+            [
+              "ETA service",
+              "Estimates time from traffic and machine learning"
+            ],
+            [
+              "Ranking service",
+              "Ranks routes by preferences like avoiding tolls"
+            ],
+            [
+              "Updater service",
+              "Refreshes key databases asynchronously"
+            ]
+          ],
+          "explanation": "The route planner is the coordinator. It gets coordinates from geocoding, calls the shortest path service for candidate routes, asks the ETA service for times, and has the ranking service order routes by user criteria. The updater service refreshes important data asynchronously in the background.",
+          "ref": "Navigation Service#2"
+        },
+        {
+          "id": "c18-04-05",
+          "type": "fill",
+          "prompt": "Complete how routing tiles are produced and stored",
+          "text": "Routing tiles are generated periodically by an [[offline pipeline]] from multiple road data sources, compressed into binary files, and stored in [[object storage]] with aggressive caching.",
+          "distractors": [
+            "stream processing",
+            "Cassandra",
+            "Redis"
+          ],
+          "explanation": "Routing tiles are generated periodically and read whole, needing no database transactions or queries, so object storage like S3 plus caching fits best. Cassandra takes the write-heavy location data, and Redis serves the read-heavy geocoding.",
+          "ref": "Routing Tiles"
+        },
+        {
+          "id": "c18-04-06",
+          "type": "single",
+          "prompt": "The geocoding database is read-heavy with few writes, and the chapter uses Redis to speed up reads. What is the limit of this choice?",
+          "options": [
+            "Redis is a poor fit for read-heavy workloads",
+            "Key-value mapping oversimplifies; real lookups need text indexing and disambiguation",
+            "Redis cannot persist, so all mappings are lost on restart",
+            "Geocoding has heavy writes, so it must use Cassandra instead"
+          ],
+          "answer": 1,
+          "explanation": "A key-value mapping suits exact lookups of “which coordinates does this address have”. Real users misspell, use aliases, and hit duplicate address names, and reverse spatial queries exist too, all of which need text indexing, aliases, and disambiguation. Read-heavy is exactly where Redis fits, and it supports persistence.",
+          "ref": "Geocoding Database"
+        },
+        {
+          "id": "c18-04-07",
+          "type": "single",
+          "prompt": "A tile has an accident. For each navigating user, the system stores the origin tile and its successive parent tiles, up to one that covers the destination. A user’s final covering tile contains the accident tile. What should happen next?",
+          "options": [
+            "Nothing; a parent tile hit means the route avoids the accident",
+            "Mark the user as a candidate, then check whether the actual route passes the accident",
+            "Immediately push a reroute to the user",
+            "Clear the user’s cached routing tiles"
+          ],
+          "answer": 1,
+          "explanation": "A large parent tile containing the accident only means the user may be affected; the route may not pass through it. Pushing without verifying would make many unaffected users reroute constantly. After confirming who is affected, notify the user if a faster candidate route exists.",
+          "ref": "Improvement: Dynamic ETA and Rerouting"
+        },
+        {
+          "id": "c18-04-08",
+          "type": "judge",
+          "prompt": "Storing only the origin tile and its successive parent tiles takes less storage than storing every tile the route passes through.",
+          "answer": true,
+          "explanation": "A route may cross many fine tiles, while a few levels of parent tiles cover the destination, so storage is far smaller. The cost is coarseness: a hit only means possibly affected, and the actual path must still be checked. A tile → active routes inverted index can also reduce scanning.",
+          "ref": "Improvement: Dynamic ETA and Rerouting"
+        },
+        {
+          "id": "c18-04-09",
+          "type": "single",
+          "prompt": "During navigation the server must keep pushing traffic changes and reroute suggestions to clients. Which channel does this chapter favor?",
+          "options": [
+            "WebSocket: lower overhead than repeated long polling, and two-way for extensions",
+            "Long polling: simplest to implement and lowest server overhead",
+            "SSE: one-way push is enough, and simpler than WebSocket",
+            "Mobile push notifications: system-level delivery for frequent navigation data"
+          ],
+          "answer": 0,
+          "explanation": "Mobile push payloads are limited and unsuited to continuous navigation data, long polling repeatedly sets up requests at higher overhead, and SSE only pushes one way. WebSocket wins because its two-way channel can also support extensions such as last-mile delivery.",
+          "ref": "Data Delivery Protocol"
+        },
+        {
+          "id": "c18-04-10",
+          "type": "single",
+          "prompt": "Dynamic ETA and rerouting need to know where traffic is building up. Where does this real-time traffic information mainly come from?",
+          "options": [
+            "Map image tiles cached on clients",
+            "Tile access logs on CDN edge nodes",
+            "The location stream continuously reported by navigating users",
+            "Address aliases in the geocoding database"
+          ],
+          "answer": 2,
+          "explanation": "The location stream from the location service can improve ETA, monitor traffic, and detect closures; Kafka feeds it to downstream services such as traffic. Many users’ speeds are the traffic signal, linking the location path to the navigation path. Address aliases, tile logs, and cached image tiles say nothing about speed.",
+          "ref": "Location Service"
+        }
+      ]
+    }
+  ]
+}

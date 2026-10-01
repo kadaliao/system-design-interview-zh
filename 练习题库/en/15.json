@@ -1,0 +1,557 @@
+{
+  "chapter": 15,
+  "title": "Google Drive",
+  "fullTitle": "Chapter 15: Design Google Drive",
+  "intro": [
+    "**How to read this chapter**: Think of a cloud drive as a file-content warehouse, a file-directory database, and a change-notification service. Your CRUD experience carries over to the metadata, but large files, cross-device sync, and failure recovery need extra design. Remember four lines: **store content as blocks and manage the directory separately; upload only the changed blocks; keep a copy when edits conflict.** The goal of this chapter is to explain how one upload ends up as a file on another device."
+  ],
+  "keyPoints": [
+    "A drive = block store + metadata directory + change notifications: blocks go to object storage, the directory to a database, and each scales on its own.",
+    "Files are split into blocks of at most 4 MB and identified by hash, which enables resumable uploads, delta sync, and block-level deduplication.",
+    "Chunk on the client to save upstream bandwidth: send the block list, then upload only missing blocks. Chunking on a block server saves only the hop to S3.",
+    "A successful upload is a state transition: verify blocks and checksums, then atomically publish pending as uploaded. Keep the callback idempotent.",
+    "Conflicts are caught by a conditional update on base_version: the first request the server handles wins; the other is kept as a conflicted copy.",
+    "A notification only says “changed”; the client then fetches the delta. Notifications can be lost, so add version numbers, a cursor, and full re-sync."
+  ],
+  "refs": {
+    "Non-Functional Requirements": "非功能需求",
+    "Constraints and Assumptions": "约束与假设",
+    "Moving to Distributed Systems": "迁移到分布式系统（Moving to Distributed Systems）",
+    "Single-Server Setup": "单服务器方案（Single-Server Setup）",
+    "API": "API",
+    "Improvements": "改进",
+    "Improved Design": "改进后的设计（Improved Design）",
+    "Sync Conflicts": "同步冲突（Sync Conflicts）",
+    "Table Schema": "表结构",
+    "File Upload Flow": "文件上传流程（File Upload Flow）",
+    "File Sync": "文件同步（File Sync）",
+    "File Download Flow": "文件下载流程（File Download Flow）",
+    "Storage Optimization": "存储优化（Storage Optimization）",
+    "Failure Handling": "故障处理（Failure Handling）"
+  },
+  "lessons": [
+    {
+      "id": "c15-01",
+      "title": "Scope and Sizing",
+      "summary": "Requirements, capacity assumptions, two upload modes",
+      "exercises": [
+        {
+          "id": "c15-01-01",
+          "type": "single",
+          "prompt": "One non-functional requirement for a cloud drive is bandwidth efficiency. Which design choice serves it most directly?",
+          "options": [
+            "Upload only the changed blocks (delta sync)",
+            "A standby load balancer that takes over",
+            "Primary-replica replication of the metadata database",
+            "Sharding storage by user_id"
+          ],
+          "answer": 0,
+          "explanation": "Delta sync sends only the blocks that changed and, together with compression, cuts unnecessary transfer. Replication and a standby load balancer serve high availability; sharding serves scalability.",
+          "ref": "Non-Functional Requirements"
+        },
+        {
+          "id": "c15-01-02",
+          "type": "multi",
+          "prompt": "The chapter states 500 PB of total storage, but that number cannot be derived from the other assumptions. Which capacity inputs should you confirm first in an interview?",
+          "options": [
+            "Total registered users, not just DAU",
+            "How much of the free space users actually use",
+            "Which programming language the API servers use",
+            "The multiplier from version history and replicas",
+            "Whether notifications use long polling or WebSocket"
+          ],
+          "answers": [
+            0,
+            1,
+            3
+          ],
+          "explanation": "The chapter gives no total users, actual utilization, or version and replica multipliers, so 10 million DAU × 10 GB = 100 PB does not match 500 PB. The programming language and the notification mechanism have no bearing on a capacity estimate.",
+          "ref": "Constraints and Assumptions"
+        },
+        {
+          "id": "c15-01-03",
+          "type": "single",
+          "prompt": "The requirements say 10 million DAU, 10 GB of free space per user, and 500 PB of total storage. What is the best way to read these numbers?",
+          "options": [
+            "10 million × 10 GB is exactly 500 PB",
+            "500 PB is derived exactly from 10 million × 10 GB × 5 replicas",
+            "500 PB is the amount of new storage added each day",
+            "500 PB is a separate assumption; 10 million × 10 GB is only 100 PB"
+          ],
+          "answer": 3,
+          "explanation": "10 million × 10 GB = 100 PB, and DAU is not the same as total users. The chapter also gives no utilization, version, or replica multiplier, so 500 PB cannot be derived. In an interview, confirm the capacity assumptions first, then estimate daily growth and replica overhead.",
+          "ref": "Constraints and Assumptions"
+        },
+        {
+          "id": "c15-01-04",
+          "type": "single",
+          "prompt": "With 10 million DAU, 2 uploaded files per user per day, and an average file size of 500 KB, roughly how much new upload data arrives per day (ignoring versions and replicas)?",
+          "options": [
+            "About 1 TB",
+            "About 100 TB",
+            "About 10 PB",
+            "About 10 TB"
+          ],
+          "answer": 3,
+          "explanation": "10 million × 2 × 500 KB = 10 million × 2 × 500,000 B = 10 trillion B ≈ 10 TB. At that rate it would take over a hundred years to accumulate 500 PB, which shows that 500 PB is a separate capacity assumption.",
+          "ref": "Constraints and Assumptions"
+        },
+        {
+          "id": "c15-01-05",
+          "type": "judge",
+          "prompt": "The single-server design can already identify every file uniquely, so moving to a big enough machine is enough to serve 10 million DAU.",
+          "answer": false,
+          "explanation": "However big the machine, it is a single point of failure: if it breaks the service is down, and a disk failure loses data, which violates the availability and reliability requirements. That is why the chapter moves to sharding, redundant S3 storage, load balancing, and metadata database replication.",
+          "ref": "Moving to Distributed Systems"
+        },
+        {
+          "id": "c15-01-06",
+          "type": "single",
+          "prompt": "In the single-server design, files live under `drive/{namespace}/{relative path}`. What does the namespace do?",
+          "options": [
+            "It maps to one user, and adding the relative path locates a file",
+            "It marks which block of a file this is",
+            "It marks which data center region stores the file",
+            "It distinguishes revisions of the same file"
+          ],
+          "answer": 0,
+          "explanation": "Each namespace holds all the uploaded files of one user, and namespace plus relative path uniquely identifies a file or folder. This single-machine design is only a starting point; it cannot handle large-scale capacity or availability.",
+          "ref": "Single-Server Setup"
+        },
+        {
+          "id": "c15-01-07",
+          "type": "fill",
+          "prompt": "Complete the two upload modes",
+          "text": "Small files use a [[simple upload]] that sends everything in one request; large files use a [[resumable upload]]: get an upload URL first, and after an interruption continue from the confirmed position.",
+          "distractors": [
+            "delta sync",
+            "long polling",
+            "cold storage"
+          ],
+          "explanation": "If a large file is sent in one piece, a failure means starting over. A resumable upload records progress on the server, so you pick up where you left off after a disconnect. Delta sync solves “only a little changed”, not “the transfer broke halfway”.",
+          "ref": "API"
+        },
+        {
+          "id": "c15-01-08",
+          "type": "order",
+          "prompt": "Put the steps of a resumable upload in order",
+          "items": [
+            "Send the initiation request",
+            "Receive the resumable upload URL",
+            "Upload the data in parts and check the status",
+            "After an interruption, resume from the confirmed position"
+          ],
+          "explanation": "First initiate the session and get its dedicated URL. Then upload in parts and query how far the server has confirmed. After a disconnect, send only the unconfirmed part.",
+          "ref": "API"
+        },
+        {
+          "id": "c15-01-09",
+          "type": "judge",
+          "prompt": "In a resumable upload, if the client resends the same block after a timeout, the server should recognize it instead of creating a duplicate file.",
+          "answer": true,
+          "explanation": "An implementation should record the upload session, block index, checksum, and expiration time. With a session and a block index, a resent block lands in the same place and never creates an extra file.",
+          "ref": "API"
+        }
+      ]
+    },
+    {
+      "id": "c15-02",
+      "title": "Distributed Design",
+      "summary": "Sharding, block servers, two planes, sync conflicts",
+      "exercises": [
+        {
+          "id": "c15-02-01",
+          "type": "single",
+          "prompt": "When moving from a single server to a distributed design, the chapter shards storage by `user_id`. What main problem does this solve?",
+          "options": [
+            "One machine runs out of space, so data is spread across machines by user",
+            "The system no longer needs a metadata database to track files",
+            "Files with identical content are stored only once across the site",
+            "Two devices can no longer conflict when editing the same file"
+          ],
+          "answer": 0,
+          "explanation": "A single server eventually runs out of space, and sharding by user_id spreads different users' data across several servers. A conflict is a concurrent-edit problem, which sharding does not solve, and deduplication relies on block hashes, not shards.",
+          "ref": "Improvements"
+        },
+        {
+          "id": "c15-02-02",
+          "type": "judge",
+          "prompt": "File blocks are already replicated in S3, so the metadata database only needs sharding and no replication.",
+          "answer": false,
+          "explanation": "Metadata records which blocks make up which version of which file, and in what order. If the metadata is lost, the blocks in S3 cannot be reassembled into files. So the chapter shards and replicates the metadata database, and promotes a replica when the primary fails.",
+          "ref": "Improvements"
+        },
+        {
+          "id": "c15-02-03",
+          "type": "multi",
+          "prompt": "Every block has a unique hash. What can the hash be used for?",
+          "options": [
+            "Ordering change notifications",
+            "Deciding which shard holds a user's data",
+            "Letting multiple files or versions share one block (deduplication)",
+            "Telling whether the server already has a block, so the upload can be skipped",
+            "Spotting which blocks changed during delta sync"
+          ],
+          "answers": [
+            2,
+            3,
+            4
+          ],
+          "explanation": "The hash is computed from the block content, so identical content gives an identical hash. That tells you whether a block exists, whether it changed, and whether it can be shared. Sharding uses user_id, and notification order comes from version numbers or a change cursor.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c15-02-04",
+          "type": "single",
+          "prompt": "Why separate file blocks and metadata into two planes instead of storing whole files in the metadata database?",
+          "options": [
+            "Once separated, a notification service is no longer needed to push changes",
+            "Object storage has no redundancy, so the metadata database must back it up",
+            "The metadata database cannot store file names with special characters",
+            "Bulk content and the small directory have different loads, so each scales on its own"
+          ],
+          "answer": 3,
+          "explanation": "File blocks are large and read and written per block, which suits object storage. Metadata is small and needs queries and updates, which suits a database plus a cache. Think of blocks as boxes in a warehouse and metadata as the directory of which boxes make up which file.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c15-02-05",
+          "type": "match",
+          "prompt": "Match each component with its responsibility",
+          "pairs": [
+            [
+              "Block server",
+              "Chunks, compresses, encrypts, stores to cloud"
+            ],
+            [
+              "API server",
+              "Auth, user profiles, metadata updates"
+            ],
+            [
+              "Notification service",
+              "Tells clients a file changed"
+            ],
+            [
+              "Offline backup queue",
+              "Holds changes for clients that are offline"
+            ],
+            [
+              "Cold storage",
+              "Cheap storage for long-inactive files"
+            ]
+          ],
+          "explanation": "The block server handles content, the API server handles every workflow except the upload itself, and the notification service only says “something changed”. The offline backup queue accumulates changes for clients that are not online, and cold storage cuts cost.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c15-02-06",
+          "type": "judge",
+          "prompt": "When the notification service pushes a change, it only needs to tell the client which file changed, not carry the file content.",
+          "answer": true,
+          "explanation": "A notification only says the directory changed. The client then asks the API server for the latest metadata and downloads the changed blocks, so file content travels over the high-volume block storage path.",
+          "ref": "Improved Design"
+        },
+        {
+          "id": "c15-02-07",
+          "type": "single",
+          "prompt": "User 1 and user 2 both edit the same file starting from version 5, and the server processes user 1's request first. When user 2's request arrives, what should the system do?",
+          "options": [
+            "Merge both users' edits character by character on the server",
+            "Silently discard user 2's edit without any notice",
+            "Flag a conflict and keep both user 2's copy and the latest server version",
+            "Overwrite with user 2's content; the last writer wins"
+          ],
+          "answer": 2,
+          "explanation": "The update processed first succeeds, and the later one receives a conflict. The system keeps both copies and lets the user merge or overwrite. This is a conflict policy, not Google Docs-style character-level real-time merging, and silently overwriting or discarding would lose data.",
+          "ref": "Sync Conflicts"
+        },
+        {
+          "id": "c15-02-08",
+          "type": "judge",
+          "prompt": "To decide which of two conflicting edits was “processed first”, you can compare the local clocks of the two clients at submission time.",
+          "answer": false,
+          "explanation": "Client clocks can be inaccurate or even changed by users. “Processed first” must be defined by the server's version rule, for example a conditional update with base_version: whoever moves the version from 5 to 6 first wins.",
+          "ref": "Sync Conflicts"
+        },
+        {
+          "id": "c15-02-09",
+          "type": "fill",
+          "prompt": "Complete the conflict detection approach",
+          "text": "When submitting an edit, the client includes [[base_version]], and the server performs a [[conditional update]]: it writes only if that value equals the current version, and otherwise reports a conflict.",
+          "distractors": [
+            "client clock",
+            "last writer wins",
+            "long polling"
+          ],
+          "explanation": "base_version is the version the edit was based on. A conditional update guarantees that only one request can move the version from 5 to 6; the other finds the version has already changed and enters the conflict flow.",
+          "ref": "Sync Conflicts"
+        }
+      ]
+    },
+    {
+      "id": "c15-03",
+      "title": "Upload and Sync",
+      "summary": "Upload states, delta sync, and where to chunk",
+      "exercises": [
+        {
+          "id": "c15-03-01",
+          "type": "match",
+          "prompt": "Match each metadata table with what it stores",
+          "pairs": [
+            [
+              "User",
+              "Profile and preferences"
+            ],
+            [
+              "File",
+              "File name, size, and path"
+            ],
+            [
+              "Block",
+              "Block info needed to rebuild a file"
+            ],
+            [
+              "File Version",
+              "Revision history of a file"
+            ]
+          ],
+          "explanation": "File describes the file itself, Block records which blocks rebuild it, and File Version lets users go back to older versions. The block content itself is not in the metadata database; it lives in cloud storage.",
+          "ref": "Table Schema"
+        },
+        {
+          "id": "c15-03-02",
+          "type": "order",
+          "prompt": "Put one file upload in order, from start until it becomes visible to other devices",
+          "items": [
+            "Upload the file blocks; metadata is marked pending",
+            "Cloud storage fires the upload-complete callback",
+            "Verify the block list, sizes, and checksums",
+            "Atomically publish the version; status becomes uploaded",
+            "The notification service informs the relevant clients"
+          ],
+          "explanation": "The callback is only a signal that an object was written. The version is published atomically only after the whole block list is verified, and other devices are notified after that. Otherwise they would download an incomplete file.",
+          "ref": "File Upload Flow"
+        },
+        {
+          "id": "c15-03-03",
+          "type": "judge",
+          "prompt": "If S3 fires an object-upload-complete callback, all blocks of the whole file have arrived.",
+          "answer": false,
+          "explanation": "An object event only proves that one object was written, not that every block of the file has arrived. Verify the block list, sizes, and checksums, then publish the file version atomically.",
+          "ref": "File Upload Flow"
+        },
+        {
+          "id": "c15-03-04",
+          "type": "single",
+          "prompt": "The upload-complete callback is delivered twice because of a network retry. How should the handler be designed?",
+          "options": [
+            "Raise an error on a duplicate callback and delete the file",
+            "Make it idempotent: a duplicate callback neither republishes nor notifies again",
+            "Create a new file version on every callback",
+            "Move the file back to pending on the second callback"
+          ],
+          "answer": 1,
+          "explanation": "Callbacks can be duplicated, so the handler must be idempotent: if the version is already published, simply return. Creating a version per callback would add phantom versions to the history, and erroring and deleting could destroy a perfectly good file.",
+          "ref": "File Upload Flow"
+        },
+        {
+          "id": "c15-03-05",
+          "type": "single",
+          "prompt": "A phone sees that a file's metadata status is still `pending`. What should it do?",
+          "options": [
+            "Assume the upload failed and delete the metadata entry",
+            "Download the blocks that have arrived and fill the rest with zeros",
+            "Not download it as a complete file yet, and wait until it becomes uploaded",
+            "Save it locally as a conflicted copy"
+          ],
+          "answer": 2,
+          "explanation": "pending means the content has not been fully verified, so other devices must not treat it as a complete file. Zero-filling would produce a corrupted file. It is not a conflict and does not mean failure; it simply is not verified yet.",
+          "ref": "File Upload Flow"
+        },
+        {
+          "id": "c15-03-06",
+          "type": "single",
+          "prompt": "The chapter has the block server chunk, compress, and encrypt files. A user edits one small part of a 1 GB file. With this design, which part of the traffic does delta sync save?",
+          "options": [
+            "The upload from the client to the block server",
+            "The traffic of the API server writing to the metadata database",
+            "The traffic of the client receiving notifications",
+            "The hop from the block server to S3"
+          ],
+          "answer": 3,
+          "explanation": "Chunking happens on the block server, so the client still sends the whole 1 GB file to it every time. The block server chunks and compares, and writes only the changed blocks to S3. So the chapter's design only saves the block-server-to-S3 hop.",
+          "ref": "File Sync"
+        },
+        {
+          "id": "c15-03-07",
+          "type": "order",
+          "prompt": "To save client upload bandwidth, real sync clients upload like this. Put the steps in order",
+          "items": [
+            "Chunk locally and compute each block's hash",
+            "Submit the block list to the server",
+            "The server replies which blocks are missing",
+            "The client uploads only the missing blocks"
+          ],
+          "explanation": "Chunking and hashing happen on the client. It sends the block list first and then only the missing blocks, so unchanged blocks never use upstream bandwidth. Dropbox has publicly described this approach (4 MB blocks, SHA-256 hashes).",
+          "ref": "File Sync"
+        },
+        {
+          "id": "c15-03-08",
+          "type": "single",
+          "prompt": "In which scenario does delta sync save the most bandwidth?",
+          "options": [
+            "Uploading a newly recorded video",
+            "Rewriting a file's entire content",
+            "Creating a new 500 KB document",
+            "A few blocks changed in a 10 GB VM image"
+          ],
+          "answer": 3,
+          "explanation": "Delta sync pays off when a file is large and only a small part changed: only the few changed blocks are sent, which saves most of the traffic. For a brand-new or fully rewritten file, every block is new and there is nothing to save.",
+          "ref": "File Sync"
+        },
+        {
+          "id": "c15-03-09",
+          "type": "judge",
+          "prompt": "Compressing already-compressed videos and images again before sync usually brings little benefit.",
+          "answer": true,
+          "explanation": "Compressing already-compressed videos or images again usually gains little: it wastes computation without saving much traffic. That is why the chapter picks the compression algorithm by file type instead of recompressing everything.",
+          "ref": "File Sync"
+        }
+      ]
+    },
+    {
+      "id": "c15-04",
+      "title": "Download & Storage",
+      "summary": "Catch-up, dedup cleanup, versions, failover",
+      "exercises": [
+        {
+          "id": "c15-04-01",
+          "type": "order",
+          "prompt": "Another device edited a file. Put the steps by which this device gets the update in order",
+          "items": [
+            "The notification service signals a change",
+            "The client fetches the latest metadata",
+            "Download the changed blocks",
+            "Rebuild the file in block order"
+          ],
+          "explanation": "The notification only says “something changed”. The metadata tells the client which blocks make up the new version, so it downloads the changed blocks and assembles the file in order.",
+          "ref": "File Download Flow"
+        },
+        {
+          "id": "c15-04-02",
+          "type": "single",
+          "prompt": "A laptop was off for three days, and 20 files were edited on a phone in the meantime. How does the laptop get those changes when it comes back online?",
+          "options": [
+            "The phone pushes the files directly to the laptop over P2P",
+            "The laptop must download the entire drive again",
+            "The notification service keeps resending until the laptop powers on",
+            "Changes made while offline are stored first, and the laptop pulls them once online"
+          ],
+          "answer": 3,
+          "explanation": "While a client is offline, its change information is saved (the architecture calls this the offline backup queue), and the client pulls the latest changes after coming online. Only when the offline record has outlived its retention period is a full reconciliation needed.",
+          "ref": "File Download Flow"
+        },
+        {
+          "id": "c15-04-03",
+          "type": "judge",
+          "prompt": "A client can simply pull changes whenever it receives a notification, with no need to track a version number or change cursor.",
+          "answer": false,
+          "explanation": "Notifications can be lost, duplicated, or reordered. The client must remember which version or cursor it has synced to: after a missed notification it can re-pull a snapshot or the delta from its cursor, and duplicate notifications are ignored by version number.",
+          "ref": "File Download Flow"
+        },
+        {
+          "id": "c15-04-04",
+          "type": "single",
+          "prompt": "A client was offline so long that the offline changes the server kept for it were purged after the retention period. What should it do when it comes back online?",
+          "options": [
+            "Run a full reconciliation with the server",
+            "Assume nothing changed in the meantime",
+            "Wait for the notification service to resend all historical notifications",
+            "Ask the user to re-upload all local files"
+          ],
+          "answer": 0,
+          "explanation": "Offline records have a retention period. Once it passes, the delta is gone, so the only option is to compare local state against a server snapshot in full. Assuming nothing changed would miss updates, and notifications are not kept forever.",
+          "ref": "File Download Flow"
+        },
+        {
+          "id": "c15-04-05",
+          "type": "judge",
+          "prompt": "Deduplication identifies duplicate content by block hash within an account, so identical blocks in the same account are stored only once.",
+          "answer": true,
+          "explanation": "Equal block hashes mean equal content, so multiple files or versions can reference the same block. Because blocks are shared, deletion must check whether any references remain and cannot simply remove the block along with one version.",
+          "ref": "Storage Optimization"
+        },
+        {
+          "id": "c15-04-06",
+          "type": "single",
+          "prompt": "A user deletes the old version v1, but some of v1's blocks are also referenced by the current version v3. What is the right way to handle those blocks?",
+          "options": [
+            "Move them to cold storage and remove v3's references to them",
+            "Keep them; reclaim only unreferenced blocks past retention",
+            "Have v3 re-upload those blocks, then delete them",
+            "Delete them immediately along with v1 to save space"
+          ],
+          "answer": 1,
+          "explanation": "Deduplication lets several versions share blocks. Only blocks with no live reference and past the retention or rollback window may be reclaimed. Otherwise deleting an old version would corrupt the current file.",
+          "ref": "Storage Optimization"
+        },
+        {
+          "id": "c15-04-07",
+          "type": "single",
+          "prompt": "A file is autosaved hundreds of times a day. Following the chapter's version policy, how should versions be kept?",
+          "options": [
+            "Keep only the first version to save space",
+            "Keep every version so you can go back to any moment",
+            "Cap the number of versions and prefer the recent ones",
+            "Copy the whole file as a new version on every edit"
+          ],
+          "answer": 2,
+          "explanation": "If every edit of a frequently modified file leaves a version, history grows without bound. The chapter's policy is to cap the number of versions and prefer recent ones. Keeping only the first version would drop the functional requirement to retain revisions.",
+          "ref": "Storage Optimization"
+        },
+        {
+          "id": "c15-04-08",
+          "type": "fill",
+          "prompt": "Complete the three storage optimizations",
+          "text": "Use [[deduplication]] by block hash, cap the [[number of versions]] you keep, and move files that are rarely accessed to [[cold storage]] such as S3 Glacier.",
+          "distractors": [
+            "delta sync",
+            "long polling",
+            "sharding"
+          ],
+          "explanation": "The three target duplicate content, ever-growing history, and cold data. Delta sync saves transfer bandwidth, not storage space.",
+          "ref": "Storage Optimization"
+        },
+        {
+          "id": "c15-04-09",
+          "type": "match",
+          "prompt": "Match each failure with its handling",
+          "pairs": [
+            [
+              "Load balancer failure",
+              "A standby load balancer takes over"
+            ],
+            [
+              "Block server failure",
+              "Pending tasks go to other servers"
+            ],
+            [
+              "Metadata DB failure",
+              "Promote a replica to primary"
+            ],
+            [
+              "Cloud storage failure",
+              "Read from cross-region replicas"
+            ],
+            [
+              "Notification failure",
+              "Clients reconnect to another node"
+            ]
+          ],
+          "explanation": "Every component has redundancy: a standby LB, replaceable block servers, primary-replica failover, cross-region replicas, and reconnectable notification nodes. To close out, also confirm how much data loss is acceptable (RPO) and how fast recovery must be (RTO).",
+          "ref": "Failure Handling"
+        }
+      ]
+    }
+  ]
+}

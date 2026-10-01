@@ -1,0 +1,572 @@
+{
+  "chapter": 12,
+  "title": "Chat System",
+  "fullTitle": "Chapter 12: Design a Chat System",
+  "intro": [
+    "**Learning goal**: Understand why chat needs three parts working together: a real-time connection, persisted messages, and incremental catch-up.",
+    "**Remember first**: The WebSocket is the channel, the message store is the history, and the cursor is the catch-up progress. Ordering within one conversation matters more than a global order across all conversations.",
+    "**Common misconceptions**: A dropped connection means lost messages; a unique message ID means strict ordering; heartbeat-based presence is perfectly accurate."
+  ],
+  "keyPoints": [
+    "50 million DAU does not mean 50 million concurrent connections; concurrency depends on peak hours, devices per user, and connection-keeping policy.",
+    "Polling wastes empty requests, and long polling must hold requests and reconnect. A WebSocket is two-way once open, but the channel alone is not reliable.",
+    "Chat servers are stateful because they hold long connections. Write to KV first, then deliver; push to offline users, who catch up by cursor.",
+    "Unique does not mean ordered: Snowflake IDs only roughly follow time, so strict order within a conversation needs a per-conversation sequence number.",
+    "Keep cursors per device and per conversation (or use a monotonic sync sequence), and advance one only after all earlier messages are confirmed received.",
+    "Heartbeat every 5 s, offline after 30 s without one. Presence is approximate; with many friends, subscribe only to visible contacts."
+  ],
+  "refs": {
+    "Receiver Side": "接收端（Receiver Side）",
+    "Design": "设计（Design）",
+    "Components": "组件（Components）",
+    "Service Discovery": "服务发现（Service Discovery）",
+    "One-on-One Chat": "一对一聊天（One-on-One Chat）",
+    "Group Chat": "群聊（Group Chat）",
+    "Message Synchronization": "消息同步（Message Synchronization）",
+    "1. Heartbeat Mechanism": "1. 心跳机制（Heartbeat Mechanism）",
+    "2. Fanout Model": "2. 扩散模型（Fanout Model）",
+    "Additional Considerations": "其他考虑（Additional Considerations）",
+    "Future Extensions": "后续扩展（Future Extensions）",
+    "Note: DAU Is Not Concurrent Connections": "批注：DAU 不能直接当连接数",
+    "Note: Keep-Alive Does Not Let Servers Push": "批注：HTTP keep-alive 不等于服务器可随时推消息",
+    "Note: Choose a Database by Access Pattern": "批注：按访问模式选数据库",
+    "Note: Uniqueness and Ordering Are Separate Problems": "批注：唯一性与顺序是两件事",
+    "Note: ZooKeeper Stores Information, Not Decisions": "批注：ZooKeeper 保存信息，不替你决定业务策略",
+    "Note: Fan-out on Write for Small Groups Only": "批注：小群可用写扩散，大群需重新估算",
+    "Note: Don’t Mix the Two ID Schemes": "批注：原文两种 ID 方案不能直接混用",
+    "Note: Presence Is Approximate": "批注：在线是近似状态"
+  },
+  "lessons": [
+    {
+      "id": "c12-01",
+      "title": "Needs & Protocols",
+      "summary": "Sizing chat and three ways to receive",
+      "exercises": [
+        {
+          "id": "c12-01-01",
+          "type": "judge",
+          "prompt": "50 million DAU means the chat servers must hold 50 million WebSocket connections at the same time.",
+          "answer": false,
+          "explanation": "DAU counts people active at some point during a day, and they are not all online together. Concurrent connections depend on the peak-hour distribution, devices per person, and the connection-keeping policy. With several devices per person, connections can even outnumber online users.",
+          "ref": "Note: DAU Is Not Concurrent Connections"
+        },
+        {
+          "id": "c12-01-02",
+          "type": "multi",
+          "prompt": "To estimate how many concurrent connections the chat servers must carry, what else do you need to know?",
+          "options": [
+            "The connection-keeping policy (how long idle connections stay open)",
+            "Group chats hold at most 100 members",
+            "A single message is at most 100,000 characters",
+            "How users’ activity is distributed across the day",
+            "How many devices each user has online on average"
+          ],
+          "answers": [
+            0,
+            3,
+            4
+          ],
+          "explanation": "Concurrent connections count the devices connected at the same moment: the activity pattern decides how many people are online together, device count multiplies connections, and the keeping policy decides how long idle ones linger. Message length and group size affect storage and fan-out, not connection count.",
+          "ref": "Note: DAU Is Not Concurrent Connections"
+        },
+        {
+          "id": "c12-01-03",
+          "type": "match",
+          "prompt": "Match each communication method with its trait",
+          "pairs": [
+            [
+              "Polling",
+              "Asks periodically, many empty replies"
+            ],
+            [
+              "Long polling",
+              "Holds until message or timeout, then reconnects"
+            ],
+            [
+              "WebSocket",
+              "Persistent two-way channel once open"
+            ],
+            [
+              "Keep-alive",
+              "Reuses the connection, still client-initiated"
+            ]
+          ],
+          "explanation": "Polling and long polling are both client-initiated and differ only in how they wait. HTTP keep-alive saves repeated handshakes, but the server still cannot send on its own. Only once a WebSocket is open can the server push at any time.",
+          "ref": "Receiver Side"
+        },
+        {
+          "id": "c12-01-04",
+          "type": "single",
+          "prompt": "The receiver needs the server to push new messages. Why does this design choose WebSocket over long polling?",
+          "options": [
+            "WebSocket runs on UDP, so latency is lower",
+            "WebSocket needs no connection state on the server",
+            "WebSocket guarantees messages are never lost",
+            "Once open, both sides send any time, no hold-and-reconnect"
+          ],
+          "answer": 3,
+          "explanation": "Long polling must end and reconnect after every message or timeout, and the server has to keep the held requests. A WebSocket is set up once and stays two-way. It runs on TCP, not UDP, and it does not guarantee delivery. It also needs the server to keep connection state, which is exactly why chat servers are stateful.",
+          "ref": "Receiver Side"
+        },
+        {
+          "id": "c12-01-05",
+          "type": "judge",
+          "prompt": "If the sender uses HTTP keep-alive persistent connections, the server can push new messages to the client at any time.",
+          "answer": false,
+          "explanation": "Keep-alive only reuses the connection and cuts handshake cost; the request/response pattern is still started by the client. For the server to push on its own, you need a two-way channel such as a WebSocket.",
+          "ref": "Note: Keep-Alive Does Not Let Servers Push"
+        },
+        {
+          "id": "c12-01-06",
+          "type": "judge",
+          "prompt": "Even with an established WebSocket connection, you still need catch-up after disconnects and deduplication to avoid lost or duplicate messages.",
+          "answer": true,
+          "explanation": "A live channel does not make messages reliable: messages sent during a disconnect must be fetched from persisted history, and reconnects and retries can create duplicates, which you remove by a stable message ID.",
+          "ref": "Note: Keep-Alive Does Not Let Servers Push"
+        },
+        {
+          "id": "c12-01-07",
+          "type": "single",
+          "prompt": "A client polls for new messages every 2 seconds, but a user receives one only every few minutes on average. What is the main problem?",
+          "options": [
+            "Most requests return empty, wasting resources",
+            "The server cannot tell which user is asking",
+            "Messages arrive out of order and must be re-sorted",
+            "Messages sent between polls are always lost"
+          ],
+          "answer": 0,
+          "explanation": "Polling asks whether or not there is a message, so when messages are rare it mostly spins for nothing. Long polling holds the request until a message arrives, which cuts empty replies; a WebSocket lets the server push the moment one arrives.",
+          "ref": "Receiver Side"
+        },
+        {
+          "id": "c12-01-08",
+          "type": "fill",
+          "prompt": "Complete the benefit and cost of long polling",
+          "text": "Long polling reduces [[empty responses]], but the server must keep [[held requests]], and the client reconnects after each one ends.",
+          "distractors": [
+            "message reordering",
+            "heartbeat packets",
+            "global sequence numbers"
+          ],
+          "explanation": "Long polling returns only when a message arrives or the request times out, so there are fewer empty replies. The cost is that the server holds many requests at once, even for inactive users, and the client must send a new one after every round.",
+          "ref": "Receiver Side"
+        },
+        {
+          "id": "c12-01-09",
+          "type": "single",
+          "prompt": "The requirements call for storing chat history permanently. Which understanding of history storage is most reasonable?",
+          "options": [
+            "For low latency, all history must be kept in memory",
+            "A single message is capped at 100,000 characters, so storage volume is negligible",
+            "Permanent storage does not mean all in memory; tier hot and cold history",
+            "Permanent storage can only be done with a relational database"
+          ],
+          "answer": 2,
+          "explanation": "Recent messages are read often and old ones rarely. Keeping hot data in fast storage and moving cold data to cheaper storage keeps history permanent while controlling cost. Holding everything in memory is neither necessary nor realistic.",
+          "ref": "Note: DAU Is Not Concurrent Connections"
+        }
+      ]
+    },
+    {
+      "id": "c12-02",
+      "title": "Components & Data",
+      "summary": "Stateful servers, KV storage, and message IDs",
+      "exercises": [
+        {
+          "id": "c12-02-01",
+          "type": "match",
+          "prompt": "Match each chat system component with its responsibility",
+          "pairs": [
+            [
+              "Chat server",
+              "Holds WebSockets, sends and receives messages"
+            ],
+            [
+              "Presence service",
+              "Tracks users’ online/offline status"
+            ],
+            [
+              "API server",
+              "Handles login, signup, profile changes"
+            ],
+            [
+              "Notification server",
+              "Sends push to offline users"
+            ],
+            [
+              "KV store",
+              "Stores chat history"
+            ]
+          ],
+          "explanation": "Only the chat server holds long-lived connections, so it is the stateful service; API servers handle ordinary requests and can scale out statelessly. Offline users cannot receive WebSocket messages, so the notification server pushes to them.",
+          "ref": "Design"
+        },
+        {
+          "id": "c12-02-02",
+          "type": "single",
+          "prompt": "Why is the chat server stateful while the API server can be stateless?",
+          "options": [
+            "The chat server holds the client’s long-lived connection",
+            "The chat server stores chat history permanently",
+            "The API server cannot scale horizontally and must be a single machine",
+            "The chat server stores users’ login passwords"
+          ],
+          "answer": 0,
+          "explanation": "Messages for a client must be relayed through whichever chat server it is connected to, so this connection state is bound to a specific machine. History lives in the KV store, and an API server keeps no state after a request, so you can add machines freely.",
+          "ref": "Components"
+        },
+        {
+          "id": "c12-02-03",
+          "type": "judge",
+          "prompt": "The chapter picks a KV store, which shows that a relational database cannot be used for chat records.",
+          "answer": false,
+          "explanation": "That is just the chapter’s choice, based on scalability and latency. The point is to pick the database by access pattern: chat history is mostly read in conversation order, so what matters is a good partition key and sort key, and a well-designed relational database works too.",
+          "ref": "Note: Choose a Database by Access Pattern"
+        },
+        {
+          "id": "c12-02-04",
+          "type": "single",
+          "prompt": "The group message table uses (channel_id, message_id) as a composite key. Which access does this mainly support?",
+          "options": [
+            "Sorting all groups’ messages globally by time",
+            "Fetching one group’s messages and paging back through them in order",
+            "Looking up which groups a user has joined",
+            "Looking up all messages sent by a given sender"
+          ],
+          "answer": 1,
+          "explanation": "channel_id keeps one group’s messages together and message_id orders them within the group. That matches the most common read: open a group chat and scroll up through its history.",
+          "ref": "Design"
+        },
+        {
+          "id": "c12-02-05",
+          "type": "judge",
+          "prompt": "Snowflake IDs are globally unique and roughly increasing with time, so they guarantee strict order of messages within a conversation.",
+          "answer": false,
+          "explanation": "Uniqueness and ordering are separate problems. Clock drift, concurrency across nodes, and late messages can make Snowflake order differ from the real order. Strict order within a conversation needs rules for assigning and persisting a per-conversation sequence number.",
+          "ref": "Note: Uniqueness and Ordering Are Separate Problems"
+        },
+        {
+          "id": "c12-02-06",
+          "type": "single",
+          "prompt": "The chapter suggests a local sequence number for each conversation. Compared with relying on a global sequence, what is its advantage?",
+          "options": [
+            "Order is needed only within a conversation, so no global ordering to coordinate",
+            "Local numbers are globally unique, so they can be used directly for deduplication",
+            "Local numbers can be compared across conversations to see which came first",
+            "Local numbers need no persistence, so they save storage"
+          ],
+          "answer": 0,
+          "explanation": "Users care about order within one conversation, not whether group A or group B came first. A per-conversation number narrows ordering to one conversation. The cost: it is unique only there and cannot be compared across conversations, so identifying a message still takes the conversation ID or a separate global ID.",
+          "ref": "Design"
+        },
+        {
+          "id": "c12-02-07",
+          "type": "multi",
+          "prompt": "The chapter chooses a KV store for chat history. Which reasons does it give?",
+          "options": [
+            "Random access on large indexes can be expensive in a relational database",
+            "KV automatically guarantees strict message order",
+            "KV natively supports cross-table JOINs",
+            "Easy to scale horizontally",
+            "Low access latency"
+          ],
+          "answers": [
+            0,
+            3,
+            4
+          ],
+          "explanation": "Easy scaling, low latency, and avoiding the cost of random access on large relational indexes are the chapter’s three reasons. KV is actually weak at JOINs, and order comes from key design and sequence rules, not automatically.",
+          "ref": "Design"
+        },
+        {
+          "id": "c12-02-08",
+          "type": "single",
+          "prompt": "The chat server a user is connected to goes down. What is most likely to happen next?",
+          "options": [
+            "An API server pushes messages to the client over HTTP instead",
+            "ZooKeeper moves the connections from the old machine’s memory to a new one",
+            "The client reconnects, and service discovery assigns a new chat server",
+            "The chat history on that server is lost with it"
+          ],
+          "answer": 2,
+          "explanation": "Connection state lives only in the old machine’s memory and vanishes when it fails; ZooKeeper stores registration data and does not migrate connections. The client reconnects and service discovery recommends a new node. History is safe in KV and caught up by cursor. API servers use request/response and cannot push.",
+          "ref": "Note: ZooKeeper Stores Information, Not Decisions"
+        },
+        {
+          "id": "c12-02-09",
+          "type": "fill",
+          "prompt": "Complete the basis and the tool for service discovery",
+          "text": "Service discovery recommends a chat server based on [[geographic location]], server capacity, and similar factors, and the chapter uses [[ZooKeeper]] to manage coordination data.",
+          "distractors": [
+            "message ID",
+            "Snowflake",
+            "number of friends"
+          ],
+          "explanation": "Assigning by proximity lowers latency, and assigning by capacity keeps individual servers from overloading. ZooKeeper only stores registration and coordination data; which server to pick is usually decided by routing logic in the application.",
+          "ref": "Service Discovery"
+        },
+        {
+          "id": "c12-02-10",
+          "type": "judge",
+          "prompt": "A globally unique ID can still identify a message, with per-conversation order guaranteed by a separate sequence rule.",
+          "answer": true,
+          "explanation": "Each ID has its own job: the global ID identifies and deduplicates a message, and the per-conversation sequence number defines order. You don’t need one ID to meet both needs.",
+          "ref": "Note: Uniqueness and Ordering Are Separate Problems"
+        }
+      ]
+    },
+    {
+      "id": "c12-03",
+      "title": "Messages & Sync",
+      "summary": "1:1 delivery, group inbox, multi-device cursors",
+      "exercises": [
+        {
+          "id": "c12-03-01",
+          "type": "order",
+          "prompt": "B is online. Put the delivery of a one-on-one message in order",
+          "items": [
+            "A sends the message to chat server 1",
+            "Server 1 assigns a unique message ID",
+            "The message is written to the KV store",
+            "It is forwarded to server 2, which holds B’s connection",
+            "Server 2 pushes it to B over WebSocket"
+          ],
+          "explanation": "Assign the ID and persist first, then deliver in real time: even if delivery fails or B drops, the message is already saved and B can catch up after reconnecting. If B is offline, it is not forwarded to server 2; a push notification is sent instead.",
+          "ref": "One-on-One Chat"
+        },
+        {
+          "id": "c12-03-02",
+          "type": "single",
+          "prompt": "B is offline. How does chat server 1 handle the message from A?",
+          "options": [
+            "Write it to KV as usual and alert B with a push notification",
+            "Keep it only in server 1’s memory and send it when B connects",
+            "Skip KV and put the full text in a push notification to B",
+            "Drop the message and have A resend it when B comes online"
+          ],
+          "answer": 0,
+          "explanation": "The message is persisted first, whether or not B is online. An offline B has no WebSocket to push on, so the notification server sends a push alert; B catches up from KV by cursor once online. Memory-only data is lost on restart, and a push is just an alert with no delivery guarantee, so it cannot replace persistence.",
+          "ref": "One-on-One Chat"
+        },
+        {
+          "id": "c12-03-03",
+          "type": "judge",
+          "prompt": "With the inbox approach to group chat, one user’s inbox can contain messages from several senders.",
+          "answer": true,
+          "explanation": "An inbox is a sync queue organized by recipient: whoever sends in the group, a copy (or index entry) goes to every member’s inbox. So one person’s inbox naturally holds messages from many senders, and the client only has to sync its own inbox.",
+          "ref": "Group Chat"
+        },
+        {
+          "id": "c12-03-04",
+          "type": "single",
+          "prompt": "With the chapter’s inbox approach, how many inbox records are written when someone sends one message in a 100-member group?",
+          "options": [
+            "Only for online members, depending on how many are online",
+            "About 100",
+            "1",
+            "About 10,000"
+          ],
+          "answer": 1,
+          "explanation": "The message or its index is copied to every member’s inbox, so a 100-member group needs about 100 records. Offline members need one too, or they would have nothing to sync when they return. The larger the group, the worse the write amplification.",
+          "ref": "Note: Fan-out on Write for Small Groups Only"
+        },
+        {
+          "id": "c12-03-05",
+          "type": "judge",
+          "prompt": "Fan-out on write should not be copied to 10,000-member groups; better to store the body once and keep a sync index per member or conversation.",
+          "answer": true,
+          "explanation": "About 100 inbox writes per message is fine for a small group, but a 10,000-member group needs 10,000, and that write amplification is unacceptable. Share one copy of the body, keep the sync index light, and use a stable message ID to deduplicate retries.",
+          "ref": "Note: Fan-out on Write for Small Groups Only"
+        },
+        {
+          "id": "c12-03-06",
+          "type": "fill",
+          "prompt": "Complete the rule for multi-device sync",
+          "text": "Each [[device]] keeps its own cur_max_message_id; a message addressed to the current user whose message_id is [[greater than]] it is new.",
+          "distractors": [
+            "user",
+            "less than",
+            "equal to"
+          ],
+          "explanation": "A phone and a laptop have different sync progress, so the cursor must be stored per device; with one cursor per user, once one device reads, the other would miss messages. A message is new if the recipient is me and its ID is greater than my local maximum.",
+          "ref": "Message Synchronization"
+        },
+        {
+          "id": "c12-03-07",
+          "type": "single",
+          "prompt": "Message IDs increase only within each conversation, but a single user-level cur_max_message_id is used to sync all conversations. What happens?",
+          "options": [
+            "You only pull some old messages again, and the client can deduplicate",
+            "Sync just becomes a little slower",
+            "Numbers from different conversations are not comparable, so new messages are missed",
+            "Nothing wrong; a larger ID is always newer"
+          ],
+          "answer": 2,
+          "explanation": "Message 500 in group A and message 3 in group B are not comparable: once the cursor sits at 500, messages 4 to 500 in group B are wrongly treated as already synced. That means missed messages, not extra pulls. Keep a cursor per conversation, or give the user’s inbox its own monotonic sync sequence.",
+          "ref": "Note: Don’t Mix the Two ID Schemes"
+        },
+        {
+          "id": "c12-03-08",
+          "type": "judge",
+          "prompt": "When a client receives any new message, it can advance its cursor to that message’s ID.",
+          "answer": false,
+          "explanation": "Messages can arrive out of order: when 105 arrives, 103 and 104 may still be in flight. If you advance straight to 105, the late 103 and 104 are skipped. Advance the cursor only after confirming that all earlier messages have arrived.",
+          "ref": "Note: Don’t Mix the Two ID Schemes"
+        },
+        {
+          "id": "c12-03-09",
+          "type": "multi",
+          "prompt": "Network flapping causes the same message to be resent. Which practices keep users from seeing it twice?",
+          "options": [
+            "The sender reuses the same message ID when retrying",
+            "The receiver deduplicates by message ID before displaying",
+            "Tear down and rebuild the WebSocket before retrying",
+            "Generate a new message ID on retry to tell attempts apart"
+          ],
+          "answers": [
+            0,
+            1
+          ],
+          "explanation": "A stable message ID is what makes deduplication possible: a retry with the same ID lets the server and client recognize the same message. A new ID creates a new message, and rebuilding the connection has nothing to do with deduplication.",
+          "ref": "Note: Fan-out on Write for Small Groups Only"
+        }
+      ]
+    },
+    {
+      "id": "c12-04",
+      "title": "Online Presence",
+      "summary": "Heartbeat timeout, status fan-out, failures",
+      "exercises": [
+        {
+          "id": "c12-04-01",
+          "type": "single",
+          "prompt": "A client sends a heartbeat every 5 seconds, and the server marks it offline after 30 seconds without one. A user sends the last heartbeat at 12:00:00 and loses the network. When is the earliest they are marked offline?",
+          "options": [
+            "Immediately when the network drops",
+            "12:00:35",
+            "12:00:30",
+            "12:00:05"
+          ],
+          "answer": 2,
+          "explanation": "Offline is decided by how long it has been since the last heartbeat: 30 seconds with no new one after 12:00:00 is 12:00:30. At 12:00:05 only one heartbeat has been missed, which is still within tolerance.",
+          "ref": "1. Heartbeat Mechanism"
+        },
+        {
+          "id": "c12-04-02",
+          "type": "single",
+          "prompt": "Why not mark a user offline the moment the connection drops, instead of using a heartbeat timeout?",
+          "options": [
+            "Heartbeats guarantee messages are never lost",
+            "A heartbeat timeout is detected sooner than a disconnect",
+            "With heartbeats you no longer need a WebSocket connection",
+            "A brief network blip would make status flip online/offline constantly"
+          ],
+          "answer": 3,
+          "explanation": "In an elevator or when switching networks, connections often drop briefly and recover. Marking offline on disconnect makes status flicker and causes heavy fan-out; a heartbeat gives a tolerance window, and recovering within it is not offline. The cost: a real departure is noticed only after the timeout, so it is less prompt.",
+          "ref": "1. Heartbeat Mechanism"
+        },
+        {
+          "id": "c12-04-03",
+          "type": "fill",
+          "prompt": "Complete the trade-off in the heartbeat timeout threshold",
+          "text": "A shorter timeout detects departures faster, but on weak networks [[false offline marks]] increase; a longer one makes [[departure detection]] slower.",
+          "distractors": [
+            "message loss",
+            "write amplification",
+            "duplicate messages"
+          ],
+          "explanation": "The threshold trades stability against speed: a short one reacts quickly to real departures but mistakes weak networks and sleeping devices for offline; a long one is steadier, but it takes longer to show that a user really left.",
+          "ref": "Note: Presence Is Approximate"
+        },
+        {
+          "id": "c12-04-04",
+          "type": "single",
+          "prompt": "User A has friends B, C, and D. When A’s status changes, how does the fan-out model notify the friends?",
+          "options": [
+            "Write it to KV and let friends read it the next time they log in",
+            "B, C, and D each poll A’s status every second",
+            "Broadcast to one site-wide shared status channel",
+            "Publish to three channels: A-B, A-C, and A-D"
+          ],
+          "answer": 3,
+          "explanation": "Each pair of friends has a publish/subscribe channel, A’s status change is published to the channel for each friend, and the friends receive it in real time by subscribing. Cost grows with the number of friends, so the chapter says it suits smaller groups of relationships.",
+          "ref": "2. Fanout Model"
+        },
+        {
+          "id": "c12-04-05",
+          "type": "single",
+          "prompt": "A user has 5,000 friends, and fanning every status change out to all of them is too costly. What does the note suggest?",
+          "options": [
+            "Shorten the heartbeat interval to 1 second",
+            "Have each friend pull his status every second",
+            "Subscribe to status only for the contacts currently open on screen",
+            "Notify friends only when he comes online, not when he goes offline"
+          ],
+          "answer": 2,
+          "explanation": "Only a few contacts are visible on screen, so subscribing to just those is enough, cutting fan-out from all friends to those watching. Shortening the heartbeat or switching to polling would only cost more. Pushing only online events would leave friends seeing “online” forever.",
+          "ref": "Note: Presence Is Approximate"
+        },
+        {
+          "id": "c12-04-06",
+          "type": "judge",
+          "prompt": "If either the phone or the laptop of the same user still has a valid connection, the user can be shown as online.",
+          "answer": true,
+          "explanation": "Online status means “recently reachable.” If the phone loses its network but the laptop is still connected, messages can still be delivered in real time, so showing online is reasonable.",
+          "ref": "Note: Presence Is Approximate"
+        },
+        {
+          "id": "c12-04-07",
+          "type": "judge",
+          "prompt": "A heartbeat timeout means the user has deliberately quit the app.",
+          "answer": false,
+          "explanation": "A timeout can also come from a weak network or a sleeping device. A heartbeat expresses “recently reachable,” not exact proof, so online status is only an approximation.",
+          "ref": "Note: Presence Is Approximate"
+        },
+        {
+          "id": "c12-04-08",
+          "type": "multi",
+          "prompt": "For growth and failures, which practices does the chapter mention under “Additional Considerations”?",
+          "options": [
+            "Forbid clients from reconnecting after a server failure, to avoid an avalanche",
+            "Use caching to reduce database load and latency",
+            "Queue and retry when message delivery fails",
+            "Add servers horizontally and spread connections with a load balancer",
+            "Have ZooKeeper migrate the existing connections when a server fails"
+          ],
+          "answers": [
+            1,
+            2,
+            3
+          ],
+          "explanation": "Scaling means adding machines horizontally, load balancing, and caching; fault tolerance means queueing and retrying failed deliveries, and service discovery assigning a new server. Old connections exist only in the failed machine’s memory and cannot be migrated, so clients reconnect; forbidding it cuts users off.",
+          "ref": "Additional Considerations"
+        },
+        {
+          "id": "c12-04-09",
+          "type": "match",
+          "prompt": "Match each future extension with the problem it solves",
+          "pairs": [
+            [
+              "Media messages",
+              "Compress images/video, store in the cloud"
+            ],
+            [
+              "End-to-end encryption",
+              "Protects message privacy"
+            ],
+            [
+              "Client-side cache",
+              "Avoids re-downloading content"
+            ],
+            [
+              "Geo-distributed cache",
+              "Loads nearby for users everywhere"
+            ]
+          ],
+          "explanation": "Media files are large, so compress them and put them in cloud storage rather than the message store; end-to-end encryption protects privacy; a client-side cache means content already on the device need not be downloaded again; a geo-distributed cache puts data on nodes closer to users in each region.",
+          "ref": "Future Extensions"
+        }
+      ]
+    }
+  ]
+}
