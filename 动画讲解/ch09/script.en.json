@@ -1,0 +1,11 @@
+[
+ {"id":"title","text":"Chapter 9, the web crawler. Let's see how it works in a few minutes."},
+ {"id":"pipe","text":"A crawler is a loop. Seed URLs go into a queue. The downloader takes one out, resolves its host through DNS, and fetches the page. The parser checks that the page is well formed, and if it is, the content goes into storage."},
+ {"id":"loop","text":"But pages contain more links. The link extractor pulls them out, and the filter drops blacklisted and broken addresses. Then we check whether we've seen each URL before. Only new ones go back into the queue. A handful of seeds roll out into a whole web."},
+ {"id":"dedup","text":"Why check twice? Because different URLs can serve identical content, like tracking parameters or mirror sites. So after downloading, we also compare page hashes. And the reverse is true too: the same URL may change tomorrow. So the seen record keeps a fetch time, and never blocks a URL forever."},
+ {"id":"frontier","text":"The heart of the system is the URL Frontier, the queue of pages to crawl. It has two layers. Front queues are split by priority, and decide who goes first. Back queues are split by host, and decide when a fetch is allowed. Every URL passes through both."},
+ {"id":"polite","text":"First, politeness. With a plain FIFO queue, URLs from one site sit together, and every download thread hits that site at once. It gets overwhelmed. The fix is one queue per host, with a single worker each. One request at a time per host, with a delay between downloads."},
+ {"id":"prio","text":"Now priority. Front queues score URLs with signals like PageRank and update frequency. Higher priority queues are more likely to be picked. More likely, not always. A picked URL still lands in a back queue and waits for its host's delay. High priority can't skip the rate limit."},
+ {"id":"trap","text":"Finally, spider traps. Take an endless calendar: every page links to next month, and every URL is new, so URL dedup can't stop it. The queue just keeps growing. A URL length limit isn't enough, since short URLs can go on forever. Add a depth limit and a per-site crawl budget."},
+ {"id":"end","text":"Remember three words: loop, politeness, dedup. A good crawler is judged by its throughput of useful new content, not by its thread count."}
+]

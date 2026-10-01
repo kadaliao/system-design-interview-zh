@@ -1,0 +1,13 @@
+{
+ "title": 6.768,
+ "bucket": 20.544,
+ "split": 22.704,
+ "upload": 24.336,
+ "store": 23.256,
+ "ec": 15.048,
+ "rebuild": 21.528,
+ "compare": 36.864,
+ "multipart": 27.6,
+ "version": 22.704,
+ "end": 19.848
+}

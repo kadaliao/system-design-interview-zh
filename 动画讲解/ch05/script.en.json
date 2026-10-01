@@ -1,0 +1,13 @@
+[
+ {"id":"title","text":"Chapter 5, consistent hashing. Let's see how it works in a couple of minutes."},
+ {"id":"mod","text":"Say we spread data across several machines. For every key, we must pick a machine. The simplest way: hash the key, then take the remainder when dividing by N, the number of servers."},
+ {"id":"rehash","text":"With a fixed number of servers, this works fine. But add one machine, and N goes from four to five. Now most keys map somewhere new. The cache misses almost everywhere, every request hits the database, and scaling out causes an outage first."},
+ {"id":"ring","text":"Consistent hashing takes a different approach. It joins the two ends of the hash space into a ring. Each server is hashed, and lands at one position on that ring."},
+ {"id":"lookup","text":"A key is hashed too, and lands on the ring. From there, walk clockwise. The first server you meet owns that key. If you pass the end, you simply wrap around."},
+ {"id":"add","text":"Now add a new server, s4. Only the keys between s4 and the server just before it move over to s4. Everything else stays exactly where it was."},
+ {"id":"remove","text":"Removing a server works the same way. Its keys all go to the next server clockwise. No other key is affected."},
+ {"id":"skew","text":"But server positions on the ring are random, so the gaps are uneven. Some machines get a huge slice of the ring, others get only a sliver."},
+ {"id":"vnode","text":"The fix is virtual nodes. Each physical machine takes many positions on the ring. The more positions each one has, the closer every machine gets to an equal share."},
+ {"id":"hot","text":"One thing to remember: even data is not even traffic. A single hot key still lands on just one machine. That needs cache replication, or splitting the key, to solve."},
+ {"id":"end","text":"Remember three words: ring, clockwise, virtual nodes. Systems like Dynamo, Cassandra, and Discord use ideas like this."}
+]

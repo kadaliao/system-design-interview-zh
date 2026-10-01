@@ -1,0 +1,46 @@
+[
+ {
+  "id": "title",
+  "text": "Chapter twenty-three, the distributed email service. Let's follow one email and see how it works."
+ },
+ {
+  "id": "proto",
+  "text": "Alice writes in Outlook and hits send. Outlook's server looks up the MX record for the recipient's domain, finds Gmail's mail server, and hands the message over with SMTP. Bob later fetches it from Gmail with IMAP or POP. So: SMTP between servers, IMAP or POP for users, and HTTP for the web client."
+ },
+ {
+  "id": "send",
+  "text": "In the distributed design, a send request hits the load balancer, passes rate limiting, and reaches a web server. The web server runs basic checks, like size. If they pass, the message enters the outgoing queue. Attachments travel as references to object storage. Failures go to an error queue. An SMTP outbound worker checks for spam and viruses, delivers the message, and saves it to the sent folder."
+ },
+ {
+  "id": "retry",
+  "text": "Always watch the outgoing queue length. A backlog has two possible causes. If the recipient's server is down, retry with exponential backoff. If workers are the bottleneck, scale them out. But if the recipient is rate limiting you, more workers make things worse. Temporary failures can be retried. Permanent rejections must produce a failure result, never endless resends."
+ },
+ {
+  "id": "receive",
+  "text": "Receiving runs the other way. Mail hits the SMTP load balancer, then an SMTP server, which applies policies and rejects invalid mail. Large attachments go to object storage. A mail processing worker then does preliminary checks, writes to persistent storage and cache, and notifies the real-time servers. Online users get a push. Offline users read over HTTP when they return."
+ },
+ {
+  "id": "store",
+  "text": "Why keep attachments apart from mail data? Do the math. A billion users, forty emails a day each, fifty kilobytes per email: about seven hundred thirty petabytes a year. Twenty percent carry attachments, five hundred kilobytes on average: about fourteen hundred sixty petabytes a year. Attachments dominate the bytes, so they go to object storage. The database keeps references."
+ },
+ {
+  "id": "shard",
+  "text": "How do we shard the metadata? By user ID. One user's data lives on one shard, because fetching, marking as read, and searching all work within a single user. The primary key has two parts. The partition key picks the shard. The clustering key sorts rows inside it. The email ID is a timeuuid, so mail is ordered by creation time."
+ },
+ {
+  "id": "views",
+  "text": "But a Cassandra-style model can't efficiently filter by read or unread. So we denormalize: one table for read mail, one for unread. The cost is on writes. Marking an email as read means deleting from the unread table and writing to the read table, and duplicate or out-of-order events must not break anything. Reads get easier, writes take on more responsibility."
+ },
+ {
+  "id": "search",
+  "text": "Search uses Elasticsearch, routed by user ID, so one user's mail sits on one shard. Changes are written to the primary store first, then flow into the index asynchronously through Kafka. So a brand-new email may not be searchable yet. First confirm it's in the primary store. Then check the index queue's offset. And even after it's consumed, wait for the search to become visible."
+ },
+ {
+  "id": "levels",
+  "text": "One last thing: success has four levels. Our system accepted the send. The recipient's SMTP server accepted it. The mail reached the inbox. The user read it. None of the first three can stand in for the last. SMTP accepted does not mean read."
+ },
+ {
+  "id": "end",
+  "text": "Remember three phrases: SMTP delivers, storage is separated, shard by user. Accept reliably first, then deliver and index asynchronously."
+ }
+]

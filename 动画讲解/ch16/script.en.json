@@ -1,0 +1,46 @@
+[
+ {
+  "id": "title",
+  "text": "Chapter 16, the proximity service. Let's see how a map gets sliced up, so nearby businesses can be found fast."
+ },
+ {
+  "id": "slow",
+  "text": "Say we want restaurants within five hundred meters. The obvious query limits latitude and longitude to a range each. But a normal index can only follow one dimension. It scans a whole horizontal band, then checks longitude row by row. With two hundred million businesses, that's far too slow."
+ },
+ {
+  "id": "geohash",
+  "text": "Geohash splits the map one bit at a time. Cut longitude into left and right: right is one, left is zero. Then cut latitude into top and bottom, and record another bit. Alternate like this, and a point becomes a string of bits. Every five bits become one base32 character. This shop is nine q eight y y m."
+ },
+ {
+  "id": "prefix",
+  "text": "Each extra character cuts the cell smaller. Two locations that share a prefix sit in the same bigger cell, so a longer shared prefix means a smaller area. We pick the length by radius: length six for five hundred meters, five for one or two kilometers, and four for five or twenty."
+ },
+ {
+  "id": "nine",
+  "text": "Here's the book's example. A user at latitude thirty-seven point seven seven six seven two, longitude minus one twenty-two point four one six seven three, wants restaurants within five hundred meters. The service picks length six, finds the user's cell plus its eight neighbors, fetches all nine in parallel, then filters out anything outside the circle by real distance."
+ },
+ {
+  "id": "boundary",
+  "text": "Boundaries are the trap. Two shops just tens of meters apart can have different last characters. Across the equator, one code starts with s and the other with k. So we must query the neighbor cells too. And precision can't be too fine: length seven cells are only about a hundred meters wide, so nine of them can't cover a five hundred meter circle."
+ },
+ {
+  "id": "flow",
+  "text": "Here is the full path. The client sends its location and radius through a load balancer to the location service. It's read-only and stateless, so we can run several copies. It queries the Geohash Redis in parallel for business IDs, fetches details from the business Redis, sorts by distance, and returns. The cache key is the Geohash, not GPS coordinates, which change whenever the user moves."
+ },
+ {
+  "id": "quad",
+  "text": "Geohash cells are a fixed size, but cities are dense and the countryside is sparse. A quadtree follows density. The whole map is the root. If a cell holds more businesses than a threshold, it splits into four quadrants, recursively. The book uses a hundred; the picture uses a small number. Dense areas split deep, sparse areas stay as one block."
+ },
+ {
+  "id": "knn",
+  "text": "Quadtrees are great for the nearest k businesses, like the closest gas stations. Walk down to the user's leaf. If that gives fewer than k, widen the search and visit intersecting leaves until we have k. The cost: every server builds the tree in memory at startup. For two hundred million businesses that takes minutes, with no traffic until it's ready, and updates often mean a rebuild."
+ },
+ {
+  "id": "s2",
+  "text": "The third option is Google S2. It cuts the sphere into cells and numbers them along a Hilbert curve, turning two-dimensional space into a line. Neighboring numbers are usually close in space, but not the reverse: two adjacent cells can have very different numbers. S2 can combine cells of different levels to cover any shape, which suits geofencing, though it's harder to use."
+ },
+ {
+  "id": "end",
+  "text": "To sum up. Geohash is simple and fits fixed-radius search; check neighbors, then filter exactly. Quadtrees adapt to density and find the nearest k, but need rebuilding. S2 excels at geofencing. In an interview, remember: find the cells, fetch the businesses, filter by distance."
+ }
+]
