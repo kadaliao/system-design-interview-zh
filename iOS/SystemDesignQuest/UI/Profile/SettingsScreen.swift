@@ -62,8 +62,6 @@ struct SettingsScreen: View {
                 Text("当天已经学过就不再提醒。")
             }
 
-            VideoCacheSection()
-
             Section("课程") {
                 Link(destination: store.library.readerHomeURL) {
                     Label("在线阅读版", systemImage: "safari")

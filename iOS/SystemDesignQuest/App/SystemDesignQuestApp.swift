@@ -13,6 +13,11 @@ struct SystemDesignQuestApp: App {
         // -unlockAll 只在 DEBUG 构建里生效，用于截图和演示
         let entitlements = Entitlements(debugUnlockAll: ProcessInfo.processInfo.arguments.contains("-unlockAll"))
         _entitlements = State(initialValue: entitlements)
+        if !Self.isHostingUnitTests {
+            // 完整版权益变化时同步视频内容密钥：购买/恢复后取，退款后删；启动时清理上次残留的临时明文
+            entitlements.onFullAccessChanged = { VideoService.shared.entitlementChanged(hasFullAccess: $0) }
+            VideoService.shared.cleanUpAtLaunch()
+        }
         do {
             let library = try CourseLibrary.loadBundled()
             let arguments = ProcessInfo.processInfo.arguments

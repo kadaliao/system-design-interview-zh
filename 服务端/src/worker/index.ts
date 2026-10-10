@@ -1,4 +1,5 @@
 // 海外视频服务：Cloudflare Worker（R2 绑定 + HMAC token）
+//   POST /v1/key                  StoreKit JWS -> 视频内容主密钥（App 随包视频的解密密钥，购买验证通过才发）
 //   POST /v1/auth                 StoreKit JWS -> 15 分钟 token（绑定 /v1/{lang}/）
 //   GET|HEAD /v1/{lang}/chNN.mp4  免费章节直接放行；其余需 ?token=
 //   GET|HEAD /v1/{lang}/manifest.json  公开（只含文件名/大小/sha256）
@@ -15,6 +16,7 @@ export interface WorkerEnv {
   VIDEOS: R2Bucket;
   TOKEN_SECRET: string; // wrangler secret
   TOKEN_SECRET_PREVIOUS?: string; // 轮换期可选
+  CONTENT_KEY?: string; // wrangler secret：base64 的 32 字节视频内容主密钥
   APPLE_BUNDLE_ID: string;
   APPLE_PRODUCT_IDS: string;
   ALLOWED_ENVIRONMENTS?: string;
@@ -81,6 +83,11 @@ async function route(req: Request, env: WorkerEnv, ctx: Ctx, cache: CacheLike, v
     return handleAuth(req, env, vo);
   }
 
+  if (url.pathname === "/v1/key") {
+    if (req.method !== "POST") return fail(405, "METHOD_NOT_ALLOWED", "POST only", { allow: "POST, OPTIONS" });
+    return handleKey(req, env, vo);
+  }
+
   const m = VIDEO_PATH.exec(url.pathname);
   if (m && (req.method === "GET" || req.method === "HEAD")) {
     const catalog = catalogFromEnv(env as unknown as PlainEnv);
@@ -126,6 +133,28 @@ async function handleAuth(req: Request, env: WorkerEnv, vo: Partial<VerifyOption
     const prefix = `/v1/${body.lang}/`;
     const { token, expiresAt } = await signToken(env.TOKEN_SECRET, { prefix, ttlSeconds: ttl, subject: await transactionFingerprint(tx) });
     return json(200, { ok: true, token, expiresAt, ttlSeconds: ttl, pathPrefix: prefix });
+  } catch (e) {
+    if (e instanceof VerifyError) return fail(statusForVerifyCode(e.code), e.code, e.message);
+    return fail(500, "INTERNAL", "verification failed");
+  }
+}
+
+/** 购买验证通过后下发视频内容主密钥：App 随包的第 2–28 章视频是用它派生的密钥加密的。 */
+async function handleKey(req: Request, env: WorkerEnv, vo: Partial<VerifyOptions>): Promise<Response> {
+  const raw = env.CONTENT_KEY ?? "";
+  if (atob(raw.replace(/\s+/g, "") || "AA==").length !== 32) return fail(500, "MISCONFIGURED", "content key not set");
+  if (env.AUTH_LIMITER) {
+    const key = req.headers.get("cf-connecting-ip") ?? "unknown";
+    if (!(await env.AUTH_LIMITER.limit({ key })).success) return fail(429, "RATE_LIMITED", "too many requests", { "retry-after": "10" });
+  }
+  const text = await req.text();
+  if (text.length > 20_000) return fail(413, "TOO_LARGE", "body too large");
+  let body: { signedTransaction?: unknown };
+  try { body = JSON.parse(text); } catch { return fail(400, "BAD_REQUEST", "invalid JSON"); }
+  if (typeof body.signedTransaction !== "string") return fail(400, "BAD_REQUEST", "signedTransaction required");
+  try {
+    await verifyStoreKitTransaction(body.signedTransaction, { ...verifyOptionsFromEnv(env as unknown as PlainEnv), ...vo });
+    return json(200, { ok: true, key: raw.replace(/\s+/g, ""), keyVersion: 1 });
   } catch (e) {
     if (e instanceof VerifyError) return fail(statusForVerifyCode(e.code), e.code, e.message);
     return fail(500, "INTERNAL", "verification failed");

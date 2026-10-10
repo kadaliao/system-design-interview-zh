@@ -53,7 +53,7 @@ What is inside
 • Mistake notebook: missed questions are reviewed after 1, 3, 7 and 16 days; five correct answers in a row count as mastered.
 • Speak-aloud practice: 58 open-ended cards. Say your answer out loud first, then compare it with the conclusion, the full explanation and a diagram, and rate yourself from "couldn't recall" to "explained it well". The app schedules your next review from that rating.
 • 48 interactive labs: drag the parameters and run preset scenarios to see a rate limiter let through double the traffic at a window boundary, which keys move when a consistent-hash ring gains or loses a node, and how caching and sharding shift the bottleneck. Everything runs offline inside the app.
-• Video walkthroughs: one animated explainer of 2 to 5 minutes for each of the 28 chapters, with landscape full screen, caching on your device, and an optional setting to cache automatically only on Wi-Fi. The narration is AI-generated speech.
+• Video walkthroughs: one animated explainer of 2 to 5 minutes for each of the 28 chapters, built into the app, so they play offline, with landscape full screen. The narration is AI-generated speech.
 • Unit guides: an overview, hand-drawn illustrations, key points and related labs for every chapter. Illustrations can be zoomed.
 • Study rhythm: XP, streaks, a daily goal and an optional daily reminder. Wrong answers in a lesson cost a heart; you can turn the heart limit off in Settings. Dark mode and iPad are supported.
 
@@ -61,7 +61,7 @@ Free and full version
 Chapter 1, including its video, speak-aloud cards and labs, is free to complete. Chapters 2 to 28, the general review cards and their videos unlock with a single one-time in-app purchase, Full Access: pay once, keep it forever, no subscription, and future content updates are included. Your purchase follows your Apple Account and can be restored on a new device.
 
 Privacy and connectivity
-No account, no ads, no third-party analytics. Your progress is stored only on your device. Lessons, questions and labs work offline. Videos from chapter 2 onward need a connection to stream or download, and the "read the full text" links open the online reading edition in your browser.
+No account, no ads, no third-party analytics. Your progress is stored only on your device. Lessons, questions, labs and videos all work offline. After you buy Full Access, the app needs a connection once to unlock the paid videos, and the "read the full text" links open the online reading edition in your browser.
 
 Good to know
 There is no cloud sync, so progress does not move between devices. Questions are written from the course text. The app is for study and interview preparation and does not guarantee any outcome.

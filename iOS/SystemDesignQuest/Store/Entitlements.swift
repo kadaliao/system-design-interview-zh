@@ -66,6 +66,9 @@ final class Entitlements: EntitlementProviding {
 
     var displayPrice: String? { product?.displayPrice }
 
+    /// StoreKit 权益刷新后回调（true=已购买，false=未购买或已退款）。视频模块借此取/删内容密钥。
+    @ObservationIgnored var onFullAccessChanged: (@MainActor (Bool) -> Void)?
+
     @ObservationIgnored private let productID: String
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var updatesTask: Task<Void, Never>?
@@ -211,6 +214,7 @@ final class Entitlements: EntitlementProviding {
     private func setUnlocked(_ value: Bool) {
         storeUnlocked = value
         defaults.set(value, forKey: Self.mirrorKey)
+        onFullAccessChanged?(value)
     }
 
     /// 关闭付费墙或离开页面后清掉一次性的提示状态。

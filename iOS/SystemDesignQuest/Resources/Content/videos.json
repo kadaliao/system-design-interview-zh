@@ -4,18 +4,12 @@
    "chapter": 1,
    "files": {
     "en": {
-     "bundled": true,
-     "bytes": 5560361,
      "durationSec": 243.8,
-     "file": "ch01.mp4",
-     "sha256": "9f26c64be1071990d96217db7c281da017b6b42a14b99c1aa298057c6b5c7b69"
+     "file": "ch01.mp4"
     },
     "zh": {
-     "bundled": true,
-     "bytes": 4957971,
      "durationSec": 224.1,
-     "file": "ch01.mp4",
-     "sha256": "823f07d06dcc9fd823566cd8fdad8caf4b01d27f8b1a7a4fe7cf18708f011ce6"
+     "file": "ch01.mp4"
     }
    },
    "free": true,
@@ -28,18 +22,12 @@
    "chapter": 2,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5027592,
      "durationSec": 235.2,
-     "file": "ch02.mp4",
-     "sha256": "6f3e0c5a75277da0fb48cca19efa42e50e43ae362a2e0527ef7c8d78eb7e73a8"
+     "file": "ch02.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 3890646,
      "durationSec": 188.6,
-     "file": "ch02.mp4",
-     "sha256": "86a600090de010f8f293c78dd368d150020bdaeb53a8567aacbe00f80beeb052"
+     "file": "ch02.sdqv"
     }
    },
    "free": false,
@@ -52,18 +40,12 @@
    "chapter": 3,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5510428,
      "durationSec": 246.9,
-     "file": "ch03.mp4",
-     "sha256": "59becd279c175ff301ef0362ff7d5eb3ea72ba510eaa197682bebb10fd2d11da"
+     "file": "ch03.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5214599,
      "durationSec": 239.4,
-     "file": "ch03.mp4",
-     "sha256": "2cd35ad8adcd72c2b78a6cd84f39542831ff4a1240c01963d6b2c4242b4494af"
+     "file": "ch03.sdqv"
     }
    },
    "free": false,
@@ -76,18 +58,12 @@
    "chapter": 4,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5929925,
      "durationSec": 255.7,
-     "file": "ch04.mp4",
-     "sha256": "e9164c422cc31074820a8b9ebbe5fb7b371b1bd917fe688672b4d04a7252cabd"
+     "file": "ch04.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5420315,
      "durationSec": 239.3,
-     "file": "ch04.mp4",
-     "sha256": "74b1269800745abcaff83c92aa1c5fb115b896aa7e0f9fd02715193ba543bc9b"
+     "file": "ch04.sdqv"
     }
    },
    "free": false,
@@ -100,18 +76,12 @@
    "chapter": 5,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 3277956,
      "durationSec": 139.8,
-     "file": "ch05.mp4",
-     "sha256": "e82c6d7eca24d9de8ab39355c6422983c4f2e63ee21c23430427051637819437"
+     "file": "ch05.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 3069151,
      "durationSec": 133.1,
-     "file": "ch05.mp4",
-     "sha256": "04464df6c400feea1ab3b6d5fbb6974065edb8cbb286d4a69ec74688aa316a71"
+     "file": "ch05.sdqv"
     }
    },
    "free": false,
@@ -124,18 +94,12 @@
    "chapter": 6,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5531835,
      "durationSec": 264.6,
-     "file": "ch06.mp4",
-     "sha256": "9102e3f1611c8a88c9f9562a74cab72944bcd8463ea601fe395a4d8607348594"
+     "file": "ch06.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4922498,
      "durationSec": 240.8,
-     "file": "ch06.mp4",
-     "sha256": "34ce1ea9c26fdeeeb51c46def2e82394cccfdc9fd8dc84bbb8d7a452fac7ec97"
+     "file": "ch06.sdqv"
     }
    },
    "free": false,
@@ -148,18 +112,12 @@
    "chapter": 7,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5989373,
      "durationSec": 269,
-     "file": "ch07.mp4",
-     "sha256": "6bebdb09677e46bf1257e4b08e358f71179dc7138f3ad5a477ab1b4e22e510b5"
+     "file": "ch07.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5098007,
      "durationSec": 239.8,
-     "file": "ch07.mp4",
-     "sha256": "146f30e95d1b53a530b4ccdcea66775f79d2a9a24641ac7fde11d14f0658677a"
+     "file": "ch07.sdqv"
     }
    },
    "free": false,
@@ -172,18 +130,12 @@
    "chapter": 8,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4781509,
      "durationSec": 218.8,
-     "file": "ch08.mp4",
-     "sha256": "3415569d92291ab56fd5d1f39cfbcd9b623103d0d6a2f38f1d4edcb99be97ff1"
+     "file": "ch08.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4028409,
      "durationSec": 190.6,
-     "file": "ch08.mp4",
-     "sha256": "7a962698fc38e5ab0f66a3208a3b1ee017105d3e312e521526bb3892912e68d2"
+     "file": "ch08.sdqv"
     }
    },
    "free": false,
@@ -196,18 +148,12 @@
    "chapter": 9,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 3870881,
      "durationSec": 166,
-     "file": "ch09.mp4",
-     "sha256": "0270fcbc8a046aa879e506ed0eb06ef46b97a9fb2621b05d31c1fa58dee0755b"
+     "file": "ch09.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 3985430,
      "durationSec": 179.6,
-     "file": "ch09.mp4",
-     "sha256": "320acefae01305d8d672d2e66cd3edf53b1243c24ae58481be7a24bc5fe79880"
+     "file": "ch09.sdqv"
     }
    },
    "free": false,
@@ -220,18 +166,12 @@
    "chapter": 10,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4485374,
      "durationSec": 188.7,
-     "file": "ch10.mp4",
-     "sha256": "d102201642e5110b00cc452a3c31eecd58a310dcb3a95bf7b2756e188a0a315f"
+     "file": "ch10.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4051414,
      "durationSec": 173.2,
-     "file": "ch10.mp4",
-     "sha256": "76c1d81abfc2eb37314b6f35db9e30ef29a905956b40446890719c5df8703801"
+     "file": "ch10.sdqv"
     }
    },
    "free": false,
@@ -244,18 +184,12 @@
    "chapter": 11,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4838853,
      "durationSec": 213.3,
-     "file": "ch11.mp4",
-     "sha256": "3b4bce919e8558f2c2c912a7c1301e554b0978313ee65e7900cb0891a8ab439b"
+     "file": "ch11.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4467579,
      "durationSec": 204.7,
-     "file": "ch11.mp4",
-     "sha256": "cbb0a64cb30a312e050eb692a064d4b3b491f423761be129fad498ff18d70043"
+     "file": "ch11.sdqv"
     }
    },
    "free": false,
@@ -268,18 +202,12 @@
    "chapter": 12,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5276793,
      "durationSec": 237.3,
-     "file": "ch12.mp4",
-     "sha256": "2e655d9a809f9ecf9c4998090b8b040085cf7661fb49cc40cef1dfc1c30b37ee"
+     "file": "ch12.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4765400,
      "durationSec": 223.5,
-     "file": "ch12.mp4",
-     "sha256": "269feecded043920476f36e583dc949786f2c7218ed0f8f5b84f4106fb7d4cd0"
+     "file": "ch12.sdqv"
     }
    },
    "free": false,
@@ -292,18 +220,12 @@
    "chapter": 13,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4924448,
      "durationSec": 215.4,
-     "file": "ch13.mp4",
-     "sha256": "fbbce468fbf986fca3ef7fd3bc80fc43501a9f27eaecdefb34561a09b74fe1d4"
+     "file": "ch13.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4392194,
      "durationSec": 203.2,
-     "file": "ch13.mp4",
-     "sha256": "56581fba3b95ad7da85f9879e5df884d9b241f67166c7770335b16d46d48110b"
+     "file": "ch13.sdqv"
     }
    },
    "free": false,
@@ -316,18 +238,12 @@
    "chapter": 14,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5424526,
      "durationSec": 248.5,
-     "file": "ch14.mp4",
-     "sha256": "6888ced2430c0d73c67444738d5fd99e6aa4089872f49e777e2b5610f9aa5826"
+     "file": "ch14.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4744369,
      "durationSec": 225.5,
-     "file": "ch14.mp4",
-     "sha256": "d3abeebc547c10cfd849d7c98086345c39fffa5b7d2f28effc0e22d2a70fda67"
+     "file": "ch14.sdqv"
     }
    },
    "free": false,
@@ -340,18 +256,12 @@
    "chapter": 15,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4718056,
      "durationSec": 208.7,
-     "file": "ch15.mp4",
-     "sha256": "853ad830d34dfa6c1fec19d3d9c0adb28dfa5634c5044c5ffc0b55f59c899328"
+     "file": "ch15.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4072688,
      "durationSec": 191.3,
-     "file": "ch15.mp4",
-     "sha256": "9edbc13bf99aca3773e2a363abc8cd5a67c8006e2ca1ea456d3cc832d4138827"
+     "file": "ch15.sdqv"
     }
    },
    "free": false,
@@ -364,18 +274,12 @@
    "chapter": 16,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5960366,
      "durationSec": 266.9,
-     "file": "ch16.mp4",
-     "sha256": "13d30da0bdbe9e864e6083a09e018a5d9027a4effb4845192b879fbb69aeeb86"
+     "file": "ch16.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5924987,
      "durationSec": 273.7,
-     "file": "ch16.mp4",
-     "sha256": "5d19b1ae9c1a7554d5d95776df33dfd54e25c6702640f2fef35e889b4b1b9317"
+     "file": "ch16.sdqv"
     }
    },
    "free": false,
@@ -388,18 +292,12 @@
    "chapter": 17,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5411557,
      "durationSec": 225.5,
-     "file": "ch17.mp4",
-     "sha256": "688c7aa4806f7784bdccdc6c85f040e5e645bb5f311a5f1b2542cee3fc75cc30"
+     "file": "ch17.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5181094,
      "durationSec": 223.4,
-     "file": "ch17.mp4",
-     "sha256": "25ec9863916e544cacd6b186521a45191e28edb22d62b9dbac091076e6e73765"
+     "file": "ch17.sdqv"
     }
    },
    "free": false,
@@ -412,18 +310,12 @@
    "chapter": 18,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5176895,
      "durationSec": 211.9,
-     "file": "ch18.mp4",
-     "sha256": "b8e1e3715c9f08f7d66d2b5bcb5d705ddf1dafada22e20ad4f9fdeab4da5721d"
+     "file": "ch18.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4652530,
      "durationSec": 198,
-     "file": "ch18.mp4",
-     "sha256": "a79524f51d6fc90ec882007b29062e83b5c4ede752554d69b29548fce6b797ad"
+     "file": "ch18.sdqv"
     }
    },
    "free": false,
@@ -436,18 +328,12 @@
    "chapter": 19,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5843259,
      "durationSec": 255.4,
-     "file": "ch19.mp4",
-     "sha256": "fe4d91944905034572bc204d69485138badd3ea3d9b19c3ec001d899287625ea"
+     "file": "ch19.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5322488,
      "durationSec": 245.4,
-     "file": "ch19.mp4",
-     "sha256": "0a8ecaab6304446a91dc5122cb7b620768691915c656955b23120964b166c795"
+     "file": "ch19.sdqv"
     }
    },
    "free": false,
@@ -460,18 +346,12 @@
    "chapter": 20,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5914167,
      "durationSec": 267.4,
-     "file": "ch20.mp4",
-     "sha256": "c7efe26d79204798ed9a2b2b987bfc5a68ec9ed42d97e5d9c60e1b0f47515497"
+     "file": "ch20.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5499954,
      "durationSec": 255.4,
-     "file": "ch20.mp4",
-     "sha256": "a5bdc109c4463956c9cfdc23fd9f32b8ef89b305b67f84ed99600e32ca0c711a"
+     "file": "ch20.sdqv"
     }
    },
    "free": false,
@@ -484,18 +364,12 @@
    "chapter": 21,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5295743,
      "durationSec": 227.3,
-     "file": "ch21.mp4",
-     "sha256": "0f13c13b0ca63a52a28e38817893a22158007ed61bfb98cf04dc05c33b8495f9"
+     "file": "ch21.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 4901981,
      "durationSec": 225.3,
-     "file": "ch21.mp4",
-     "sha256": "25081c3280ce17fc2b766e1fc1c036288bcb46904badcc9c08641f5c8a8dac1c"
+     "file": "ch21.sdqv"
     }
    },
    "free": false,
@@ -508,18 +382,12 @@
    "chapter": 22,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5816694,
      "durationSec": 260.6,
-     "file": "ch22.mp4",
-     "sha256": "459e80e84323d2cea7089e96cf0f794016592aba04f1d5a0bca9c67a79319e47"
+     "file": "ch22.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5356973,
      "durationSec": 255.9,
-     "file": "ch22.mp4",
-     "sha256": "fb6296c4ac8f20db49057cf2ff1251719200a7dd940800fc3c30b5033b8aca0c"
+     "file": "ch22.sdqv"
     }
    },
    "free": false,
@@ -532,18 +400,12 @@
    "chapter": 23,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 6074783,
      "durationSec": 266.8,
-     "file": "ch23.mp4",
-     "sha256": "cf7d8b16068b2f232de703f5832db9a747b345226cd6ce2624b80614d500fd87"
+     "file": "ch23.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5623878,
      "durationSec": 261,
-     "file": "ch23.mp4",
-     "sha256": "760f643672f206c9aad2aa78f1b43a70ee7fdbc3d865a8e4c8ade694b9c7f34b"
+     "file": "ch23.sdqv"
     }
    },
    "free": false,
@@ -556,18 +418,12 @@
    "chapter": 24,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5928248,
      "durationSec": 262.6,
-     "file": "ch24.mp4",
-     "sha256": "cc2fd528ded698d7fb59064c487cd209c8b005952f38e41796e252f117fa6339"
+     "file": "ch24.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5465359,
      "durationSec": 251,
-     "file": "ch24.mp4",
-     "sha256": "0d3baa45336e9936f3da23a9f102453394d8ba19470857b9153ebed1543178f9"
+     "file": "ch24.sdqv"
     }
    },
    "free": false,
@@ -580,18 +436,12 @@
    "chapter": 25,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5835905,
      "durationSec": 251.9,
-     "file": "ch25.mp4",
-     "sha256": "5787e050bf03717171116a047d2e59ec4777d6cbd5c869514924ca0a9b7e1191"
+     "file": "ch25.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5147753,
      "durationSec": 233,
-     "file": "ch25.mp4",
-     "sha256": "d6038f7299c8b1a83201d6bd38fb849bb323145541cfd632de346d6829a30f21"
+     "file": "ch25.sdqv"
     }
    },
    "free": false,
@@ -604,18 +454,12 @@
    "chapter": 26,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 4361905,
      "durationSec": 197.9,
-     "file": "ch26.mp4",
-     "sha256": "382e6216ebdc3f4c8ccb8e900d7ca0681c351a7ae0ac0b83aafd5698f5df75f6"
+     "file": "ch26.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 3865608,
      "durationSec": 183.1,
-     "file": "ch26.mp4",
-     "sha256": "49323b6fb4f28cd020683bb02bfa479730f1b29f50e1f5aec3d5a0b469900deb"
+     "file": "ch26.sdqv"
     }
    },
    "free": false,
@@ -628,18 +472,12 @@
    "chapter": 27,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5761082,
      "durationSec": 256.6,
-     "file": "ch27.mp4",
-     "sha256": "dbbfdbda6e37af9ca5a0ccf762653e8f800a63715ea52b9267c47032eb736ca6"
+     "file": "ch27.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5278831,
      "durationSec": 240.1,
-     "file": "ch27.mp4",
-     "sha256": "5328d8d8130a09cbe4236f729493849dd007d44cc78d7c2939bddf8345e74fdc"
+     "file": "ch27.sdqv"
     }
    },
    "free": false,
@@ -652,18 +490,12 @@
    "chapter": 28,
    "files": {
     "en": {
-     "bundled": false,
-     "bytes": 5682368,
      "durationSec": 252.6,
-     "file": "ch28.mp4",
-     "sha256": "f3493aca21594967e7429b7b8646bdc2e6c6817933067a2cf254c6670773057d"
+     "file": "ch28.sdqv"
     },
     "zh": {
-     "bundled": false,
-     "bytes": 5347847,
      "durationSec": 243.5,
-     "file": "ch28.mp4",
-     "sha256": "77279803c5a1ead43ae3da0edd19806baa767c59cbc29e77e41155c3812dcd0a"
+     "file": "ch28.sdqv"
     }
    },
    "free": false,

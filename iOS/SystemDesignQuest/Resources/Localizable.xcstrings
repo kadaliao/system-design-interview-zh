@@ -375,16 +375,6 @@
         }
       }
     },
-    "仅 Wi-Fi 下载": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Download on Wi-Fi Only"
-          }
-        }
-      }
-    },
     "今天": {
       "localizations": {
         "en": {
@@ -1211,16 +1201,6 @@
         }
       }
     },
-    "已缓存": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cached"
-          }
-        }
-      }
-    },
     "已解锁": {
       "localizations": {
         "en": {
@@ -1311,32 +1291,12 @@
         }
       }
     },
-    "当前使用蜂窝网络，观看本章约消耗 %@ 流量。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You’re on cellular. Watching this chapter uses about %@ of data."
-          }
-        }
-      }
-    },
     "当前关卡": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Current level"
-          }
-        }
-      }
-    },
-    "当前没有网络，这一章的视频还没有缓存。联网后再来看吧。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You’re offline and this chapter’s video isn’t cached yet. Connect to the internet and try again."
           }
         }
       }
@@ -1581,16 +1541,6 @@
         }
       }
     },
-    "暂时拿不到视频地址，请稍后重试。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t get the video address right now. Please try again later."
-          }
-        }
-      }
-    },
     "暂时无法连接 App Store，请检查网络后重试。": {
       "localizations": {
         "en": {
@@ -1801,36 +1751,6 @@
         }
       }
     },
-    "清除": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clear"
-          }
-        }
-      }
-    },
-    "清除全部已缓存的视频？之后观看会重新下载。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clear all cached videos? They’ll be downloaded again when you watch them."
-          }
-        }
-      }
-    },
-    "清除视频缓存": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Clear Video Cache"
-          }
-        }
-      }
-    },
     "漂亮！": {
       "localizations": {
         "en": {
@@ -1919,16 +1839,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Goal"
-          }
-        }
-      }
-    },
-    "看过的动画讲解会缓存在本机，下次可以离线观看。开启后，只在 Wi-Fi 下自动缓存；蜂窝网络下仍可手动观看，每章约 5 MB。第 1 章的视频已内置，不占缓存。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Videos you watch are cached on this device so you can watch them offline. When on, videos only cache over Wi-Fi; you can still watch manually on cellular (about 5 MB per chapter). Chapter 1’s video is built in and doesn’t use the cache."
           }
         }
       }
@@ -2367,16 +2277,6 @@
         }
       }
     },
-    "继续观看": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continue Watching"
-          }
-        }
-      }
-    },
     "自由模式": {
       "localizations": {
         "en": {
@@ -2439,32 +2339,12 @@
         }
       }
     },
-    "视频加载失败，请检查网络后重试。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The video failed to load. Check your connection and try again."
-          }
-        }
-      }
-    },
     "视频文件无法播放。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This video file can’t be played."
-          }
-        }
-      }
-    },
-    "视频缓存": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Video Cache"
           }
         }
       }
@@ -3233,6 +3113,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "The video service is temporarily unavailable. Please try again later."
+          }
+        }
+      }
+    },
+    "本机还没有视频密钥。请联网后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device doesn't have the video key yet. Connect to the internet and try again."
+          }
+        }
+      }
+    },
+    "没有找到本章的视频文件。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video file for this chapter wasn't found."
+          }
+        }
+      }
+    },
+    "视频文件无法解密，可能已损坏。请重试，或更新 App。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video couldn't be decrypted and may be damaged. Try again, or update the app."
+          }
+        }
+      }
+    },
+    "无法准备视频，请检查设备存储空间后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't prepare the video. Check your device storage and try again."
+          }
+        }
+      }
+    },
+    "视频密钥无效，请稍后重试。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The video key is invalid. Please try again later."
           }
         }
       }

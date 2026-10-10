@@ -23,15 +23,15 @@ HOW TO TEST THE PURCHASE
 3. Buy. The sheet closes with "Full Version unlocked" and chapters 2-28 open.
 4. To test restore: delete and reinstall the app, open the paywall and tap Restore Purchases.
 
-VIDEOS NEED A NETWORK CONNECTION
-Each chapter has a short narrated animation. Only the chapter 1 video is bundled (it works offline). Videos for chapters 2-28 are streamed from our CDN over HTTPS and can be cached on the device (Settings > Video Cache has a Wi-Fi-only switch and a clear-cache button). Without a connection the player shows an offline message; lessons, questions, labs and speak-aloud cards all work offline. [PRE-SUBMISSION CHECK: the production CDN domain and the token service must be live and must accept sandbox transactions, otherwise the reviewer cannot play paid videos. Remove this bracket when done.]
+VIDEOS ARE BUNDLED AND ENCRYPTED
+All 28 chapter videos (short narrated animations, Chinese and English) are bundled in the app and play offline. The chapter 1 video is unencrypted and free. To keep unpaid users from extracting the paid videos from the app package, the videos for chapters 2-28 are encrypted. After Full Access is purchased (or restored), the app sends the StoreKit signed transaction (JWS) once to our verification service (https://video.liaoxingyi.com/v1/key), which verifies it with Apple's certificate chain and returns the decryption key; the key is stored in the device Keychain and the videos then play fully offline. The service accepts sandbox transactions, so the reviewer can unlock and play the videos with a sandbox account; an internet connection is needed once, right after purchase. Lessons, questions, labs and speak-aloud cards all work offline.
 
 AI-GENERATED NARRATION
 The narration in the videos is synthesized speech (text-to-speech), not a recording of a person. The video descriptions state this. The explanations are based on the written course text, which was written by the developer.
 
 DATA AND PRIVACY
 - No analytics, no advertising, no third-party SDKs, no tracking, no data sold or shared.
-- The app itself does not collect personal data. Network requests are limited to: (a) StoreKit (handled by Apple); (b) downloading video files from our CDN, which, like any web server, may log IP address and request metadata; [PRE-SUBMISSION CHECK: (c) a request to our token-issuing service that sends the StoreKit signed transaction (JWS) so we can verify the purchase; it stores nothing but short-lived signed tokens - confirm against the deployed service]; (d) links that open in Safari (online reading edition, GitHub).
+- The app itself does not collect personal data. Network requests are limited to: (a) StoreKit (handled by Apple); (b) one request to our verification service that sends the StoreKit signed transaction (JWS) so we can verify the purchase and return the video unlock key; it stores nothing and, like any web service, may log IP address and request metadata for no more than 30 days; (c) links that open in Safari (online reading edition, GitHub).
 - Local notifications (optional daily study reminder) are scheduled on the device; no push notifications and no remote notification server.
 - Encryption: the app uses only standard HTTPS provided by the OS (ITSAppUsesNonExemptEncryption = NO).
 

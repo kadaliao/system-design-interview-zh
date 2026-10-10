@@ -72,13 +72,8 @@ struct VideoPlayerScreen: View {
             if let player = model.player {
                 SystemVideoPlayer(player: player).ignoresSafeArea()
             }
-        case let .confirmCellular(bytes):
-            message(
-                icon: "antenna.radiowaves.left.and.right",
-                text: String(localized: "当前使用蜂窝网络，观看本章约消耗 \(VideoFormat.bytes(bytes)) 流量。"),
-                button: "继续观看") { model.start(confirmedCellular: true) }
         case let .failed(text):
-            message(icon: "wifi.exclamationmark", text: text, button: "重试") { model.start() }
+            message(icon: "exclamationmark.triangle", text: text, button: "重试") { model.start() }
         case let .unavailable(text):
             message(icon: "lock.fill", text: text, button: nil, action: {})
         }

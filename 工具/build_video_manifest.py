@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""生成 App 内置的视频清单 Content/videos.json，并把免费章节（第 1 章）的视频拷进包里。
+"""生成 App 内置的视频清单 Content/videos.json（只描述随包文件），并把免费章节（第 1 章）的明文视频拷进包里。
+付费章节随包的是加密文件 chNN.sdqv，由 动画讲解/lib/encrypt-videos.mjs 生成，本脚本不处理它们，只在清单里登记文件名。
 
     python3 工具/build_video_manifest.py
 
 读取 动画讲解/dist/v1/{zh,en}/manifest.json（由 `node 动画讲解/lib/pack.mjs <lang>` 生成），
 语言目录不存在就跳过。输出：
   iOS/SystemDesignQuest/Resources/Content/videos.json
-  iOS/SystemDesignQuest/Resources/Content/videos/{lang}/chNN.mp4   （只含 free 章节）
+  iOS/SystemDesignQuest/Resources/Content/videos/{lang}/chNN.mp4   （只含 free 章节；付费章节的 .sdqv 不在这里生成，也不会被删除）
 
-注意：工具/build_app_content.py 会整个删掉并重建 Content/，跑完它之后要重新跑本脚本。
+注意：工具/build_app_content.py 会保留 videos/ 与 videos.json，一般无需在它之后重跑本脚本。
 """
 from __future__ import annotations
 
@@ -52,8 +53,8 @@ def main() -> int:
 
     chapters: dict[int, dict] = {}
     bundled_dir = OUT / 'videos'
-    if bundled_dir.exists():
-        shutil.rmtree(bundled_dir)
+    for old in bundled_dir.glob('*/*.mp4'):
+        old.unlink()
     for lang, manifest in manifests.items():
         for v in manifest['videos']:
             n = v['chapter']
@@ -68,12 +69,10 @@ def main() -> int:
             title = v['title'] if lang == 'zh' else v.get('en') or v['title']
             entry['titles'][lang] = title
             bundled = entry['free']
+            stem = Path(v['file']).stem
             entry['files'][lang] = {
-                'file': v['file'],
-                'bytes': v['bytes'],
-                'sha256': v['sha256'],
+                'file': stem + ('.mp4' if bundled else '.sdqv'),
                 'durationSec': round(v['durationSec'], 1),
-                'bundled': bundled,
             }
             if bundled:
                 dst = bundled_dir / lang / v['file']

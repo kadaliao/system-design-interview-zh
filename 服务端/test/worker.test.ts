@@ -196,6 +196,26 @@ test("POST /v1/auth：端到端（JWS -> token -> 取视频）", async () => {
   assert.equal(rv.status, 403);
 });
 
+test("POST /v1/key：验证购买后才下发内容主密钥", async () => {
+  const chain = await makeChain();
+  const jws = await signJws(chain, basePayload({ signedDate: Date.now() - 1000 }));
+  const KEY = Buffer.alloc(32, 7).toString("base64");
+  const e = (x: Record<string, unknown> = {}) => env({ CONTENT_KEY: KEY, ...x });
+  const post = (body: unknown, en = e(), vo: object = {}) => call(en, fakeCache(), "/v1/key", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }, vo);
+  assert.equal((await post({ signedTransaction: jws })).status, 401); // 根证书不被信任
+  assert.equal((await post("not json")).status, 400);
+  assert.equal((await post({})).status, 400);
+  assert.equal((await call(e(), fakeCache(), "/v1/key")).status, 405);
+  assert.equal((await post({ signedTransaction: jws }, env())).status, 500); // 未配置密钥
+  const ok = await post({ signedTransaction: jws }, e(), { trustedRoots: [chain.rootDer] });
+  assert.equal(ok.status, 200);
+  const j = (await ok.json()) as { ok: boolean; key: string; keyVersion: number };
+  assert.deepEqual([j.ok, j.key, j.keyVersion], [true, KEY, 1]);
+  assert.equal(ok.headers.get("cache-control"), "no-store");
+  const revoked = await signJws(chain, basePayload({ signedDate: Date.now() - 1000, revocationDate: Date.now() - 500 }));
+  assert.equal((await post({ signedTransaction: revoked }, e(), { trustedRoots: [chain.rootDer] })).status, 403);
+});
+
 test("POST /v1/auth：速率限制返回 429", async () => {
   const e = env({ AUTH_LIMITER: { limit: async () => ({ success: false }) } });
   const r = await call(e, fakeCache(), "/v1/auth", { method: "POST", body: "{}" });

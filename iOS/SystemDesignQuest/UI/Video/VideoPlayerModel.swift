@@ -7,8 +7,6 @@ import Observation
 final class VideoPlayerModel {
     enum Phase: Equatable {
         case preparing
-        /// 蜂窝网络下手动播放前的流量提示。
-        case confirmCellular(bytes: Int64)
         case playing
         case failed(String)
         case unavailable(String)
@@ -16,35 +14,45 @@ final class VideoPlayerModel {
 
     private(set) var phase: Phase = .preparing
     private(set) var player: AVPlayer?
-    /// 播的是本地文件还是远程（用于提示文案）。
-    private(set) var isLocal = false
 
     let chapter: Int
     private let service: VideoService
     private var statusObservation: NSKeyValueObservation?
     private var startTask: Task<Void, Never>?
+    /// 解密出的临时文件，关闭播放页时删除。
+    private var temporaryURL: URL?
 
     init(chapter: Int, service: VideoService = .shared) {
         self.chapter = chapter
         self.service = service
     }
 
-    func start(confirmedCellular: Bool = false) {
+    func start() {
         startTask?.cancel()
+        releasePlayer()
         phase = .preparing
-        startTask = Task { await run(confirmedCellular: confirmedCellular) }
+        startTask = Task { await run() }
     }
 
     func stop() {
         startTask?.cancel()
+        startTask = nil
+        releasePlayer()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func releasePlayer() {
         statusObservation = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if let url = temporaryURL {
+            service.vault.discard(url)
+            temporaryURL = nil
+        }
     }
 
-    private func run(confirmedCellular: Bool) async {
+    private func run() async {
         guard service.requestPlayback(chapter: chapter) else {
             phase = .unavailable(String(localized: "解锁完整版后可观看本章动画讲解。"))
             return
@@ -53,40 +61,25 @@ final class VideoPlayerModel {
             phase = .unavailable(String(localized: "没有找到本章的动画讲解。"))
             return
         }
-        let bundled = catalog.bundledURL(for: asset)
-        let cached = bundled == nil ? await service.cache.cachedURL(for: asset) : nil
-        let plan = VideoPlaybackPlan.make(bundled: bundled, cached: cached, network: service.network.status,
-                                          wifiOnly: VideoCache.wifiOnlySetting)
-        switch plan {
-        case let .local(url):
-            isLocal = true
-            play(url)
-        case .offline:
-            phase = .failed(String(localized: "当前没有网络，这一章的视频还没有缓存。联网后再来看吧。"))
-        case let .stream(needsConfirm, cacheInBackground):
-            if needsConfirm && !confirmedCellular {
-                phase = .confirmCellular(bytes: asset.info.bytes)
+        guard let source = catalog.bundledURL(for: asset, bundle: service.bundle) else {
+            phase = .failed(VideoVaultError.fileMissing.userMessage)
+            return
+        }
+        do {
+            if asset.info.isEncrypted { try await service.provisioner.ensureKey() }
+            let url = try await service.vault.prepare(source: source, asset: asset)
+            guard !Task.isCancelled else {
+                service.vault.discard(url)
                 return
             }
-            do {
-                let url = try await service.urlProvider.playableURL(chapter: chapter, language: asset.language)
-                guard !Task.isCancelled else { return }
-                isLocal = false
-                play(url)
-                if cacheInBackground {
-                    // 后台整文件落盘，供下次播本地；不会切换正在播放的 item。
-                    let cache = service.cache
-                    let provider = service.urlProvider
-                    let chapter = chapter
-                    Task.detached {
-                        _ = try? await cache.cache(asset, from: url, trigger: .automatic, refreshURL: {
-                            try await provider.refreshedURL(chapter: chapter, language: asset.language)
-                        })
-                    }
-                }
-            } catch {
-                if error is CancellationError { return }
-                phase = .failed((error as? VideoURLError ?? .unavailable).userMessage)
+            temporaryURL = url
+            play(url)
+        } catch {
+            if error is CancellationError || Task.isCancelled { return }
+            switch error {
+            case let error as VideoKeyError: phase = .failed(error.userMessage)
+            case let error as VideoVaultError: phase = .failed(error.userMessage)
+            default: phase = .failed(String(localized: "视频文件无法播放。"))
             }
         }
     }
@@ -108,11 +101,7 @@ final class VideoPlayerModel {
 
     private func handle(_ status: AVPlayerItem.Status) {
         guard status == .failed else { return }
-        let local = isLocal
-        player?.pause()
-        player?.replaceCurrentItem(with: nil)
-        player = nil
-        statusObservation = nil
-        phase = .failed(local ? String(localized: "视频文件无法播放。") : String(localized: "视频加载失败，请检查网络后重试。"))
+        releasePlayer()
+        phase = .failed(String(localized: "视频文件无法播放。"))
     }
 }
