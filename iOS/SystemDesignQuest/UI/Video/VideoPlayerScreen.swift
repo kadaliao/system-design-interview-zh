@@ -24,6 +24,7 @@ struct VideoPlayerScreen: View {
     let title: String
     @State private var model: VideoPlayerModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     init(chapter: Int, title: String) {
         self.chapter = chapter
@@ -36,18 +37,14 @@ struct VideoPlayerScreen: View {
             Color.black.ignoresSafeArea()
             content
         }
-        .overlay(alignment: .topLeading) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
-                    .background(Circle().fill(.black.opacity(0.55)))
+        .overlay(alignment: verticalSizeClass == .compact ? .top : .topLeading) {
+            // 竖屏：左上角（上方是黑边，不挡画面）；横屏：顶部居中，避开画面自带的左上角章节标签、
+            // 右上角进度点，以及系统播放控件的左上角关闭/标题
+            HStack(spacing: 10) {
+                overlayButton("xmark", label: "关闭") { dismiss() }
+                overlayButton("rotate.right", label: "旋转屏幕") { OrientationController.toggleLandscape() }
             }
-            .accessibilityLabel("关闭")
-            .padding(.leading, 16)
+            .padding(.leading, verticalSizeClass == .compact ? 0 : 16)
             .padding(.top, 8)
         }
         .onAppear {
@@ -58,6 +55,17 @@ struct VideoPlayerScreen: View {
             model.stop()
             OrientationController.restorePortrait()
         }
+    }
+
+    private func overlayButton(_ systemName: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(.black.opacity(0.55)))
+        }
+        .accessibilityLabel(label)
     }
 
     @ViewBuilder

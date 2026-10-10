@@ -19,6 +19,19 @@ enum OrientationController {
         apply(.portrait)
     }
 
+    /// 手动切换横竖屏（视频页的「旋转」按钮）：竖屏 → 横屏，横屏 → 竖屏。
+    /// 先把掩码收窄到目标方向再请求几何更新，转完立刻放回 allButUpsideDown，这样之后仍能随手机自动旋转。
+    static func toggleLandscape() {
+        guard isPhone,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let target: UIInterfaceOrientationMask = scene.effectiveGeometry.interfaceOrientation.isLandscape ? .portrait : .landscapeRight
+        apply(target)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+            if mask == target { apply(.allButUpsideDown) }
+        }
+    }
+
     private static func apply(_ newMask: UIInterfaceOrientationMask) {
         mask = newMask
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }

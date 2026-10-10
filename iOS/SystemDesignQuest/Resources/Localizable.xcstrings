@@ -555,6 +555,16 @@
         }
       }
     },
+    "旋转屏幕": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate screen"
+          }
+        }
+      }
+    },
     "关闭": {
       "localizations": {
         "en": {

@@ -156,6 +156,7 @@ async function handleKey(req: Request, env: WorkerEnv, vo: Partial<VerifyOptions
     await verifyStoreKitTransaction(body.signedTransaction, { ...verifyOptionsFromEnv(env as unknown as PlainEnv), ...vo });
     return json(200, { ok: true, key: raw.replace(/\s+/g, ""), keyVersion: 1 });
   } catch (e) {
+    console.log("key-verify-failed", e instanceof VerifyError ? `${e.code}: ${e.message}` : String(e));
     if (e instanceof VerifyError) return fail(statusForVerifyCode(e.code), e.code, e.message);
     return fail(500, "INTERNAL", "verification failed");
   }
