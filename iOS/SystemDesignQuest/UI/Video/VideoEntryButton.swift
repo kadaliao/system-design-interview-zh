@@ -3,7 +3,6 @@ import SwiftUI
 /// 单元指南里的「观看动画讲解」按钮，自带播放页和锁定提示。
 struct VideoEntryButton: View {
     let chapter: Int
-    @State private var playing = false
     @State private var showsLockedAlert = false
     private let service = VideoService.shared
 
@@ -12,7 +11,7 @@ struct VideoEntryButton: View {
             let locked = !service.access.canPlay(chapter: chapter)
             Button {
                 if service.requestPlayback(chapter: chapter) {
-                    playing = true
+                    VideoPresenter.present(chapter: chapter, title: service.title(chapter: chapter) ?? "")
                 } else if service.onNeedsPaywall == nil {
                     showsLockedAlert = true
                 }
@@ -21,9 +20,6 @@ struct VideoEntryButton: View {
                       systemImage: locked ? "lock.fill" : "play.rectangle.fill")
             }
             .buttonStyle(ChunkyButtonStyle(fill: Palette.purple, shadow: Palette.purpleShadow))
-            .fullScreenCover(isPresented: $playing) {
-                VideoPlayerScreen(chapter: chapter, title: service.title(chapter: chapter) ?? "")
-            }
             .alert("解锁完整版后观看", isPresented: $showsLockedAlert) {
                 Button("好", role: .cancel) {}
             } message: {

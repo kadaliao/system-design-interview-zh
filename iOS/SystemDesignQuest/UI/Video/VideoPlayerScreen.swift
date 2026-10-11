@@ -18,6 +18,23 @@ struct SystemVideoPlayer: UIViewControllerRepresentable {
     }
 }
 
+/// 用 UIKit 把播放页直接盖在当前最上层的页面上。
+/// 不用 SwiftUI 的 fullScreenCover：播放页从单元指南（sheet）里打开，转屏时 sheet 重排会让 SwiftUI 把
+/// cover 拆掉重建，播放会从头开始、横屏也会被恢复成竖屏。UIKit 呈现的页面不受上层 SwiftUI 重建影响。
+@MainActor
+enum VideoPresenter {
+    static func present(chapter: Int, title: String) {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              var top = scene.keyWindow?.rootViewController else { return }
+        while let presented = top.presentedViewController, !presented.isBeingDismissed { top = presented }
+        let host = UIHostingController<VideoPlayerScreen>(rootView: VideoPlayerScreen(chapter: chapter, title: title))
+        host.rootView.onClose = { [weak host] in host?.presentingViewController?.dismiss(animated: true) }
+        host.modalPresentationStyle = .fullScreen
+        host.view.backgroundColor = .black
+        top.present(host, animated: true)
+    }
+}
+
 /// 动画讲解播放页，全屏呈现；进入时放开横屏，退出时恢复竖屏。
 struct VideoPlayerScreen: View {
     let chapter: Int
@@ -25,6 +42,10 @@ struct VideoPlayerScreen: View {
     @State private var model: VideoPlayerModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// 由呈现方提供的关闭动作（UIKit 呈现时用）；为空时用 SwiftUI 的 dismiss。
+    var onClose: (() -> Void)?
+    @State private var visible = false
+    @State private var started = false
 
     init(chapter: Int, title: String) {
         self.chapter = chapter
@@ -41,19 +62,37 @@ struct VideoPlayerScreen: View {
             // 竖屏：左上角（上方是黑边，不挡画面）；横屏：顶部居中，避开画面自带的左上角章节标签、
             // 右上角进度点，以及系统播放控件的左上角关闭/标题
             HStack(spacing: 10) {
-                overlayButton("xmark", label: "关闭") { dismiss() }
+                overlayButton("xmark", label: "关闭") {
+                    visible = false
+                    model.stop()
+                    started = false
+                    OrientationController.restorePortrait()
+                    if let onClose { onClose() } else { dismiss() }
+                }
                 overlayButton("rotate.right", label: "旋转屏幕") { OrientationController.toggleLandscape() }
             }
             .padding(.leading, verticalSizeClass == .compact ? 0 : 16)
             .padding(.top, 8)
         }
         .onAppear {
+            visible = true
             OrientationController.allowLandscape()
-            model.start()
+            if !started {
+                started = true
+                model.start()
+            }
         }
         .onDisappear {
-            model.stop()
-            OrientationController.restorePortrait()
+            // 转屏时上层的 sheet 会重排，SwiftUI 可能把本页先 onDisappear 再 onAppear。
+            // 稍等一下再判断是否真的离开，避免误停播放、误恢复竖屏（真机上表现为点了旋转又竖回去、视频从头播）。
+            visible = false
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !visible else { return }
+                model.stop()
+                started = false
+                OrientationController.restorePortrait()
+            }
         }
     }
 

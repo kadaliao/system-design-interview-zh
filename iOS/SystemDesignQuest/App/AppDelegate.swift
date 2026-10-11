@@ -15,8 +15,9 @@ enum OrientationController {
 
     static func allowLandscape() {
         guard isPhone else { return }
-        manualLock = nil
         startWatchingDevice()
+        // 已经手动锁定（例如视频页因转屏被 SwiftUI 重新挂载又触发 onAppear）时不能放开，否则手机竖着拿会立刻转回竖屏
+        guard manualLock == nil else { return }
         apply(.allButUpsideDown)
     }
 
@@ -89,11 +90,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         if let i = args.firstIndex(of: "-openVideo"), i + 1 < args.count, let chapter = Int(args[i + 1]) {
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(4))
-                guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
-                      let root = scene.keyWindow?.rootViewController else { return }
-                let host = UIHostingController(rootView: VideoPlayerScreen(chapter: chapter, title: String(localized: "第 \(chapter) 章")))
-                host.modalPresentationStyle = .fullScreen
-                root.present(host, animated: false)
+                VideoPresenter.present(chapter: chapter, title: String(localized: "第 \(chapter) 章"))
             }
         }
         #endif
