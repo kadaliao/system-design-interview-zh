@@ -9,27 +9,66 @@ enum OrientationController {
 
     static var mask: UIInterfaceOrientationMask = restingMask
 
+    /// 「旋转」按钮锁定的方向；nil 表示跟随手机自动旋转。
+    private(set) static var manualLock: UIInterfaceOrientationMask?
+    private static var deviceObserver: NSObjectProtocol?
+
     static func allowLandscape() {
         guard isPhone else { return }
+        manualLock = nil
+        startWatchingDevice()
         apply(.allButUpsideDown)
     }
 
     static func restorePortrait() {
         guard isPhone else { return }
+        manualLock = nil
+        stopWatchingDevice()
         apply(.portrait)
     }
 
     /// 手动切换横竖屏（视频页的「旋转」按钮）：竖屏 → 横屏，横屏 → 竖屏。
-    /// 先把掩码收窄到目标方向再请求几何更新，转完立刻放回 allButUpsideDown，这样之后仍能随手机自动旋转。
+    /// 锁定到目标方向，直到手机的实际朝向也转到同一方向时才解锁、恢复自动旋转。
+    /// 不能转完马上放开：手机还竖着拿时一放开，系统会按实际朝向立刻转回竖屏。
     static func toggleLandscape() {
         guard isPhone,
               let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
-        let target: UIInterfaceOrientationMask = scene.effectiveGeometry.interfaceOrientation.isLandscape ? .portrait : .landscapeRight
-        apply(target)
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(700))
-            if mask == target { apply(.allButUpsideDown) }
+        let lock: UIInterfaceOrientationMask = scene.effectiveGeometry.interfaceOrientation.isLandscape ? .portrait : .landscape
+        manualLock = lock
+        mask = lock
+        var top = scene.keyWindow?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        top?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        // 横屏优先转到「刘海在左」（landscapeRight），之后翻转手机仍可在左右横屏之间切换
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: lock == .landscape ? .landscapeRight : .portrait)) { _ in }
+    }
+
+    /// 手机实际朝向与锁定方向一致时即可解锁：此时界面已与手机朝向相同，解锁不会引起跳转。
+    nonisolated static func shouldReleaseLock(_ lock: UIInterfaceOrientationMask, device: UIDeviceOrientation) -> Bool {
+        if lock == .landscape { return device.isLandscape }
+        if lock == .portrait { return device == .portrait }
+        return false
+    }
+
+    private static func startWatchingDevice() {
+        guard deviceObserver == nil else { return }
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        deviceObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                guard let lock = manualLock, shouldReleaseLock(lock, device: UIDevice.current.orientation) else { return }
+                manualLock = nil
+                apply(.allButUpsideDown)
+            }
         }
+    }
+
+    private static func stopWatchingDevice() {
+        guard let deviceObserver else { return }
+        NotificationCenter.default.removeObserver(deviceObserver)
+        self.deviceObserver = nil
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
     private static func apply(_ newMask: UIInterfaceOrientationMask) {

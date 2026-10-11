@@ -189,3 +189,21 @@ struct VideoPlayerModelTests {
         #expect(model.player == nil)
     }
 }
+
+@Suite("视频页旋转锁")
+struct OrientationLockTests {
+    @Test func landscapeLockReleasesOnlyWhenPhoneTurnsLandscape() {
+        // 手机还竖着拿时不能解锁，否则系统会立刻转回竖屏（真机上「点了又竖回去」的 bug）
+        #expect(!OrientationController.shouldReleaseLock(.landscape, device: .portrait))
+        #expect(!OrientationController.shouldReleaseLock(.landscape, device: .faceUp))
+        #expect(!OrientationController.shouldReleaseLock(.landscape, device: .unknown))
+        #expect(OrientationController.shouldReleaseLock(.landscape, device: .landscapeLeft))
+        #expect(OrientationController.shouldReleaseLock(.landscape, device: .landscapeRight))
+    }
+
+    @Test func portraitLockReleasesOnlyWhenPhoneTurnsUpright() {
+        #expect(!OrientationController.shouldReleaseLock(.portrait, device: .landscapeLeft))
+        #expect(!OrientationController.shouldReleaseLock(.portrait, device: .portraitUpsideDown))
+        #expect(OrientationController.shouldReleaseLock(.portrait, device: .portrait))
+    }
+}
